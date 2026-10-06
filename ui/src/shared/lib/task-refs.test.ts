@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { caseHref, projectHref, readEntryNo, splitTaskRefs, taskRefHref } from './task-refs';
+import {
+  caseHref,
+  directionHref,
+  projectHref,
+  readEntryNo,
+  splitDirectionAddress,
+  splitTaskRefs,
+  taskRefHref,
+} from './task-refs';
 
 describe('ссылки на задачи в тексте', () => {
   it('находит задачу и запись, сохраняя текст вокруг', () => {
@@ -35,6 +43,35 @@ describe('ссылки на задачи в тексте', () => {
     expect(splitTaskRefs('проект TRK и trk#7')).toEqual([
       { kind: 'text', value: 'проект TRK и trk#7' },
     ]);
+  });
+
+  it('запись дела направления `TRK/promotion#3` ведёт на страницу направления (TRK-557)', () => {
+    expect(splitTaskRefs('решено в TRK/promotion#3 и TRK#7')).toEqual([
+      { kind: 'text', value: 'решено в ' },
+      {
+        kind: 'ref',
+        value: 'TRK/promotion#3',
+        href: '/projects/TRK/directions/promotion?entry=3',
+      },
+      { kind: 'text', value: ' и ' },
+      { kind: 'ref', value: 'TRK#7', href: '/projects/TRK?entry=7' },
+    ]);
+  });
+
+  it('адрес направления без номера записи и путь вроде `API/v1` ссылкой не становятся', () => {
+    expect(splitTaskRefs('направление TRK/promotion, путь API/v1')).toEqual([
+      { kind: 'text', value: 'направление TRK/promotion, путь API/v1' },
+    ]);
+  });
+
+  it('страница направления — под проектом, запись — параметром `entry`', () => {
+    expect(directionHref('TRK/promotion')).toBe('/projects/TRK/directions/promotion');
+    expect(directionHref('TRK/promotion', 3)).toBe('/projects/TRK/directions/promotion?entry=3');
+    expect(splitDirectionAddress('TRK/promotion')).toEqual({
+      projectKey: 'TRK',
+      directionKey: 'promotion',
+    });
+    expect(splitDirectionAddress('TRK')).toEqual({ projectKey: 'TRK', directionKey: '' });
   });
 
   it('экран проекта — по ключу, запись — параметром `entry`', () => {

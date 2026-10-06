@@ -65,6 +65,8 @@ describe('словари языков', () => {
     // и число остальных — подстановки и знаки, слов в них нет. И номера крайних записей
     // группы правок (UI-133): два числа через тире. И подпись «Git ref» пункта «Добавить
     // маркетплейс» приложения Codex (TRK-420): так поле названо в приложении на любом языке.
+    // И строка направления в отборе списка (TRK-557): название и адрес через тире —
+    // подстановки и знак, слов в ней нет.
     const sameOnPurpose = new Set([
       'access.agent.namePlaceholder',
       'people.create.namePlaceholder',
@@ -74,6 +76,7 @@ describe('словари языков', () => {
       'login.tokenPlaceholder',
       'tasks.filters.query.placeholder',
       'tasks.board.unknown',
+      'tasks.filters.directionOption',
       'ui.error.withCode',
       'ui.entry.headline.resolutionOutcome',
       'ui.entry.group.range',

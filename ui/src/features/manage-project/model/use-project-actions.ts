@@ -1,21 +1,30 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { directionKeys } from '@/entities/direction';
 import { questionKeys, remarkKeys } from '@/entities/entry';
 import { projectKeys } from '@/entities/project';
 import { sessionKeys } from '@/entities/session';
-import { useOnceKey } from '@/shared/lib';
+import { splitDirectionAddress, useOnceKey } from '@/shared/lib';
 import {
+  archiveDirection,
   archiveProject,
+  createDirection,
   createProject,
-  restoreProject,
-  fileNote,
+  fileEntry,
   removeAttribute,
+  restoreDirection,
+  restoreProject,
   setAttribute,
+  updateDirection,
   updateProject,
   type ArchivingInput,
+  type CreateDirectionInput,
   type CreateProjectInput,
-  type NoteInput,
+  type DirectionArchivingInput,
+  type EntryInput,
+  type Holder,
   type RemoveAttributeInput,
   type SetAttributeInput,
+  type UpdateDirectionInput,
 } from '../api/projects';
 
 type Input<TInput> = Omit<TInput, 'idempotencyKey'>;
@@ -30,6 +39,16 @@ type Input<TInput> = Omit<TInput, 'idempotencyKey'>;
  * пока отбрасывает (`UI-177`), поэтому перечитывание здесь — единственный путь, каким
  * своё действие доезжает до экрана.
  */
+
+/**
+ * Префикс того, что устарело от атрибута или записи в деле: карточка с атрибутами, дело
+ * и тела записей проекта — `['project', key]`, направления — `['direction', адрес]`.
+ */
+function holderKey(holder: Holder): QueryKey {
+  return holder.kind === 'direction'
+    ? directionKeys.detail(holder.key)
+    : projectKeys.detail(holder.key);
+}
 
 /** Заводит проект: он обязан появиться в панели сразу, а не после перезагрузки. */
 export function useCreateProject() {
@@ -59,7 +78,7 @@ export function useUpdateProject() {
   });
 }
 
-/** Заводит или меняет атрибут: новое значение и запись в деле проекта. */
+/** Заводит или меняет атрибут: новое значение и запись в деле проекта или направления. */
 export function useSetAttribute() {
   const queryClient = useQueryClient();
   const once = useOnceKey<Input<SetAttributeInput>>();
@@ -67,9 +86,9 @@ export function useSetAttribute() {
   return useMutation({
     mutationFn: (input: Input<SetAttributeInput>) =>
       setAttribute({ ...input, idempotencyKey: once.keyFor(input) }),
-    onSuccess: (_attribute, { projectKey }) => {
+    onSuccess: (_attribute, { holder }) => {
       once.forget();
-      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectKey) });
+      void queryClient.invalidateQueries({ queryKey: holderKey(holder) });
     },
   });
 }
@@ -82,24 +101,25 @@ export function useRemoveAttribute() {
   return useMutation({
     mutationFn: (input: Input<RemoveAttributeInput>) =>
       removeAttribute({ ...input, idempotencyKey: once.keyFor(input) }),
-    onSuccess: (_entry, { projectKey }) => {
+    onSuccess: (_entry, { holder }) => {
       once.forget();
-      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectKey) });
+      void queryClient.invalidateQueries({ queryKey: holderKey(holder) });
     },
   });
 }
 
 /**
- * Заметка в дело проекта. Ключ повтора приходит из черновика формы (`Composer`), как у
- * замечания: он переживает и провал попытки, и перезагрузку вкладки.
+ * Запись человека в дело проекта или направления. Ключ повтора приходит из черновика
+ * формы (`Composer`), как у замечания: он переживает и провал попытки, и перезагрузку
+ * вкладки.
  */
-export function useFileNote() {
+export function useFileEntry() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: NoteInput) => fileNote(input),
-    onSuccess: (_entry, { projectKey }) => {
-      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectKey) });
+    mutationFn: (input: EntryInput) => fileEntry(input),
+    onSuccess: (_entry, { holder }) => {
+      void queryClient.invalidateQueries({ queryKey: holderKey(holder) });
     },
   });
 }
@@ -135,4 +155,72 @@ export function useArchiveProject() {
 
 export function useRestoreProject() {
   return useArchiving(restoreProject);
+}
+
+/*
+ * Действия с направлением (TRK-557). Список направлений живёт под префиксом проекта
+ * (`directionKeys.list`), поэтому заведение, правка и архив перечитывают проект целиком —
+ * его карточку с активными направлениями и раздел «Направления». Правка и архив меняют
+ * ещё и то, что о направлении знает каждая его задача: название и признак архива едут в
+ * пакете карточки (`['task']`) и в строке выдачи (`['tasks']`). Какие задачи затронуты,
+ * интерфейс не вычисляет — перечитывается всё прочитанное, а бэкенд отвечает как есть.
+ */
+
+/** Заводит направление; ключ повтора окна переживает провал попытки. */
+export function useCreateDirection() {
+  const queryClient = useQueryClient();
+  const once = useOnceKey<Input<CreateDirectionInput>>();
+
+  return useMutation({
+    mutationFn: (input: Input<CreateDirectionInput>) =>
+      createDirection({ ...input, idempotencyKey: once.keyFor(input) }),
+    onSuccess: (_direction, { projectKey }) => {
+      once.forget();
+      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectKey) });
+    },
+  });
+}
+
+/** Что перечитать после правки или архива направления — см. комментарий выше. */
+function directionChanged(address: string): QueryKey[] {
+  return [
+    directionKeys.detail(address),
+    projectKeys.detail(splitDirectionAddress(address).projectKey),
+    ['task'],
+    ['tasks'],
+  ];
+}
+
+export function useUpdateDirection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: UpdateDirectionInput) => updateDirection(input),
+    onSuccess: (_direction, { address }) => {
+      for (const queryKey of directionChanged(address)) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
+}
+
+function useDirectionArchiving(mutationFn: (input: DirectionArchivingInput) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn,
+    onSuccess: (_direction, { address }) => {
+      for (const queryKey of directionChanged(address)) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
+}
+
+export function useArchiveDirection() {
+  return useDirectionArchiving(archiveDirection);
+}
+
+export function useRestoreDirection() {
+  return useDirectionArchiving(restoreDirection);
 }

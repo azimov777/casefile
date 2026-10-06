@@ -8,7 +8,7 @@ import { bootstrapQueryOptions } from '@/entities/session';
 import { ViewSwitch, readFilters, tasksHref } from '@/features/task-filters';
 import { LiveStatus, type LiveJournal } from '@/features/live-journal';
 import { LanguageSwitch } from '@/features/switch-language';
-import { cn } from '@/shared/lib';
+import { cn, projectHref } from '@/shared/lib';
 import { Button } from '@/shared/ui';
 import { readPlace, type Place } from './place';
 
@@ -217,6 +217,17 @@ function crumbsOf(place: Place, t: TFunction<'ui'>): Crumb[] {
 
   // Экран проекта: ключ ведёт в его задачи, как и внутри задачи, а раздел назван словом.
   if (place.section === 'project') return [project, { label: t('app.crumbProject') }];
+
+  // Страница направления (TRK-557): проект, его экран ссылкой и само место словом.
+  // Слово «Направление» ниже `fold` не показывается: оно повторяло бы надпись над
+  // заголовком страницы, а место в полосе нужно ссылке на экран проекта.
+  if (place.section === 'direction' && place.project !== null) {
+    return [
+      project,
+      { label: t('app.crumbProject'), to: projectHref(place.project) },
+      { label: t('app.crumbDirection'), wide: true },
+    ];
+  }
 
   if (place.taskKey === null) return [project];
 

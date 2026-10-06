@@ -5,6 +5,7 @@ import type { ProjectAttribute } from '@/entities/project';
 import { ApiError } from '@/shared/api';
 import { complainsAbout, errorMessage } from '@/shared/errors';
 import { Button, Callout, Dialog, Input, Textarea } from '@/shared/ui';
+import type { Holder } from '../api/projects';
 import { useRemoveAttribute, useSetAttribute } from '../model/use-project-actions';
 import { ReasonField } from './reason-field';
 
@@ -19,8 +20,11 @@ import { ReasonField } from './reason-field';
  * здесь разошлась бы с первой молча. Окно называет образец подсказкой и объясняет отказ.
  */
 
-/** Кнопка «Добавить атрибут» и окно заведения: имя и значение. */
-export function AddAttribute({ projectKey }: { projectKey: string }) {
+/**
+ * Кнопка «Добавить атрибут» и окно заведения: имя и значение — у проекта или у его
+ * направления (`holder`, TRK-557): правила атрибута у них одни.
+ */
+export function AddAttribute({ holder }: { holder: Holder }) {
   const [open, setOpen] = useState(false);
   const { t } = useTranslation('project');
 
@@ -29,7 +33,9 @@ export function AddAttribute({ projectKey }: { projectKey: string }) {
       open={open}
       onOpenChange={setOpen}
       title={t('attribute.addTitle')}
-      description={t('attribute.addIntro')}
+      description={t(
+        holder.kind === 'direction' ? 'attribute.addIntroDirection' : 'attribute.addIntro',
+      )}
       closeLabel={t('close')}
       trigger={
         <Button tone="quiet" size="sm">
@@ -38,12 +44,12 @@ export function AddAttribute({ projectKey }: { projectKey: string }) {
         </Button>
       }
     >
-      <AddAttributeForm projectKey={projectKey} onDone={() => setOpen(false)} />
+      <AddAttributeForm holder={holder} onDone={() => setOpen(false)} />
     </Dialog>
   );
 }
 
-function AddAttributeForm({ projectKey, onDone }: { projectKey: string; onDone: () => void }) {
+function AddAttributeForm({ holder, onDone }: { holder: Holder; onDone: () => void }) {
   const [name, setName] = useState('');
   const [value, setValue] = useState('');
   const [emptyName, setEmptyName] = useState(false);
@@ -60,7 +66,7 @@ function AddAttributeForm({ projectKey, onDone }: { projectKey: string; onDone: 
       setEmptyName(true);
       return;
     }
-    set.mutate({ projectKey, name: name.trim(), value, reason: null }, { onSuccess: onDone });
+    set.mutate({ holder, name: name.trim(), value, reason: null }, { onSuccess: onDone });
   }
 
   return (
@@ -115,10 +121,10 @@ function AddAttributeForm({ projectKey, onDone }: { projectKey: string; onDone: 
 
 /** Кнопка «Изменить» у строки атрибута и окно: новое значение и причина. */
 export function ChangeAttribute({
-  projectKey,
+  holder,
   attribute,
 }: {
-  projectKey: string;
+  holder: Holder;
   attribute: ProjectAttribute;
 }) {
   const [open, setOpen] = useState(false);
@@ -143,21 +149,17 @@ export function ChangeAttribute({
         </Button>
       }
     >
-      <ChangeAttributeForm
-        projectKey={projectKey}
-        attribute={attribute}
-        onDone={() => setOpen(false)}
-      />
+      <ChangeAttributeForm holder={holder} attribute={attribute} onDone={() => setOpen(false)} />
     </Dialog>
   );
 }
 
 function ChangeAttributeForm({
-  projectKey,
+  holder,
   attribute,
   onDone,
 }: {
-  projectKey: string;
+  holder: Holder;
   attribute: ProjectAttribute;
   onDone: () => void;
 }) {
@@ -174,7 +176,7 @@ function ChangeAttributeForm({
       return;
     }
     set.mutate(
-      { projectKey, name: attribute.name, value, reason: reason.trim() },
+      { holder, name: attribute.name, value, reason: reason.trim() },
       { onSuccess: onDone },
     );
   }
@@ -217,10 +219,10 @@ function ChangeAttributeForm({
  * после.
  */
 export function RemoveAttribute({
-  projectKey,
+  holder,
   attribute,
 }: {
-  projectKey: string;
+  holder: Holder;
   attribute: ProjectAttribute;
 }) {
   const [open, setOpen] = useState(false);
@@ -232,7 +234,9 @@ export function RemoveAttribute({
       open={open}
       onOpenChange={setOpen}
       title={t('attribute.removeTitle', { name: attribute.name })}
-      description={t('attribute.removeIntro')}
+      description={t(
+        holder.kind === 'direction' ? 'attribute.removeIntroDirection' : 'attribute.removeIntro',
+      )}
       closeLabel={t('close')}
       trigger={
         <Button
@@ -244,21 +248,17 @@ export function RemoveAttribute({
         </Button>
       }
     >
-      <RemoveAttributeForm
-        projectKey={projectKey}
-        attribute={attribute}
-        onDone={() => setOpen(false)}
-      />
+      <RemoveAttributeForm holder={holder} attribute={attribute} onDone={() => setOpen(false)} />
     </Dialog>
   );
 }
 
 function RemoveAttributeForm({
-  projectKey,
+  holder,
   attribute,
   onDone,
 }: {
-  projectKey: string;
+  holder: Holder;
   attribute: ProjectAttribute;
   onDone: () => void;
 }) {
@@ -273,10 +273,7 @@ function RemoveAttributeForm({
       setEmptyReason(true);
       return;
     }
-    remove.mutate(
-      { projectKey, name: attribute.name, reason: reason.trim() },
-      { onSuccess: onDone },
-    );
+    remove.mutate({ holder, name: attribute.name, reason: reason.trim() }, { onSuccess: onDone });
   }
 
   return (

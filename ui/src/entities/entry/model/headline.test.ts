@@ -245,6 +245,18 @@ describe.each(LANGUAGES)('заголовок записи по фактам на
     );
   });
 
+  it('в деле направления (TRK-557) — «направление заведено», архив и восстановление — его', () => {
+    const direction = (facts: EntryFacts) =>
+      headlineText(entryHeadline(facts, 'TRK/promotion', say.ui));
+    expect(direction(FACTS.created)).toBe(say.ui('entry.headline.directionCreated'));
+    expect(direction({ type: 'archived' })).toBe(say.ui('entry.headline.directionArchived'));
+    expect(direction({ type: 'restored' })).toBe(say.ui('entry.headline.directionRestored'));
+    // У проекта — по-прежнему проектные.
+    expect(headlineText(entryHeadline({ type: 'archived' }, 'TRK', say.ui))).toBe(
+      say.ui('entry.headline.projectArchived'),
+    );
+  });
+
   it('у записи агента заголовок остаётся авторским, у сводки — выведенным', () => {
     for (const type of [
       'decision',

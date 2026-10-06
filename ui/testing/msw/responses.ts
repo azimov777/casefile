@@ -25,6 +25,8 @@ type AccessToken = components['schemas']['TokenRead'];
 type Participant = components['schemas']['ParticipantRead'];
 type ProjectDetail = components['schemas']['ProjectDetailRead'];
 type Release = components['schemas']['ReleaseRead'];
+type DirectionCard = components['schemas']['DirectionRead'];
+type DirectionDetail = components['schemas']['DirectionDetailRead'];
 
 /** Ответ-ресурс в оболочке контракта. */
 export function data<T>(payload: T, status = 200) {
@@ -574,4 +576,36 @@ export function projectDetail(key: string, overrides: Partial<ProjectDetail> = {
     directions: [],
     ...overrides,
   };
+}
+
+/**
+ * Направление в списке направлений проекта (`GET /projects/{key}/directions`, TRK-557):
+ * адрес `DEMO/promotion` раскладывается на ключ проекта и ключ направления, активное по
+ * умолчанию.
+ */
+export function directionCard(
+  address: string,
+  overrides: Partial<DirectionCard> = {},
+): DirectionCard {
+  const [projectKey = '', key = ''] = address.split('/');
+  return {
+    id: '44444444-4444-4444-4444-444444444444',
+    project_key: projectKey,
+    key,
+    address,
+    title: 'Популяризация',
+    description: '',
+    archived_at: null,
+    created_by: AUTHOR,
+    ...STAMPS,
+    ...overrides,
+  };
+}
+
+/** Направление одним ответом: карточка и атрибуты (`GET …/directions/{key}`). */
+export function directionDetail(
+  address: string,
+  overrides: Partial<DirectionDetail> = {},
+): DirectionDetail {
+  return { ...directionCard(address), attributes: [], ...overrides };
 }

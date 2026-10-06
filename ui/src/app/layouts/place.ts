@@ -6,6 +6,7 @@ export type Section =
   | 'task'
   | 'case'
   | 'project'
+  | 'direction'
   | 'questions'
   | 'start'
   | 'connect'
@@ -71,6 +72,17 @@ export function readPlace(pathname: string, params: URLSearchParams): Place {
     return {
       section: 'project',
       project: decodeURIComponent(project[1]).toUpperCase(),
+      taskKey: null,
+    };
+  }
+
+  // `/projects/TRK/directions/promotion`: страница направления (TRK-557) — тоже место
+  // проекта, и панель помечает его строку так же, как на экране проекта.
+  const direction = /^\/projects\/([^/]+)\/directions\/[^/]+$/.exec(pathname);
+  if (direction?.[1] !== undefined) {
+    return {
+      section: 'direction',
+      project: decodeURIComponent(direction[1]).toUpperCase(),
       taskKey: null,
     };
   }

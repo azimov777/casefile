@@ -2,6 +2,7 @@ import { access } from './access';
 import { account } from './account';
 import { caseScreen } from './case';
 import { connect } from './connect';
+import { direction } from './direction';
 import { errors } from './errors';
 import { fieldReasons } from './field-reasons';
 import { login } from './login';
@@ -20,6 +21,7 @@ export const ru = {
   account,
   case: caseScreen,
   connect,
+  direction,
   errors,
   fieldReasons,
   login,

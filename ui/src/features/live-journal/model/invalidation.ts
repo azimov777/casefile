@@ -1,6 +1,8 @@
 import type { QueryKey } from '@tanstack/react-query';
+import { directionKeys } from '@/entities/direction';
 import { questionKeys } from '@/entities/entry';
 import { projectKeys } from '@/entities/project';
+import { splitDirectionAddress } from '@/shared/lib';
 import { sessionKeys } from '@/entities/session';
 import { taskKeys } from '@/entities/task';
 import type { JournalFrame } from './frames';
@@ -22,7 +24,7 @@ import type { JournalFrame } from './frames';
  *   предлагается полосой, а не навязывается.
  * - Экран проекта устроен как открытая задача: у него нет ни доски, ни таблицы,
  *   поэтому запись дела проекта перечитывает его сразу и целиком, без склейки и
- *   без полосы (UI-177).
+ *   без полосы (UI-177). Страница направления — так же (TRK-557).
  */
 export interface Invalidation {
   /** Перечитывается сразу: обновление ничего не сдвигает. */
@@ -52,6 +54,20 @@ export function keysToInvalidate(frame: JournalFrame): Invalidation {
   // сам экран — карточка, атрибуты и опись (TRK-156, UI-177).
   if (frame.projectKey !== null) {
     return { immediate: [projectKeys.detail(frame.projectKey)], coalesced: [], deferred: [] };
+  }
+
+  // Запись дела направления (TRK-557) — так же, как проекта: перечитывается страница
+  // направления сразу и целиком. И проект: правка и архив направления — тоже записи его
+  // дела, а раздел «Направления» экрана проекта показывает название и признак архива.
+  if (frame.direction !== null) {
+    return {
+      immediate: [
+        directionKeys.detail(frame.direction),
+        projectKeys.detail(splitDirectionAddress(frame.direction).projectKey),
+      ],
+      coalesced: [],
+      deferred: [],
+    };
   }
 
   // `taskKey` не назван вместе с `projectKey` быть не может: `parseFrame` такой кадр
@@ -90,7 +106,14 @@ export function keysToInvalidate(frame: JournalFrame): Invalidation {
  */
 export function keysAfterReconnect(): Invalidation {
   return {
-    immediate: [['task'], ['project'], questionKeys.all, taskKeys.attention, sessionKeys.bootstrap],
+    immediate: [
+      ['task'],
+      ['project'],
+      ['direction'],
+      questionKeys.all,
+      taskKeys.attention,
+      sessionKeys.bootstrap,
+    ],
     coalesced: [taskKeys.board],
     deferred: [taskKeys.table],
   };

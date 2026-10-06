@@ -1,6 +1,8 @@
+export type { Holder } from './api/projects';
 export { useProjectRights, type ProjectRights } from './model/rights';
 export { ProjectArchiving } from './ui/archive-project';
-export { AddAttribute, ChangeAttribute, RemoveAttribute } from './ui/attribute-dialogs';
+export { AttributesSection } from './ui/attributes-section';
+export { CaseSection } from './ui/case-section';
 export { CreateProject } from './ui/create-project';
+export { CreateDirection, DirectionArchiving, EditDirection } from './ui/direction-dialogs';
 export { EditProject } from './ui/edit-project';
-export { NoteForm } from './ui/note-form';

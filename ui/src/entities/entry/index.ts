@@ -5,6 +5,7 @@ export {
   caseFeedQueryOptions,
   entryKeys,
   entryQueryOptions,
+  holderCaseQueryOptions,
   isServiceEntry,
   projectCaseQueryOptions,
   type Author,

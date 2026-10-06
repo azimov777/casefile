@@ -1,6 +1,8 @@
 import { useId, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { CircleHelp, Flag, Lock, TriangleAlert, Hourglass } from 'lucide-react';
+import { NO_DIRECTION, directionsQueryOptions } from '@/entities/direction';
 import { PriorityMark, StatusMark, TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
 import { cn } from '@/shared/lib';
 import { FilterGroup, ToggleGroup, ToggleGroupItem } from '@/shared/ui';
@@ -123,6 +125,8 @@ export function FilterMenu({
         )}
       </FilterGroup>
 
+      <DirectionField filters={filters} onApply={onApply} />
+
       <form className="flex flex-col gap-1.5" onSubmit={submit}>
         <label className="text-label text-muted" htmlFor={assigneeId}>
           {t('filters.assignee')}
@@ -141,6 +145,69 @@ export function FilterMenu({
           {pending ? <PendingMark id={pendingId} /> : null}
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Отбор по направлению (TRK-557): «любое», «без направления» и направления выбранного
+ * проекта — то же условие `direction`, каким отбирает агент. Применяется сразу, как
+ * переключатели рядом.
+ *
+ * Направления берутся у проекта, где человек стоит, вместе с архивными: задачи остаются в
+ * архивном направлении, и отобрать их нужно и после архива. Без проекта предложить можно
+ * только «без направления»: адрес направления называет проект, а читать направления всех
+ * проектов ради поля было бы запросом на каждый. Направление из адреса, которого в списке
+ * нет (ссылку прислали из другого проекта), стоит в поле своим адресом — поле не врёт, что
+ * отбора нет.
+ *
+ * Обычный `select`, а не `Select` на Radix: поле живёт внутри панели «Фильтр», а
+ * выпадающий слой поверх выпадающего слоя — лишний уровень фокуса; системный список
+ * на телефоне ещё и открывается родным колесом.
+ */
+function DirectionField({
+  filters,
+  onApply,
+}: {
+  filters: TaskFilters;
+  onApply: (changes: Partial<TaskFilters>) => void;
+}) {
+  const fieldId = useId();
+  const { t } = useTranslation('tasks');
+  const project = filters.project;
+  const directions = useQuery({
+    ...directionsQueryOptions(project, true),
+    enabled: project !== '',
+  });
+  const value = filters.direction.trim();
+  const listed = directions.data?.items ?? [];
+  const known =
+    value === '' || value === NO_DIRECTION || listed.some((item) => item.address === value);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-label text-muted" htmlFor={fieldId}>
+        {t('filters.directionLegend')}
+      </label>
+      {/* Фон и цвет названы у поля явно: у `select` своя системная палитра формы
+          (`docs/notes/ui.md`, «Кнопка без объявленного фона получает `ButtonFace`»). */}
+      <select
+        id={fieldId}
+        className="max-w-full truncate rounded-mark border border-line-strong bg-surface px-2 py-1 text-text max-fold:min-h-(--ui-tap)"
+        value={value}
+        onChange={(event) => onApply({ direction: event.target.value })}
+      >
+        <option value="">{t('filters.directionAny')}</option>
+        <option value={NO_DIRECTION}>{t('filters.directionNone')}</option>
+        {listed.map((item) => (
+          <option key={item.address} value={item.address}>
+            {item.archived_at === null
+              ? t('filters.directionOption', { title: item.title, address: item.address })
+              : t('filters.directionArchived', { title: item.title, address: item.address })}
+          </option>
+        ))}
+        {known ? null : <option value={value}>{value}</option>}
+      </select>
     </div>
   );
 }

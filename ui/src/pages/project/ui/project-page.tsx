@@ -4,23 +4,28 @@ import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { projectQueryOptions } from '@/entities/project';
 import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
-import { EditProject, ProjectArchiving, useProjectRights } from '@/features/manage-project';
+import {
+  AttributesSection,
+  CaseSection,
+  EditProject,
+  ProjectArchiving,
+  useProjectRights,
+} from '@/features/manage-project';
 import { tasksHref } from '@/features/task-filters';
 import { ApiError } from '@/shared/api';
 import { useLanguage } from '@/shared/i18n';
 import { exactTime, readEntryNo } from '@/shared/lib';
 import { Callout, Markdown, QueryState } from '@/shared/ui';
-import { ProjectAttributes } from './project-attributes';
-import { ProjectCase } from './project-case';
 import { ProjectDecisions } from './project-decisions';
+import { ProjectDirections } from './project-directions';
 
 /** Колонка экрана: та же ширина и тот же шаг, что у карточки задачи. */
 const SCREEN = 'flex max-w-(--ui-page-max) flex-col gap-4';
 
 /**
  * Экран проекта на чтение (UI-174, `docs/CONCEPT.md`, 3): карточка — ключ, название,
- * описание, — атрибуты с историей по клику, решения проекта со статусом (TRK-554) и опись
- * дела проекта с телами по клику.
+ * описание, — атрибуты с историей по клику, направления проекта (TRK-557), решения
+ * проекта со статусом (TRK-554) и опись дела проекта с телами по клику.
  *
  * Всё состояние — в адресе: `?entry=N` называет раскрытую запись дела, `?attribute=имя`
  * — атрибут, чья история открыта. Ссылку можно переслать, перезагрузка возвращает тот
@@ -166,13 +171,16 @@ export function ProjectPage() {
        */}
       <div className="flex flex-col gap-4 card:flex-row card:items-start">
         <div className="flex flex-col gap-4 card:min-w-0 card:flex-[2_1_0]">
-          <ProjectAttributes
-            projectKey={card.key}
+          <AttributesSection
+            holder={{ kind: 'project', key: card.key }}
             attributes={card.attributes}
             canWrite={canWrite}
             open={attribute}
             onOpenChange={rememberAttribute}
           />
+          {/* Направления — под атрибутами: части работы проекта без конца, каждая со своей
+              страницей (TRK-557). Над решениями: это места, куда из проекта переходят. */}
+          <ProjectDirections projectKey={card.key} canWrite={canWrite} />
           {/* Решения — под атрибутами: тоже то, что о проекте верно сейчас, и на узком
               экране они встают над делом, где лежит их текст (TRK-554). */}
           <ProjectDecisions
@@ -182,8 +190,8 @@ export function ProjectPage() {
           />
         </div>
         <div className="flex flex-col gap-4 card:min-w-0 card:flex-[3_1_0]">
-          <ProjectCase
-            projectKey={card.key}
+          <CaseSection
+            holder={{ kind: 'project', key: card.key }}
             canWrite={canWrite}
             openAt={openAt}
             onOpenChange={rememberEntry}

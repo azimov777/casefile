@@ -26,6 +26,7 @@ export const say = {
   account: i18n.getFixedT(null, 'account'),
   people: i18n.getFixedT(null, 'people'),
   project: i18n.getFixedT(null, 'project'),
+  direction: i18n.getFixedT(null, 'direction'),
   questions: i18n.getFixedT(null, 'questions'),
   start: i18n.getFixedT(null, 'start'),
   errors: i18n.getFixedT(null, 'errors'),

@@ -87,6 +87,8 @@ export const project = {
     addTitle: 'New attribute',
     addIntro:
       'A reference fact about the project: a name and a value. It is set without a reason; changing or removing it takes one.',
+    addIntroDirection:
+      'A reference fact about the direction: a name and a value. It is set without a reason; changing or removing it takes one.',
     nameLabel: 'Name',
     nameHint: 'Latin letters, digits, “_” and “-”, up to 64: workspace, read-first.',
     nameEmpty: 'The attribute needs a name.',
@@ -108,6 +110,8 @@ export const project = {
     removeTitle: 'Remove attribute {{name}}?',
     removeIntro:
       'The attribute leaves the project card; its last value and the reason stay in the project case.',
+    removeIntroDirection:
+      'The attribute leaves the direction card; its last value and the reason stay in the direction case.',
     removeReasonHint: 'Why the attribute is no longer true. It is read in the attribute history.',
     removeReasonEmpty:
       'An attribute is not removed without a reason: the history has to explain why the fact stopped being true.',

@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
 import { MessageSquarePlus } from 'lucide-react';
 import { EntryBody, EntryIndex, type EntryIndexHandle, type Question } from '@/entities/entry';
-import { TaskNav, taskPackageQueryOptions } from '@/entities/task';
+import { CLOSED_STATUSES, TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import {
   AnswerForm,
   AnswerReceipt,
@@ -16,6 +16,7 @@ import {
 import { WarningPanel } from '@/features/accept-warning';
 import { RemarkForm } from '@/features/leave-remark';
 import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
+import { useProjectRights } from '@/features/manage-project';
 import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { caseHref, projectHref, readEntryNo } from '@/shared/lib';
@@ -126,6 +127,7 @@ export function TaskPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const pkg = useQuery(taskPackageQueryOptions(key));
+  const rights = useProjectRights();
 
   /**
    * Адрес с прежним ключом переносится на текущий (`CONCEPT.md`, «Карточка задачи»;
@@ -398,7 +400,17 @@ export function TaskPage() {
       )}
 
       <TaskNav taskKey={task.key} view="card" />
-      <TaskHeader task={task} features={features} parent={parent ?? null} decisions={decisions} />
+      <TaskHeader
+        task={task}
+        features={features}
+        parent={parent ?? null}
+        decisions={decisions}
+        canChangeDirection={
+          // Закрытая задача поле не меняет (`task_closed`), архивный проект — ничего
+          // (`project_archived`): кнопки нет, а не «есть и падает» (TRK-557).
+          rights.write && !frozen && !(CLOSED_STATUSES as readonly string[]).includes(task.status)
+        }
+      />
 
       {/* Почему на карточке нет ни «Ответить», ни «Замечания», сказано словами — и
           сказано, где задачу вернуть в работу: на экране её проекта. */}
