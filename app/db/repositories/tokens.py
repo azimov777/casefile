@@ -3,12 +3,13 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import ColumnElement, and_, or_, select
+from sqlalchemy import ColumnElement, and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.participant import Participant
 from app.db.models.token import Token
 from app.db.pagination import Page, paginate
+from app.domain.authors import Author, AuthorKind
 from app.domain.tokens import TokenKind
 
 
@@ -115,6 +116,33 @@ class TokenRepository:
         if keep is not None:
             statement = statement.where(Token.id != keep)
         return (await self._session.scalars(statement)).unique().all()
+
+    async def list_live_named_of_kind(self, name: str, kind: TokenKind) -> Sequence[Token]:
+        """Неотозванные токены установки с этим именем и этого вида — у любого участника."""
+        statement = select(Token).where(
+            Token.name == name,
+            Token.kind == kind,
+            Token.revoked_at.is_(None),
+        )
+        return (await self._session.scalars(statement)).unique().all()
+
+    async def reassign_tracker_issued(self, kinds: Sequence[TokenKind], issuer: Author) -> int:
+        """Живые токены этих видов, выпущенные трекером, переписывает на `issuer`.
+
+        Отозванные и прочие виды (сеансы) не трогаются. Возвращает число переписанных;
+        повтор даёт ноль, потому что выбранных строк больше нет.
+        """
+        statement = (
+            update(Token)
+            .where(
+                Token.kind.in_(list(kinds)),
+                Token.revoked_at.is_(None),
+                Token.created_by_kind == AuthorKind.TRACKER,
+            )
+            .values(created_by_kind=issuer.kind, created_by_signature=issuer.signature)
+            .returning(Token.id)
+        )
+        return len((await self._session.execute(statement)).all())
 
     async def add(self, token: Token) -> Token:
         self._session.add(token)

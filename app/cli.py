@@ -160,7 +160,12 @@ async def _local_token(args: argparse.Namespace) -> int:
     except PasswordHashError as exc:
         print(f"TRACKER_PASSWORD_HASH is not a password hash: {exc}", file=sys.stderr)
         return 1
-    return await _keep_in_file(args, ensure_local_token, legacy_password_hash=legacy)
+    return await _keep_in_file(
+        args,
+        ensure_local_token,
+        legacy_password_hash=legacy,
+        adopt_connections=get_settings().login == "local",
+    )
 
 
 def _legacy_password_hash() -> PasswordHash | None:
@@ -176,7 +181,9 @@ def _legacy_password_hash() -> PasswordHash | None:
 
 async def _agent_token(args: argparse.Namespace) -> int:
     """Кладёт в файл действующий токен агента этой машины — тем же путём, что ключ интерфейса."""
-    return await _keep_in_file(args, ensure_agent_token)
+    return await _keep_in_file(
+        args, ensure_agent_token, issued_by_person=get_settings().login == "local"
+    )
 
 
 async def _keep_in_file(args: argparse.Namespace, ensure: EnsureToken, **extra: object) -> int:
