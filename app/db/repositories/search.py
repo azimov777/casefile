@@ -62,7 +62,7 @@ from app.db.repositories.entries import (
     open_remark_count,
     remarks_in_work_count,
 )
-from app.db.repositories.links import open_blockers_of, parent_of
+from app.db.repositories.links import descendants_of, open_blockers_of, parent_of
 from app.db.repositories.projects import in_active_project
 from app.db.sql import ilike_contains
 from app.domain.links import LinkKind
@@ -287,10 +287,10 @@ def compile_filter(resolved: ResolvedFilter) -> ColumnElement[bool]:
 def _archive_visibility(named: NamedInFilter) -> ColumnElement[bool]:
     """Задача видна, если её проект жив или отбор назвал её явно (`CONCEPT.md`, 4.4).
 
-    Явно — это проект условием `project:`, ключ самой задачи условием `key:` или ключ её
-    родителя условием `parent:`; что считается названным, решает домен
-    (`named_in_filter`). Условие ложится на отбор через `and`, поэтому названное в одной
-    ветке `or` не открывает архив остальным ветвям.
+    Явно — это проект условием `project:`, ключ самой задачи условием `key:`, ключ её
+    родителя условием `parent:` или ключ корня её поддерева условием `under:`; что
+    считается названным, решает домен (`named_in_filter`). Условие ложится на отбор через
+    `and`, поэтому названное в одной ветке `or` не открывает архив остальным ветвям.
     """
     parts = [in_active_project(Task.project_id)]
     if named.projects:
@@ -298,6 +298,8 @@ def _archive_visibility(named: NamedInFilter) -> ColumnElement[bool]:
     if named.tasks:
         parts.append(Task.id.in_(named.tasks))
     parts.extend(_has_parent(parent) for parent in named.parents)
+    if named.subtrees:
+        parts.append(Task.id.in_(descendants_of(sorted(named.subtrees, key=str))))
     return or_(*parts)
 
 
@@ -396,31 +398,34 @@ def _has_parent(source_id: Any = None) -> ColumnElement[bool]:
 def _task_key(term: SearchTerm) -> ColumnElement[bool]:
     """Значение-ключ задачи: чей он, решает поле.
 
-    Вид значения у `parent` и `key` один — оба разрешаются в идентификатор задачи одним
-    и тем же путём сценария, — а условия разные: родитель живёт связью, ключ самой
-    задачи колонкой. Тот же приём, что у счётчиков (`_counted`): вид значения отвечает
-    за проверку, поле — за то, куда условие ложится.
+    Вид значения у `parent`, `under` и `key` один — все три разрешаются в идентификатор
+    задачи одним и тем же путём сценария, — а условия разные: родитель живёт связью,
+    поддерево — рекурсией по связям, ключ самой задачи колонкой. Тот же приём, что у
+    счётчиков (`_counted`): вид значения отвечает за проверку, поле — за то, куда условие
+    ложится.
     """
     match term.field:
         case SearchField.PARENT:
             return _parent(term.operator, term.values)
+        case SearchField.UNDER:
+            return _under(term.operator, term.values)
         case SearchField.KEY:
             # Сравнение идёт по `id`, а не по строке ключа: ключ уже разрешён в задачу
             # сценарием, и второе сравнение — по тексту, с оглядкой на регистр — было бы
             # вторым толкованием одного значения.
             return _scalar(Task.id, term.operator, term.values)
         case _:
-            # Недостижимо: вид `task_key` носят только эти два поля. Явная ошибка вместо
-            # тихого условия — чтобы третье поле назвало себя, а не отбирало не то.
+            # Недостижимо: вид `task_key` носят только эти три поля. Явная ошибка вместо
+            # тихого условия — чтобы четвёртое поле назвало себя, а не отбирало не то.
             raise ValueError(f"Search field {term.field.value!r} has no task-key condition")
 
 
 def _parent(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
     """Дети названной задачи. Значение — идентификатор родителя, разрешённый сценарием.
 
-    Родство прямое и на одно колено: внуки сюда не попадают. Рекурсия потребовала бы
-    обхода графа на каждую строку выдачи, а вопрос, ради которого поле заведено, —
-    «все ли дети закрыты» — про прямых детей.
+    Родство прямое и на одно колено: внуки сюда не попадают, а вопрос, ради которого поле
+    заведено, — «все ли дети закрыты» — про прямых детей. Всё поддерево отбирает другое
+    поле, `under` (`_under`).
     """
     matching = or_(*(_has_parent(value) for value in values))
     return not_(matching) if operator in NEGATIVE_OPERATORS else matching
@@ -434,6 +439,17 @@ def _decision(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
     сравнение одно, без оглядки на регистр.
     """
     matching = or_(*(Task.decisions.contains([value]) for value in values))
+    return not_(matching) if operator in NEGATIVE_OPERATORS else matching
+
+
+def _under(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
+    """Всё поддерево названных задач: дети, внуки и так далее, без самих названных.
+
+    Значения — идентификаторы корней, разрешённые сценарием. Все корни условия идут одной
+    рекурсией (`descendants_of`), и она считается один раз на запрос, а не на строку
+    выдачи. Отрицание — «не потомок ни одного из названных»: сами корни в него входят.
+    """
+    matching = Task.id.in_(descendants_of(values))
     return not_(matching) if operator in NEGATIVE_OPERATORS else matching
 
 

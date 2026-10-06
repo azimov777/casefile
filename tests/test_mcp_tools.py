@@ -19,6 +19,7 @@
 
 import json
 import uuid
+from itertools import pairwise
 from typing import Any
 
 import jsonschema
@@ -26,8 +27,11 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.author import created_by_columns
+from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
+from app.db.repositories import EntryRepository
 from app.domain.case import EntryType
 from app.domain.errors import InvalidSearchQueryError
 from app.domain.links import LinkKind
@@ -41,7 +45,7 @@ from app.domain.search import (
     searchable_names,
     selectable_names,
 )
-from app.domain.tasks import feature_names
+from app.domain.tasks import PARENT_GOAL_LIMIT, feature_names
 from app.mcp.tools.tasks.search_tasks import DEFAULT_SEARCH_FIELDS, FieldsArg, QueryArg
 from app.mcp.tools.tasks.views import FeaturesView
 from app.services import case as case_service
@@ -655,6 +659,96 @@ async def test_search_tasks_names_the_parent_and_leaves_it_out_when_not_asked(
     response = await auth_client.get("/api/v1/tasks", params={"project": "TRK", "fields": fields})
     assert response.status_code == 200, response.text
     assert asked["items"] == response.json()["data"]
+
+
+async def test_search_tasks_selects_the_whole_subtree_with_under_and_rest_agrees(
+    mcp_session: Connect,
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    task_actor: Actor,
+    project: Project,
+    task_secret: str,
+) -> None:
+    """TRK-468: `under` — потомки любой глубины, `parent` — одно колено; MCP и REST сходятся.
+
+    Строка языка и структурный аргумент отвечают одинаково, у несуществующего корня — отказ
+    `search_value_invalid`, а не пустая страница.
+    """
+    chain = [
+        await tasks_service.create_task(
+            db_session, actor=task_actor, project=project, title=name, description="описание"
+        )
+        for name in ("корень", "ребёнок", "внук", "правнук")
+    ]
+    for parent, child in pairwise(chain):
+        await links_service.add_link(
+            db_session, parent, child, actor=task_actor, kind=LinkKind.PARENT
+        )
+    root, *below = (task.key for task in chain)
+
+    async with mcp_session(task_secret) as session:
+        by_argument = await call(session, "search_tasks", under=[root], fields=["key"])
+        by_query = await call(session, "search_tasks", query=f"under: {root}", fields=["key"])
+        children = await call(session, "search_tasks", parent=[root], fields=["key"])
+        missing = await refuse(session, "search_tasks", under=["TRK-404"])
+
+    assert [item["key"] for item in by_argument["items"]] == below
+    assert by_query == by_argument
+    assert [item["key"] for item in children["items"]] == below[:1]
+    assert "search_value_invalid" in missing
+
+    response = await auth_client.get("/api/v1/tasks", params={"under": root, "fields": "key"})
+    assert response.status_code == 200, response.text
+    assert by_argument["items"] == response.json()["data"]
+
+
+async def test_get_task_shows_the_goal_of_the_parent_and_rest_agrees(
+    mcp_session: Connect,
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    task_actor: Actor,
+    project: Project,
+    task_secret: str,
+) -> None:
+    """TRK-468: у `parent` в карточке ребёнка есть `goal` и `goal_truncated`, у корня его нет.
+
+    Пакет сверяется со своей схемой из `tools/list` и с REST поле в поле — в том числе на
+    цели длиннее потолка: обрезка одна на оба канала.
+    """
+    long_goal = "в" * (PARENT_GOAL_LIMIT + 10)
+    root = await tasks_service.create_task(
+        db_session,
+        actor=task_actor,
+        project=project,
+        title="корень",
+        description="описание",
+        goal=long_goal,
+    )
+    child = await tasks_service.create_task(
+        db_session, actor=task_actor, project=project, title="ребёнок", description="описание"
+    )
+    await links_service.add_link(db_session, root, child, actor=task_actor, kind=LinkKind.PARENT)
+    root_key, child_key = root.key, child.key
+
+    async with mcp_session(task_secret) as session:
+        declared = {tool.name: tool.output_schema for tool in (await session.list_tools()).tools}
+        from_child = await call(session, "get_task", key=child_key)
+        from_root = await call(session, "get_task", key=root_key)
+
+    jsonschema.validate(from_child, declared["get_task"])
+    assert from_root["parent"] is None
+    assert from_child["parent"] == {
+        "key": root_key,
+        "title": "корень",
+        "status": "backlog",
+        "goal": "в" * PARENT_GOAL_LIMIT,
+        "goal_truncated": True,
+    }
+    assert set(from_root["children"][0]) == {"key", "title", "status"}
+
+    response = await auth_client.get(f"/api/v1/tasks/{child_key}")
+    assert response.status_code == 200, response.text
+    assert from_child == response.json()["data"]
 
 
 async def test_search_tasks_clips_a_long_text_and_says_so(
@@ -1390,6 +1484,77 @@ async def test_a_withdrawn_question_leaves_the_package_and_stays_in_the_case(
     assert "already_answered" in twice
 
 
+async def test_an_answer_filed_before_outcomes_reads_the_same_through_mcp_and_rest(
+    mcp_session: Connect,
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    task_secret: str,
+    task: Task,
+) -> None:
+    """TRK-563: ответ с нагрузкой `{question_no}` читают одинаково и агент, и человек.
+
+    Старую запись подшиваем прямо в базу: через инструмент её не получить, а читать её
+    будут именно так. Рядом — ответ, поданный через настоящий вызов, чтобы сверка
+    охватывала оба поколения нагрузки, а не только прежнее.
+    """
+    key, task_id, created_by = task.key, task.id, created_by_columns(task.created_by)
+    async with mcp_session(task_secret) as session:
+        old_question = await call(
+            session, "ask", key=key, addressees=["owner"], title="Какой ключ?", blocking=True
+        )
+        new_question = await call(
+            session, "ask", key=key, addressees=["owner"], title="Верхний регистр?", blocking=True
+        )
+
+    repository = EntryRepository(db_session)
+    old_no = await repository.allocate_no(task_id)
+    await repository.add(
+        Entry(
+            task_id=task_id,
+            no=old_no,
+            type=EntryType.ANSWER,
+            title=f"Answer to {key}#{old_question['no']}",
+            body="Верхний",
+            payload={"question_no": old_question["no"]},
+            **created_by,
+        )
+    )
+    await db_session.flush()
+
+    async with mcp_session(task_secret) as session:
+        current = await call(
+            session, "answer", key=key, question_no=new_question["no"], body="Годится"
+        )
+        from_mcp = await call(session, "read_entries", key=key, nos=[old_no, current["no"]])
+        package = await call(session, "get_task", key=key)
+
+    from_rest = []
+    for no in (old_no, current["no"]):
+        response = await auth_client.get(f"/api/v1/tasks/{key}/entries/{no}")
+        assert response.status_code == 200, response.text
+        from_rest.append(response.json()["data"])
+
+    assert [item["no"] for item in from_mcp["items"]] == [old_no, current["no"]]
+    assert [item["payload"] for item in from_mcp["items"]] == [
+        item["payload"] for item in from_rest
+    ]
+    assert from_mcp["items"][0]["payload"] == {
+        "question_no": old_question["no"],
+        "outcome": "answered",
+        "replaced_by": None,
+    }
+    assert from_mcp["items"][1]["payload"] == {
+        "question_no": new_question["no"],
+        "outcome": "answered",
+        "replaced_by": None,
+    }
+    # Опись читала ответ так всегда: все три двери сходятся на одном исходе.
+    index = {line["no"]: line["facts"] for line in package["index"]}
+    assert index[old_no]["outcome"] == "answered"
+    assert index[old_no]["replaced_by"] is None
+    assert package["features"]["open_questions"] == 0
+
+
 async def test_asking_an_unknown_participant_is_refused(
     mcp_session: Connect, task_secret: str, task: Task
 ) -> None:
@@ -2010,7 +2175,7 @@ async def test_every_search_field_is_reachable_from_the_tool_itself(
     for name in searchable_names():
         assert f"`{name}`" in described, f"поле {name} не названо в описании языка"
 
-    for name in ("key", "project", "parent", "status", "assignee", "priority", "text"):
+    for name in ("key", "project", "parent", "under", "status", "assignee", "priority", "text"):
         assert name in arguments, f"поле {name} не выражается структурным параметром"
 
 

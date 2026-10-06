@@ -263,13 +263,15 @@ class SearchField(StrEnum):
 
     `KEY` — ключ самой задачи: им сессия, ведущая несколько дел, спрашивает про них
     разом. Значение у него того же вида, что у `PARENT`, и разрешается тем же путём;
-    различает их компилятор.
+    различает их компилятор. Так же устроен `UNDER`: ключ задачи, но условие — потомки
+    любой глубины, а не дети.
     """
 
     KEY = "key"
     PROJECT = "project"
     PARENT = "parent"
     DECISION = "decision"
+    UNDER = "under"
     STATUS = "status"
     ASSIGNEE = "assignee"
     PRIORITY = "priority"
@@ -323,9 +325,9 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
         SearchFieldSpec(SearchField.KEY, SearchValueKind.TASK_KEY, EXACT_OPERATORS),
         SearchFieldSpec(SearchField.PROJECT, SearchValueKind.PROJECT_KEY, EXACT_OPERATORS),
         # Родство прямое и на одно колено: `parent: UI-10` — дети UI-10, а не всё
-        # поддерево. Рекурсия по внукам потребовала бы обхода графа на каждую строку
-        # выдачи, а вопрос, ради которого поле заведено, — «можно ли закрывать
-        # программу» — про прямых детей (`CONCEPT.md`, 3.5). Пустое состояние здесь
+        # поддерево. Вопрос, ради которого поле заведено, — «можно ли закрывать
+        # программу» — про прямых детей (`CONCEPT.md`, 3.5), и смысл поля не менялся, когда
+        # понадобилось поддерево: оно отдельное поле `under` ниже. Пустое состояние здесь
         # есть и означает верхний уровень проекта: задачи, у которых родителя нет.
         SearchFieldSpec(
             SearchField.PARENT, SearchValueKind.TASK_KEY, EXACT_OPERATORS, is_nullable=True
@@ -340,6 +342,10 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
             EXACT_OPERATORS,
             is_nullable=True,
         ),
+        # Всё поддерево: потомки названной задачи на любой глубине, без неё самой (TRK-468).
+        # Пустого состояния нет намеренно: «ничьего потомка нет» — не вопрос, у каждой
+        # задачи он тривиально верен, а верхний уровень уже называет `parent: empty()`.
+        SearchFieldSpec(SearchField.UNDER, SearchValueKind.TASK_KEY, EXACT_OPERATORS),
         SearchFieldSpec(SearchField.STATUS, SearchValueKind.STATUS, EXACT_OPERATORS),
         # Исполнитель — свободная строка, а не ссылка на участника (`CONCEPT.md`, 3.3),
         # поэтому вхождение подстроки здесь осмысленно: `assignee: ~ bot` находит и
@@ -575,13 +581,14 @@ NAMING_OPERATORS = frozenset({Operator.EQ, Operator.IN})
 
 @dataclass(frozen=True, slots=True)
 class NamedInFilter:
-    """Что отбор называет явно: проекты, ключи задач и родителей — идентификаторами.
+    """Что отбор называет явно: проекты, ключи задач, родителей и корни поддеревьев.
 
     Задачи архивного проекта в выдачу не попадают, пока отбор не назовёт их явно:
     условием `project:` с этим проектом, ключом самой задачи (`key:`) или, для детей,
-    ключом родителя (`parent:`) (`CONCEPT.md`, 3.2 и 4.4; `TRK-164#9`, `TRK-151#17`).
-    Поля в языке запросов для этого нет намеренно: архив показывается названием, а не
-    отдельным флагом.
+    ключом родителя (`parent:`), а для всего поддерева — ключом его корня (`under:`)
+    (`CONCEPT.md`, 3.2 и 4.4; `TRK-164#9`, `TRK-151#17`, `TRK-468`). Поля в языке
+    запросов для этого нет намеренно: архив показывается названием, а не отдельным
+    флагом.
 
     Названное собирается по всему дереву, в какой бы ветке `or` оно ни стояло: условие
     видимости добавляется к отбору через `and` и пропускает только названное, поэтому
@@ -592,14 +599,16 @@ class NamedInFilter:
     projects: frozenset[Any] = frozenset()
     tasks: frozenset[Any] = frozenset()
     parents: frozenset[Any] = frozenset()
+    subtrees: frozenset[Any] = frozenset()
 
 
 def named_in_filter(root: Term | None) -> NamedInFilter:
-    """Проекты, задачи и родители, названные условиями равенства или вхождения."""
+    """Проекты, задачи, родители и корни поддеревьев, названные равенством или вхождением."""
     found: dict[SearchField, set[Any]] = {
         SearchField.PROJECT: set(),
         SearchField.KEY: set(),
         SearchField.PARENT: set(),
+        SearchField.UNDER: set(),
     }
     for term in iter_terms(root):
         if term.field in found and term.operator in NAMING_OPERATORS:
@@ -608,4 +617,5 @@ def named_in_filter(root: Term | None) -> NamedInFilter:
         projects=frozenset(found[SearchField.PROJECT]),
         tasks=frozenset(found[SearchField.KEY]),
         parents=frozenset(found[SearchField.PARENT]),
+        subtrees=frozenset(found[SearchField.UNDER]),
     )

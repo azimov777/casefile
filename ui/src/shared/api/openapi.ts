@@ -663,7 +663,11 @@ export interface paths {
          *
          *     Задачи архивного проекта в выдачу не попадают, пока отбор не назовёт их равенством
          *     или вхождением: проект условием `project`, саму задачу — `key`, её родителя —
-         *     `parent` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в языке нет.
+         *     `parent`, корень её поддерева — `under` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в
+         *     языке нет.
+         *
+         *     `parent: X` — прямые дети X на одно колено, `under: X` — всё поддерево X на любой
+         *     глубине, без самой X: дети, внуки и так далее.
          *
          *     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
          *     `open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из
@@ -1554,9 +1558,10 @@ export interface components {
          * @description Ответ, как его **читают**: исход есть всегда.
          *
          *     Трекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,
-         *     подшитый до появления исхода, этих ключей не несёт и читается значениями по умолчанию —
-         *     `answered` и `null`: тогда других исходов не было (`app/domain/case.py`,
-         *     `answer_outcome`).
+         *     подшитый до появления исхода, этих ключей не несёт; значения «тогда» — `answered` и
+         *     `null` — подставляет не эта модель, а `read_payload` (`app/domain/case.py`), одно
+         *     правило на REST и на MCP. Поэтому у полей нет умолчаний: модель только подтверждает,
+         *     что правило отработало, а не повторяет его.
          */
         AnswerPayload: {
             /**
@@ -1567,7 +1572,6 @@ export interface components {
             question_no: number;
             /**
              * @description How the question is closed: `answered` — answered on its merits; `withdrawn` — withdrawn as stale; `replaced` — replaced by the question in `replaced_by`. `withdrawn` and `replaced` need a reason in the body and are accepted only while the question has no answer yet: an answered question stays with its answer
-             * @default answered
              * @example answered
              */
             outcome: components["schemas"]["AnswerOutcome"];
@@ -1576,7 +1580,7 @@ export interface components {
              * @description Number of a later `question` entry of the same task that replaces this one; required with `replaced` and not accepted with any other outcome
              * @example null
              */
-            replaced_by?: number | null;
+            replaced_by: number | null;
         };
         /**
          * AnsweredQuestionRead
@@ -3330,6 +3334,42 @@ export interface components {
             status?: components["schemas"]["OnboardingStatus"];
             /** @description Which explanations to hide; fields left out inside it stay as they are */
             hints?: components["schemas"]["OnboardingHintsUpdate"];
+        };
+        /**
+         * PackageParentRead
+         * @description Родитель в карточке ребёнка: как у любой связи, плюс его цель (`CONCEPT.md`, 4.2).
+         *
+         *     Цель нужна затем, чтобы агент, взявший задачу из программы, видел, чему она служит, без
+         *     второго вызова. Только у прямого родителя и не длиннее потолка
+         *     (`app/domain/tasks.py`, `PARENT_GOAL_LIMIT`); детям и другим связям цель не едет.
+         */
+        PackageParentRead: {
+            /**
+             * Key
+             * @example TRK-7
+             */
+            key: string;
+            /**
+             * Title
+             * @example Выдать номера проектам
+             */
+            title: string;
+            /**
+             * @description Status of the other task; `blocked` is computed from exactly this
+             * @example open
+             */
+            status: components["schemas"]["TaskStatus"];
+            /**
+             * Goal
+             * @description The parent's `goal` section, cut at 320 characters; empty if the parent has none. The whole text is `get_task` of the parent
+             * @example Агент одним запросом находит все задачи программы
+             */
+            goal: string;
+            /**
+             * Goal Truncated
+             * @description `true` when `goal` was cut at the limit and the parent's text is longer
+             */
+            goal_truncated: boolean;
         };
         /**
          * PageMeta
@@ -5228,8 +5268,8 @@ export interface components {
          */
         TaskPackageRead: {
             task: components["schemas"]["TaskRead"];
-            /** @description The parent of this task: key, title and status; `null` for a top-level task. A task has at most one parent. Set with the same `link` call as any other link, but shown here and not in `links` */
-            parent?: components["schemas"]["LinkTaskRead"] | null;
+            /** @description The parent of this task: key, title, status and its goal; `null` for a top-level task. A task has at most one parent. Set with the same `link` call as any other link, but shown here and not in `links` */
+            parent?: components["schemas"]["PackageParentRead"] | null;
             /**
              * Children
              * @description Children of this task: key, title and status of each, in the order they were linked; empty if none. Set with `link`, shown here and not in `links`
@@ -8382,7 +8422,7 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
+                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by project and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
@@ -8402,6 +8442,8 @@ export interface operations {
                 parent?: string[] | null;
                 /** @description Project decisions `PROJECT#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's case answers 422 instead of an empty page */
                 decision?: string[] | null;
+                /** @description Root task keys: the answer holds all their descendants at any depth — children, grandchildren and so on — without the roots themselves. `parent` is the direct children only. An unknown key answers 422 instead of an empty page */
+                under?: string[] | null;
                 /** @description Task statuses */
                 status?: components["schemas"]["TaskStatus"][] | null;
                 /** @description Assignee names, matched exactly; `empty()` finds unassigned tasks */

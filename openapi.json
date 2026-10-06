@@ -4325,7 +4325,7 @@
           "tasks"
         ],
         "summary": "List and search tasks",
-        "description": "Задачи по строке запроса, по структурному фильтру или по обоим сразу.\n\nОба входа сводятся к одному отбору и на одинаковых условиях дают одинаковый\nрезультат в одинаковом порядке: `?query=project: TRK and status: open` и\n`?project=TRK&status=open` — это буквально один путь исполнения. Условия из разных\nисточников складываются по `and`.\n\nЗапрос без условий — законный: это «все задачи» по ключу, и отдельного способа\nсказать то же самое заводить незачем. Ошибка разбора приходит `422\ninvalid_search_query` с позицией символа; незнакомое имя поля — `422\nsearch_field_unknown` со списком допустимых в `details.allowed`.\n\nЗадачи архивного проекта в выдачу не попадают, пока отбор не назовёт их равенством\nили вхождением: проект условием `project`, саму задачу — `key`, её родителя —\n`parent` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в языке нет.\n\nОтбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,\n`open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из\nсвязей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:\n`project: TRK and status: open and blocked: false and open_blocking_questions: 0`.\nЕсть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а\nназванная задача ещё не закрыта».\n\nТе же признаки приходят **в каждой строке** объектом `features` — тем самым, что\nв пакете преемника: значок «заблокирована» и счётчик вопросов рисуются из списка,\nбез запроса на каждую строку.\n\n`fields` оставляет в ответе только перечисленные поля плюс `key`: полная задача с\nпятью разделами съедает контекст агента, которому нужен столбец ключей. Признаки\nвыбираются целиком именем `features`; отдельный признак именем поля выдачи не\nвыбирается — `blocked` остаётся именем условия отбора.\n\n**Страницами.** `meta.total` — сколько задач нашлось по отбору, а не сколько их на\nстранице: из него и `limit` собирается «страница 3 из 7, всего 98». Это\nединственная коллекция API, которая его считает, и считает всегда — вторым запросом\nпо тому же отбору.\n\nСтраницу адресует либо `cursor` из `meta.next_cursor` предыдущей страницы, либо\n`offset` — номер первой строки от начала выдачи: страница N размера L начинается с\n`(N - 1) * L`. Вместе они не принимаются (`422 cursor_with_offset`): это два разных\nадреса одной страницы, и выбрать за клиента значило бы отдать не ту.\n\nЦена смещения названа честно: база читает и выбрасывает пропускаемые строки, а\nстраница сдвигается, если между двумя запросами задачу завели или подняли наверх\n(`sort=-updated_at`) — строка на границе покажется дважды или пропадёт. Курсор от\nэтого свободен, поэтому обход **всей** выдачи (и агенты через MCP) идёт им.\nСмещение за концом выдачи — законный запрос: пустая страница, `has_more: false` и\nпрежний `total`.",
+        "description": "Задачи по строке запроса, по структурному фильтру или по обоим сразу.\n\nОба входа сводятся к одному отбору и на одинаковых условиях дают одинаковый\nрезультат в одинаковом порядке: `?query=project: TRK and status: open` и\n`?project=TRK&status=open` — это буквально один путь исполнения. Условия из разных\nисточников складываются по `and`.\n\nЗапрос без условий — законный: это «все задачи» по ключу, и отдельного способа\nсказать то же самое заводить незачем. Ошибка разбора приходит `422\ninvalid_search_query` с позицией символа; незнакомое имя поля — `422\nsearch_field_unknown` со списком допустимых в `details.allowed`.\n\nЗадачи архивного проекта в выдачу не попадают, пока отбор не назовёт их равенством\nили вхождением: проект условием `project`, саму задачу — `key`, её родителя —\n`parent`, корень её поддерева — `under` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в\nязыке нет.\n\n`parent: X` — прямые дети X на одно колено, `under: X` — всё поддерево X на любой\nглубине, без самой X: дети, внуки и так далее.\n\nОтбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,\n`open_blocking_questions`, `open_remarks`): колонок под них нет, они считаются из\nсвязей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:\n`project: TRK and status: open and blocked: false and open_blocking_questions: 0`.\nЕсть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а\nназванная задача ещё не закрыта».\n\nТе же признаки приходят **в каждой строке** объектом `features` — тем самым, что\nв пакете преемника: значок «заблокирована» и счётчик вопросов рисуются из списка,\nбез запроса на каждую строку.\n\n`fields` оставляет в ответе только перечисленные поля плюс `key`: полная задача с\nпятью разделами съедает контекст агента, которому нужен столбец ключей. Признаки\nвыбираются целиком именем `features`; отдельный признак именем поля выдачи не\nвыбирается — `blocked` остаётся именем условия отбора.\n\n**Страницами.** `meta.total` — сколько задач нашлось по отбору, а не сколько их на\nстранице: из него и `limit` собирается «страница 3 из 7, всего 98». Это\nединственная коллекция API, которая его считает, и считает всегда — вторым запросом\nпо тому же отбору.\n\nСтраницу адресует либо `cursor` из `meta.next_cursor` предыдущей страницы, либо\n`offset` — номер первой строки от начала выдачи: страница N размера L начинается с\n`(N - 1) * L`. Вместе они не принимаются (`422 cursor_with_offset`): это два разных\nадреса одной страницы, и выбрать за клиента значило бы отдать не ту.\n\nЦена смещения названа честно: база читает и выбрасывает пропускаемые строки, а\nстраница сдвигается, если между двумя запросами задачу завели или подняли наверх\n(`sort=-updated_at`) — строка на границе покажется дважды или пропадёт. Курсор от\nэтого свободен, поэтому обход **всей** выдачи (и агенты через MCP) идёт им.\nСмещение за концом выдачи — законный запрос: пустая страница, `has_more: false` и\nпрежний `total`.",
         "operationId": "list_tasks",
         "security": [
           {
@@ -4347,13 +4347,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
+              "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
               "examples": [
                 "project: TRK and status: open and blocked: false"
               ],
               "title": "Query"
             },
-            "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
+            "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
           },
           {
             "name": "sort",
@@ -4571,6 +4571,33 @@
               "title": "Decision"
             },
             "description": "Project decisions `PROJECT#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's case answers 422 instead of an empty page"
+          },
+          {
+            "name": "under",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Root task keys: the answer holds all their descendants at any depth — children, grandchildren and so on — without the roots themselves. `parent` is the direct children only. An unknown key answers 422 instead of an empty page",
+              "examples": [
+                [
+                  "TRK-7"
+                ]
+              ],
+              "title": "Under"
+            },
+            "description": "Root task keys: the answer holds all their descendants at any depth — children, grandchildren and so on — without the roots themselves. `parent` is the direct children only. An unknown key answers 422 instead of an empty page"
           },
           {
             "name": "status",
@@ -8322,7 +8349,6 @@
           "outcome": {
             "$ref": "#/components/schemas/AnswerOutcome",
             "description": "How the question is closed: `answered` — answered on its merits; `withdrawn` — withdrawn as stale; `replaced` — replaced by the question in `replaced_by`. `withdrawn` and `replaced` need a reason in the body and are accepted only while the question has no answer yet: an answered question stays with its answer",
-            "default": "answered",
             "examples": [
               "answered"
             ]
@@ -8347,10 +8373,12 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "question_no"
+          "question_no",
+          "outcome",
+          "replaced_by"
         ],
         "title": "AnswerPayload",
-        "description": "Ответ, как его **читают**: исход есть всегда.\n\nТрекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,\nподшитый до появления исхода, этих ключей не несёт и читается значениями по умолчанию —\n`answered` и `null`: тогда других исходов не было (`app/domain/case.py`,\n`answer_outcome`)."
+        "description": "Ответ, как его **читают**: исход есть всегда.\n\nТрекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,\nподшитый до появления исхода, этих ключей не несёт; значения «тогда» — `answered` и\n`null` — подставляет не эта модель, а `read_payload` (`app/domain/case.py`), одно\nправило на REST и на MCP. Поэтому у полей нет умолчаний: модель только подтверждает,\nчто правило отработало, а не повторяет его."
       },
       "AnsweredQuestionRead": {
         "properties": {
@@ -11573,6 +11601,54 @@
         "title": "OnboardingUpdate",
         "description": "Тело `PATCH /accounts/{account_id}/onboarding`: непереданное не трогает.\n\nМеняет только сама учётная запись (`app/services/accounts.py`,\n`update_onboarding`); администратор чужое состояние не меняет."
       },
+      "PackageParentRead": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "examples": [
+              "TRK-7"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Выдать номера проектам"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus",
+            "description": "Status of the other task; `blocked` is computed from exactly this",
+            "examples": [
+              "open"
+            ]
+          },
+          "goal": {
+            "type": "string",
+            "title": "Goal",
+            "description": "The parent's `goal` section, cut at 320 characters; empty if the parent has none. The whole text is `get_task` of the parent",
+            "examples": [
+              "Агент одним запросом находит все задачи программы"
+            ]
+          },
+          "goal_truncated": {
+            "type": "boolean",
+            "title": "Goal Truncated",
+            "description": "`true` when `goal` was cut at the limit and the parent's text is longer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "title",
+          "status",
+          "goal",
+          "goal_truncated"
+        ],
+        "title": "PackageParentRead",
+        "description": "Родитель в карточке ребёнка: как у любой связи, плюс его цель (`CONCEPT.md`, 4.2).\n\nЦель нужна затем, чтобы агент, взявший задачу из программы, видел, чему она служит, без\nвторого вызова. Только у прямого родителя и не длиннее потолка\n(`app/domain/tasks.py`, `PARENT_GOAL_LIMIT`); детям и другим связям цель не едет."
+      },
       "PageMeta": {
         "properties": {
           "next_cursor": {
@@ -14689,13 +14765,13 @@
           "parent": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/LinkTaskRead"
+                "$ref": "#/components/schemas/PackageParentRead"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The parent of this task: key, title and status; `null` for a top-level task. A task has at most one parent. Set with the same `link` call as any other link, but shown here and not in `links`"
+            "description": "The parent of this task: key, title, status and its goal; `null` for a top-level task. A task has at most one parent. Set with the same `link` call as any other link, but shown here and not in `links`"
           },
           "children": {
             "items": {

@@ -1095,6 +1095,26 @@ class TaskParent:
     title: str
 
 
+#: Потолок цели родителя в карточке ребёнка (`CONCEPT.md`, 4.2): короткое «о чём
+#: программа», а не весь раздел. Размером с описание проекта (`MAX_PROJECT_DESCRIPTION_LENGTH`),
+#: но число своё. Один на REST и MCP и не настраивается: пакет преемника в обоих каналах
+#: обязан быть одним ответом, а потолок выдачи `search_tasks` (`TRACKER_MCP_TEXT_LIMIT`)
+#: есть только у MCP.
+PARENT_GOAL_LIMIT = 320
+
+
+def clip_parent_goal(goal: str) -> tuple[str, bool]:
+    """Цель родителя для карточки ребёнка: текст не длиннее потолка и признак обрезки.
+
+    Обрезка объявляется признаком рядом со значением, а не многоточием в тексте: агент,
+    сравнивающий цели, не должен принимать метку за часть значения. Полный текст — один
+    `get_task` родителя.
+    """
+    if len(goal) <= PARENT_GOAL_LIMIT:
+        return goal, False
+    return goal[:PARENT_GOAL_LIMIT], True
+
+
 @dataclass(frozen=True, slots=True)
 class AskedParent:
     """Родитель строки выдачи, которого просили в `fields`: `value` — он сам или `None`.
