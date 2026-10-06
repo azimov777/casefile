@@ -212,7 +212,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 - `add_summary` — files a summary: the handover note of a case, in four parts
 - `add_entry` — files an entry without payload: a decision, attempt, finding, artifact, remark or note
 - `ask` — files a question to registry participants
-- `answer` — answers a question of the same task
+- `answer` — answers a question of the same task, or closes one still unanswered as `withdrawn` or `replaced` by a later question, with a reason; an answered question cannot be withdrawn
 - `resolve` — resolves a remark on a task: its outcome and where the work went
 - `add_verdict` — files the outcome of one review check
 - `read_project_entries` — returns entry bodies of one project's case, with payload, in number order
@@ -244,7 +244,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 |---|---|
 | Update right now | run the install line again |
 | Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env`, then `docker compose up -d --no-deps updater` in `~/casefile` |
-| Stay on one release | `CASEFILE_VERSION=0.9.5` in `~/casefile/.env` |
+| Stay on one release | `CASEFILE_VERSION=0.10.0` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
 | Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |
