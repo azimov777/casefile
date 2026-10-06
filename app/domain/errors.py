@@ -143,11 +143,67 @@ class ProjectReasonRequiredError(ValidationError):
     message = "Archiving or restoring a project requires a reason"
 
 
-# --- Атрибуты проекта ----------------------------------------------------------------
+# --- Направления ----------------------------------------------------------------------
+
+
+class DirectionNotFoundError(NotFoundError):
+    """Направления с таким адресом нет: проект есть, ключа в нём нет (`CONCEPT.md`, 3.7)."""
+
+    code = "direction_not_found"
+    message = "Direction not found"
+
+
+class DirectionKeyTakenError(ConflictError):
+    """Ключ направления уже занят в этом проекте: ключи уникальны без учёта регистра."""
+
+    code = "direction_key_taken"
+    message = "Direction key is already taken in this project"
+
+
+class InvalidDirectionKeyError(ValidationError):
+    """Адрес нового направления не `ПРОЕКТ/ключ` или ключ не по шаблону."""
+
+    code = "invalid_direction_key"
+    message = "Direction key is invalid"
+
+
+class DirectionDescriptionTooLongError(ValidationError):
+    """Описание направления длиннее предела (`app/domain/directions.py`); не обрезается."""
+
+    code = "direction_description_too_long"
+    message = "Direction description is too long"
+
+
+class DirectionArchivedError(ConflictError):
+    """Направление в архиве: карточка, атрибуты и дело заморожены (`CONCEPT.md`, 3.7).
+
+    Возникает в одном месте — `app/services/freeze.py`, после проверки архива проекта:
+    архив проекта называется первым.
+    """
+
+    code = "direction_archived"
+    message = "Direction is archived: its card, attributes and case are frozen"
+
+
+class DirectionNotArchivedError(ConflictError):
+    """Восстанавливать нечего: направление не в архиве."""
+
+    code = "direction_not_archived"
+    message = "Direction is not archived"
+
+
+class DirectionReasonRequiredError(ValidationError):
+    """Архивирование и восстановление направления требуют непустой причины `reason`."""
+
+    code = "direction_reason_required"
+    message = "Archiving or restoring a direction requires a reason"
+
+
+# --- Атрибуты проекта и направления ---------------------------------------------------
 
 
 class AttributeNotFoundError(NotFoundError):
-    """Атрибута с таким именем (без учёта регистра) у проекта нет."""
+    """Атрибута с таким именем (без учёта регистра) у проекта или направления нет."""
 
     code = "attribute_not_found"
     message = "Attribute not found"

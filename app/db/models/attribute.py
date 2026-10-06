@@ -1,4 +1,4 @@
-"""Атрибут проекта: текущее значение справочного факта «имя → значение»."""
+"""Атрибуты проекта и направления: текущее значение справочного факта «имя → значение»."""
 
 import uuid
 
@@ -39,3 +39,32 @@ class ProjectAttribute(BaseModel):
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(MAX_ATTRIBUTE_NAME_LENGTH), nullable=False)
     value: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class DirectionAttribute(BaseModel):
+    """Строка — нынешнее значение одного атрибута направления (`CONCEPT.md`, 3.7).
+
+    Механика атрибута проекта целиком: имя как прислано и уникально без учёта регистра,
+    история — служебные записи дела направления, снятие удаляет строку. Своя таблица, а не
+    второй владелец у `project_attributes`: у записей дела владелец общий ради одной ленты
+    (`entries`), а у атрибутов общего нет ничего, кроме формы, и вторая колонка владельца
+    превратила бы уникальность имени в два частичных индекса ради одной экономии таблицы.
+    """
+
+    __tablename__ = "direction_attributes"
+    __table_args__ = (
+        Index(
+            "uq_direction_attributes_direction_id_lower_name",
+            "direction_id",
+            text("lower(name)"),
+            unique=True,
+        ),
+    )
+
+    direction_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("directions.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(MAX_ATTRIBUTE_NAME_LENGTH), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+#: Атрибут любого владельца: у обеих строк одна форма — имя и значение.
+type Attribute = ProjectAttribute | DirectionAttribute

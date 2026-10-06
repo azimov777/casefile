@@ -449,7 +449,8 @@ export interface paths {
         };
         /**
          * Read a project
-         * @description Карточка проекта вместе с описанием, нынешними значениями атрибутов и решениями.
+         * @description Карточка проекта вместе с описанием, нынешними значениями атрибутов, решениями и
+         *     неархивными направлениями (адрес и название; `CONCEPT.md`, 3.7).
          *
          *     Описание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и
          *     таскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи
@@ -633,6 +634,209 @@ export interface paths {
          *     Номера, которого в деле проекта нет, — `404 entry_not_found`.
          */
         get: operations["read_project_entry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_key}/directions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the directions of a project
+         * @description Направления проекта. Архивные — только с `include_archived=true`; по адресу
+         *     архивное направление читается и без него.
+         */
+        get: operations["list_directions"];
+        put?: never;
+        /**
+         * Create a direction
+         * @description Заводит направление в проекте; первая запись его дела — `created`.
+         *
+         *     Ключ хранится в нижнем регистре и неизменяем; занятый в проекте (без учёта регистра)
+         *     — `409 direction_key_taken`, не по шаблону — `422 invalid_direction_key`. В архивный
+         *     проект направление не заводится — `409 project_archived`. Повтор с тем же
+         *     `Idempotency-Key` отвечает первым направлением, а не `409`.
+         */
+        post: operations["create_direction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_key}/directions/{direction_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a direction
+         * @description Карточка направления с нынешними значениями атрибутов. История атрибутов и всё
+         *     остальное дело — `/projects/{key}/directions/{direction}/entries`.
+         */
+        get: operations["read_direction"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a direction
+         * @description Меняет название и описание; проект и ключ неизменяемы, поле `key` в теле — `422`.
+         *
+         *     Каждое изменённое поле подшивает `field_changed` в дело направления. Архивное
+         *     направление — `409 direction_archived`, архивный проект — `409 project_archived`.
+         */
+        patch: operations["update_direction"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project_key}/directions/{direction_key}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive a direction
+         * @description Архивирует направление с причиной: карточка, атрибуты и дело замораживаются
+         *     (`409 direction_archived` на любое изменение, кроме восстановления). Причина — в записи
+         *     `archived`; пустая — `422 direction_reason_required`. Уже в архиве —
+         *     `409 direction_archived`, проект в архиве — `409 project_archived`.
+         */
+        post: operations["archive_direction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_key}/directions/{direction_key}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore an archived direction
+         * @description Восстанавливает направление из архива с причиной (запись `restored`). Не в архиве —
+         *     `409 direction_not_archived`; проект в архиве — `409 project_archived`: сначала
+         *     восстанавливают проект.
+         */
+        post: operations["restore_direction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_key}/directions/{direction_key}/attributes/{attribute_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set a direction attribute
+         * @description Заводит атрибут направления или меняет его значение — правила атрибута проекта.
+         *
+         *     Атрибута нет — `attribute_created`, причина необязательна; есть с другим значением —
+         *     `attribute_changed`, без причины `422 attribute_reason_required`; то же значение —
+         *     ничего не подшивается. Записи ложатся в дело направления.
+         */
+        put: operations["set_direction_attribute"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_key}/directions/{direction_key}/attributes/{attribute_name}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove a direction attribute
+         * @description Снимает атрибут направления с причиной и отдаёт подшитую `attribute_removed`.
+         *
+         *     Атрибута нет — `404 attribute_not_found`, пустая причина —
+         *     `422 attribute_reason_required`. Повтор с тем же `Idempotency-Key` отвечает первой
+         *     записью, а не `404`.
+         */
+        post: operations["remove_direction_attribute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_key}/directions/{direction_key}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read direction case entries
+         * @description Записи дела направления с телами и нагрузкой, в порядке `no` — те же фильтры, что у
+         *     дела проекта, включая историю одного атрибута (`attribute`).
+         */
+        get: operations["list_direction_entries"];
+        put?: never;
+        /**
+         * Append a direction case entry
+         * @description Подшивает запись в дело направления: заметку, решение, находку или артефакт.
+         *
+         *     Номер `no` считается внутри направления, ссылка на запись — `TRK/promotion#3`.
+         *     `supersedes` здесь нет: механика решений проекта на дело направления не
+         *     распространяется. Замечания к форме и ссылкам — разом в `422 entry_fields_invalid`.
+         *     Архивное направление — `409 direction_archived`.
+         */
+        post: operations["create_direction_entry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_key}/directions/{direction_key}/entries/{entry_no}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one direction case entry
+         * @description Одна запись дела направления по номеру — адрес из ссылки `TRK/promotion#3`.
+         *
+         *     Номера, которого в деле нет, — `404 entry_not_found`.
+         */
+        get: operations["read_direction_entry"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1243,7 +1447,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -1277,7 +1481,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -1292,6 +1496,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1307,7 +1517,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1516,7 +1726,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -1546,7 +1756,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -1561,6 +1771,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1576,7 +1792,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1723,7 +1939,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -1738,6 +1954,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1753,7 +1975,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1881,7 +2103,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -1896,6 +2118,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1911,7 +2139,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1991,22 +2219,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Always `null`: entries of this type belong to a project, never to a task
+             * @description Always `null`: entries of this type belong to a project or a direction, never to a task
              * @example null
              */
             task_key: null;
             /**
              * Project Key
-             * @description Key of the owning project; the entry address is `TRK#7`
+             * @description Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry
              * @example TRK
              */
-            project_key: string;
+            project_key: string | null;
+            /**
+             * Direction
+             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * @example null
+             */
+            direction?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2022,7 +2256,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2093,22 +2327,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Always `null`: entries of this type belong to a project, never to a task
+             * @description Always `null`: entries of this type belong to a project or a direction, never to a task
              * @example null
              */
             task_key: null;
             /**
              * Project Key
-             * @description Key of the owning project; the entry address is `TRK#7`
+             * @description Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry
              * @example TRK
              */
-            project_key: string;
+            project_key: string | null;
+            /**
+             * Direction
+             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * @example null
+             */
+            direction?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2124,7 +2364,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2248,22 +2488,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Always `null`: entries of this type belong to a project, never to a task
+             * @description Always `null`: entries of this type belong to a project or a direction, never to a task
              * @example null
              */
             task_key: null;
             /**
              * Project Key
-             * @description Key of the owning project; the entry address is `TRK#7`
+             * @description Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry
              * @example TRK
              */
-            project_key: string;
+            project_key: string | null;
+            /**
+             * Direction
+             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * @example null
+             */
+            direction?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2279,7 +2525,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2510,6 +2756,12 @@ export interface components {
             data: components["schemas"]["AnsweredQuestionRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
+        /** CollectionResponse[DirectionRead] */
+        CollectionResponse_DirectionRead_: {
+            /** Data */
+            data: components["schemas"]["DirectionRead"][];
+            meta?: components["schemas"]["PageMeta"];
+        };
         /** CollectionResponse[EntryRead] */
         CollectionResponse_EntryRead_: {
             /** Data */
@@ -2589,6 +2841,14 @@ export interface components {
         DataResponse_BootstrapRead_: {
             data: components["schemas"]["BootstrapRead"];
         };
+        /** DataResponse[DirectionDetailRead] */
+        DataResponse_DirectionDetailRead_: {
+            data: components["schemas"]["DirectionDetailRead"];
+        };
+        /** DataResponse[DirectionRead] */
+        DataResponse_DirectionRead_: {
+            data: components["schemas"]["DirectionRead"];
+        };
         /** DataResponse[EntryRead] */
         DataResponse_EntryRead_: {
             data: components["schemas"]["EntryRead"];
@@ -2664,22 +2924,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Key of the owning task; `null` for an entry of a project's case
+             * @description Key of the owning task; `null` for an entry of a project's or a direction's case
              * @example TRK-42
              */
             task_key: string | null;
             /**
              * Project Key
-             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry
              * @example null
              */
             project_key: string | null;
+            /**
+             * Direction
+             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * @example null
+             */
+            direction?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2695,7 +2961,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2799,6 +3065,234 @@ export interface components {
             after: string[];
         };
         /**
+         * DirectionArchiving
+         * @description Архивирование или восстановление направления: причина обязательна в обе стороны.
+         */
+        DirectionArchiving: {
+            /**
+             * Reason
+             * @description Why the direction is archived or restored; a blank one answers `422 direction_reason_required`. Filed in the `archived` or `restored` entry of the direction's case
+             * @example Направление закрыто: работа перешла в коммерцию
+             */
+            reason: string;
+        };
+        /**
+         * DirectionCreate
+         * @description Создание направления в проекте из пути.
+         *
+         *     Ключ принимается в любом регистре и хранится в нижнем; уникален внутри проекта без
+         *     учёта регистра и дальше неизменяем.
+         */
+        DirectionCreate: {
+            /**
+             * Key
+             * @description Direction key: lower-case Latin letters, digits and hyphens, starting and ending with a letter or a digit (`invalid_direction_key` otherwise; the pattern is `^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$` after lower-casing). Stored lower-case, never changes; a key taken in the project, in any case, answers `409 direction_key_taken`
+             * @example promotion
+             */
+            key: string;
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title: string;
+            /**
+             * Description
+             * @description Short "what this is", up to 320 characters after trimming; a longer one answers `direction_description_too_long`
+             * @default
+             * @example Каталоги, публикации и день запуска
+             */
+            description: string;
+        };
+        /**
+         * DirectionDetailRead
+         * @description Одно направление с нынешними значениями атрибутов.
+         *
+         *     Отдельная модель по той же причине, что у проекта (`ProjectDetailRead`): список
+         *     направлений атрибутов не показывает.
+         */
+        DirectionDetailRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Key
+             * @description Key of the project the direction lives in; never changes
+             * @example TRK
+             */
+            project_key: string;
+            /**
+             * Key
+             * @description Direction key inside its project, lower-case; never changes
+             * @example promotion
+             */
+            key: string;
+            /**
+             * Address
+             * @description Address of the direction: the project key and the direction key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`
+             * @example TRK/promotion
+             */
+            address: string;
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title: string;
+            /**
+             * Description
+             * @description Short "what this is", up to 320 characters; may be empty
+             * @example Каталоги, публикации и день запуска
+             */
+            description: string;
+            /**
+             * Archived At
+             * @description When the direction was archived; `null` while it is active. An archived direction is frozen: every change of its card, attributes and case answers `409 direction_archived`, except `restore`. Reading works as usual
+             * @example null
+             */
+            archived_at: string | null;
+            created_by: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Attributes
+             * @description Current attribute values, ordered by name ignoring case. Every change is an entry of the direction's case: `attribute_created`, `attribute_changed`, `attribute_removed`
+             */
+            attributes: components["schemas"]["AttributeRead"][];
+        };
+        /**
+         * DirectionEntryCreate
+         * @description Запись агента или человека в деле направления: заметка, решение, находка, артефакт.
+         *
+         *     Те же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: механики
+         *     решений проекта у дела направления нет, и лишнее поле схема отвергает до сценария.
+         */
+        DirectionEntryCreate: {
+            /**
+             * Body
+             * @description Markdown body of the entry
+             * @default
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @example []
+             */
+            refs?: string[];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Номер задачи выдаётся до валидации
+             */
+            title: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "note" | "decision" | "finding" | "artifact";
+        };
+        /**
+         * DirectionRead
+         * @description Направление в ответе: карточка.
+         */
+        DirectionRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Key
+             * @description Key of the project the direction lives in; never changes
+             * @example TRK
+             */
+            project_key: string;
+            /**
+             * Key
+             * @description Direction key inside its project, lower-case; never changes
+             * @example promotion
+             */
+            key: string;
+            /**
+             * Address
+             * @description Address of the direction: the project key and the direction key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`
+             * @example TRK/promotion
+             */
+            address: string;
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title: string;
+            /**
+             * Description
+             * @description Short "what this is", up to 320 characters; may be empty
+             * @example Каталоги, публикации и день запуска
+             */
+            description: string;
+            /**
+             * Archived At
+             * @description When the direction was archived; `null` while it is active. An archived direction is frozen: every change of its card, attributes and case answers `409 direction_archived`, except `restore`. Reading works as usual
+             * @example null
+             */
+            archived_at: string | null;
+            created_by: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * DirectionRefRead
+         * @description Направление строкой в чтении проекта: адрес и название (`CONCEPT.md`, 3.7).
+         */
+        DirectionRefRead: {
+            /**
+             * Address
+             * @description Address of the direction: the project key and the direction key. Its card, attributes and case are read at `/projects/TRK/directions/promotion`
+             * @example TRK/promotion
+             */
+            address: string;
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title: string;
+        };
+        /**
+         * DirectionUpdate
+         * @description Частичное обновление: применяется только переданное. Ключа и проекта здесь нет —
+         *     они неизменяемы, и схема отвергает лишнее поле, а не игнорирует его молча.
+         */
+        DirectionUpdate: {
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title?: string;
+            /**
+             * Description
+             * @description Short "what this is", up to 320 characters after trimming; a longer one answers `direction_description_too_long`
+             * @example Каталоги, публикации и день запуска
+             */
+            description?: string;
+        };
+        /**
          * EmptyPayload
          * @description Нагрузки нет: всё содержание записи в её заголовке, теле и ссылках.
          */
@@ -2811,7 +3305,7 @@ export interface components {
         EntryHeadingRead: {
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -2893,22 +3387,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Key of the owning task; `null` for an entry of a project's case
+             * @description Key of the owning task; `null` for an entry of a project's or a direction's case
              * @example TRK-42
              */
             task_key: string | null;
             /**
              * Project Key
-             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry
              * @example null
              */
             project_key: string | null;
+            /**
+             * Direction
+             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * @example null
+             */
+            direction?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2924,7 +3424,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3121,7 +3621,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -3136,6 +3636,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3151,7 +3657,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3261,7 +3767,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -3276,6 +3782,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3291,7 +3803,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3655,7 +4167,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -3690,22 +4202,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Key of the owning task; `null` for an entry of a project's case
+             * @description Key of the owning task; `null` for an entry of a project's or a direction's case
              * @example TRK-42
              */
             task_key: string | null;
             /**
              * Project Key
-             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry
              * @example null
              */
             project_key: string | null;
+            /**
+             * Direction
+             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * @example null
+             */
+            direction?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3721,7 +4239,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3764,22 +4282,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Always `null`: entries of this type belong to a project, never to a task
+             * @description Always `null`: entries of this type belong to a project or a direction, never to a task
              * @example null
              */
             task_key: null;
             /**
              * Project Key
-             * @description Key of the owning project; the entry address is `TRK#7`
+             * @description Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry
              * @example TRK
              */
-            project_key: string;
+            project_key: string | null;
+            /**
+             * Direction
+             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * @example null
+             */
+            direction?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3795,7 +4319,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3932,7 +4456,7 @@ export interface components {
         };
         /**
          * ProjectDetailRead
-         * @description Один проект с нынешними значениями атрибутов и его решениями.
+         * @description Один проект с нынешними значениями атрибутов, его решениями и направлениями.
          *
          *     Отдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов и
          *     решений не показывают, и запрос их на каждый проект списка стоил бы им без пользы.
@@ -3992,6 +4516,11 @@ export interface components {
              * @description Every project decision — a `decision` entry of the project's case — in number order, in force or superseded, with its status computed on read and the number of tasks that name it
              */
             decisions: components["schemas"]["ProjectDecisionRead"][];
+            /**
+             * Directions
+             * @description Active directions of the project — endless parts of its work — ordered by key. Archived ones are listed by `/projects/{key}/directions?include_archived=true`
+             */
+            directions: components["schemas"]["DirectionRefRead"][];
         };
         /**
          * ProjectEntryCreate
@@ -4014,7 +4543,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4143,7 +4672,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4178,7 +4707,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -4193,6 +4722,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4208,7 +4743,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4326,7 +4861,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4360,7 +4895,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -4375,6 +4910,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4390,7 +4931,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4459,7 +5000,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4488,7 +5029,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -4503,6 +5044,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4518,7 +5065,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4609,7 +5156,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -4624,6 +5171,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4639,7 +5192,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4768,7 +5321,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -4783,6 +5336,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4798,7 +5357,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4881,7 +5440,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4910,7 +5469,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -4925,6 +5484,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4940,7 +5505,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5900,7 +6465,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -5929,7 +6494,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -5944,6 +6509,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -5959,7 +6530,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -6080,7 +6651,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
              * @example 12
              */
             no: number;
@@ -6095,6 +6666,12 @@ export interface components {
              * @example null
              */
             project_key: null;
+            /**
+             * Direction
+             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * @example null
+             */
+            direction?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -6110,7 +6687,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -8624,6 +9201,966 @@ export interface operations {
                 /** @description Project key; matching ignores case */
                 project_key: string;
                 /** @description Entry number inside the project, from 1 */
+                entry_no: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_EntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_directions: {
+        parameters: {
+            query?: {
+                /** @description Also list archived directions. Without it they are hidden from the list; a direction is still read by its address either way */
+                include_archived?: boolean;
+                /** @description Page size */
+                limit?: number;
+                /** @description Cursor from `meta.next_cursor` of a previous page */
+                cursor?: string | null;
+            };
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse_DirectionRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_direction: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DirectionRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_direction: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Direction key inside the project; matching ignores case */
+                direction_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DirectionDetailRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_direction: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Direction key inside the project; matching ignores case */
+                direction_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DirectionDetailRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    archive_direction: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Direction key inside the project; matching ignores case */
+                direction_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectionArchiving"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DirectionDetailRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    restore_direction: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Direction key inside the project; matching ignores case */
+                direction_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectionArchiving"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DirectionDetailRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_direction_attribute: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Direction key inside the project; matching ignores case */
+                direction_key: string;
+                /** @description Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case */
+                attribute_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttributeSet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_AttributeRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    remove_direction_attribute: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Direction key inside the project; matching ignores case */
+                direction_key: string;
+                /** @description Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case */
+                attribute_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttributeRemoval"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_EntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_direction_entries: {
+        parameters: {
+            query?: {
+                /** @description Read only these entry numbers */
+                nos?: number[] | null;
+                /** @description Read only entries of these types */
+                types?: components["schemas"]["EntryType"][] | null;
+                /** @description Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters */
+                attribute?: string | null;
+                /** @description Read only entries after this number — what happened since */
+                after_no?: number | null;
+                /** @description Page size */
+                limit?: number;
+                /** @description Cursor from `meta.next_cursor` of a previous page */
+                cursor?: string | null;
+            };
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Direction key inside the project; matching ignores case */
+                direction_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse_EntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_direction_entry: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Direction key inside the project; matching ignores case */
+                direction_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectionEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_EntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_direction_entry: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Direction key inside the project; matching ignores case */
+                direction_key: string;
+                /** @description Entry number inside the direction, from 1 */
                 entry_no: number;
             };
             cookie?: never;

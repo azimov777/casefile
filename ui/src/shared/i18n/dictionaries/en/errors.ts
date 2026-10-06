@@ -40,6 +40,12 @@ export const errors = {
   database_unavailable: 'The database is unavailable.',
   decision_not_in_force:
     'This project decision has been superseded: refer to the one that replaced it.',
+  direction_archived: 'The direction is archived: its card, attributes and case accept no changes.',
+  direction_description_too_long: 'The direction description is longer than 320 characters.',
+  direction_key_taken: 'This project already has a direction with that key.',
+  direction_not_archived: 'The direction is not archived.',
+  direction_not_found: 'This project has no direction with that key.',
+  direction_reason_required: 'Archiving or restoring a direction requires a reason.',
   entry_fields_invalid: 'The entry did not pass validation.',
   entry_not_found: 'This task has no entry with that number.',
   human_token_not_allowed:
@@ -52,6 +58,8 @@ export const errors = {
   invalid_actor_label: 'The temporary-agent label does not match the pattern.',
   invalid_attribute_name: 'The attribute name may contain only Latin letters, digits, “_” and “-”.',
   invalid_cursor: 'The page cursor cannot be parsed.',
+  invalid_direction_key:
+    'The direction key may contain only lower-case Latin letters, digits and inner hyphens.',
   invalid_email: 'This does not look like an email address.',
   invalid_idempotency_key: 'The idempotency key is empty or too long.',
   invalid_journal_cursor: 'The position in the journal feed cannot be parsed.',

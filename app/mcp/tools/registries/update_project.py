@@ -1,13 +1,15 @@
-"""Инструмент `update_project`: название и описание проекта."""
+"""Инструмент `update_project`: название и описание проекта или направления."""
 
 from typing import Annotated
 
 from pydantic import Field
 
+from app.db.models.direction import Direction
 from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
-from app.mcp.arguments import ProjectKeyArg
+from app.mcp.arguments import CaseOwnerKeyArg
 from app.mcp.tools.registries.views import ProjectKeyView, project_key
 from app.mcp.toolset import IDEMPOTENT_TASK_UPDATE, Toolset
+from app.services import directions as directions_service
 from app.services import projects as projects_service
 
 # Отдельные аннотации для правки: `None` здесь означает «не передано». Осмысленного
@@ -22,8 +24,8 @@ ProjectDescriptionChangeArg = Annotated[
     Field(
         description=(
             f"New description, up to {MAX_PROJECT_DESCRIPTION_LENGTH} characters after "
-            "trimming (`project_description_too_long` otherwise); when left out, the "
-            "description stays"
+            "trimming (`project_description_too_long` or `direction_description_too_long` "
+            "otherwise); when left out, the description stays"
         )
     ),
 ]
@@ -35,19 +37,23 @@ def register(tools: Toolset) -> None:
 
     @tools.tool(title="Update project", annotations=IDEMPOTENT_TASK_UPDATE)
     async def update_project(
-        key: ProjectKeyArg,
+        key: CaseOwnerKeyArg,
         title: ProjectTitleChangeArg = None,
         description: ProjectDescriptionChangeArg = None,
     ) -> ProjectKeyView:
-        """Changes a project's title and description; a field left out stays. The key never
-        changes. Each changed field files a `field_changed`
-        entry with the previous and the new value in the project's case;
+        """Changes the title and description of a project or direction card; a field left
+        out stays. The key never changes. Each changed field files a `field_changed`
+        entry with the previous and the new value in the card owner's case;
         a value equal to the current one files nothing.
         """
         async with runtime.call() as (session, actor):
-            project = await projects_service.get_project(session, key)
-            return project_key(
-                await projects_service.update_project(
-                    session, project, actor=actor, title=title, description=description
+            owner = await directions_service.get_owner(session, key)
+            if isinstance(owner, Direction):
+                updated = await directions_service.update_direction(
+                    session, owner, actor=actor, title=title, description=description
                 )
-            )
+            else:
+                updated = await projects_service.update_project(
+                    session, owner, actor=actor, title=title, description=description
+                )
+            return project_key(updated)

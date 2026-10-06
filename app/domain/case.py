@@ -46,12 +46,18 @@
 адресом до того, как у проекта появилось дело; с нецифровым хвостом она им и остаётся.
 Цифровой хвост — уже ссылка: `TRK#007` и `TRK#0` — опечатки, а не адреса.
 
-## Дело проекта
+Запись направления (`TRK/promotion#3`, `CONCEPT.md`, 3.7) узнаётся так же узко: голова —
+адрес, то есть ключ проекта по шаблону, косая черта и ключ направления по шаблону, и хвост
+из цифр. Всё прочее с косой чертой (`docs/x.md#3`) — не ссылка трекера и должно быть URL.
+
+## Дело проекта и дело направления
 
 У проекта своё дело с той же механикой (`CONCEPT.md`, 3.4, «Дело проекта»), но из
 записей агента в нём только `note`, `decision`, `finding` и `artifact`: у проекта нет
 ни хода работы, ни проверок, ни исполнителя. Форму такой записи проверяет
-`build_project_entry` теми же функциями полей, что и `build_entry`.
+`build_project_entry` теми же функциями полей, что и `build_entry`. Дело направления
+устроено так же (`CONCEPT.md`, 3.7) и проверяется той же функцией, только без
+`supersedes`: механика решений проекта на него не распространяется.
 """
 
 import re
@@ -63,6 +69,12 @@ from enum import StrEnum
 from typing import Any, Literal
 
 from app.domain.authors import Author
+from app.domain.directions import (
+    ADDRESS_SEPARATOR,
+    format_direction_address,
+    is_direction_key,
+    parse_direction_address,
+)
 from app.domain.errors import EntryFieldsInvalidError, InvalidTaskKeyError
 from app.domain.fields import FieldProblem, FieldProblems
 from app.domain.links import LinkKind
@@ -232,23 +244,25 @@ SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
     }
 )
 
-#: Служебные записи об атрибутах проекта (`CONCEPT.md`, 3.2 и 3.4): заведение, изменение и
-#: снятие. Бывают только в деле проекта — атрибутов у задач нет, — и тип из трёх выбирает
-#: сценарий `set_attribute`/`remove_attribute`, а не вызывающий.
+#: Служебные записи об атрибутах проекта и направления (`CONCEPT.md`, 3.2, 3.4 и 3.7):
+#: заведение, изменение и снятие. Бывают только в делах проекта и направления — атрибутов у
+#: задач нет, — и тип из трёх выбирает сценарий `set_attribute`/`remove_attribute`, а не
+#: вызывающий.
 ATTRIBUTE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
     {EntryType.ATTRIBUTE_CREATED, EntryType.ATTRIBUTE_CHANGED, EntryType.ATTRIBUTE_REMOVED}
 )
 
-#: Служебные записи об архивировании проекта (`CONCEPT.md`, 3.2): `archived` и `restored` с
-#: причиной. Бывают только в деле проекта — отдельного архива у задачи нет.
+#: Служебные записи об архивировании проекта и направления (`CONCEPT.md`, 3.2 и 3.7):
+#: `archived` и `restored` с причиной. Бывают только в делах проекта и направления —
+#: отдельного архива у задачи нет.
 ARCHIVE_ENTRY_TYPES: frozenset[EntryType] = frozenset({EntryType.ARCHIVED, EntryType.RESTORED})
 
 #: Записи агента и человека — всё, что не служебное.
 AGENT_ENTRY_TYPES: frozenset[EntryType] = frozenset(EntryType) - SERVICE_ENTRY_TYPES
 
-#: Записи агента и человека в деле проекта (`CONCEPT.md`, 3.4, «Дело проекта»). Сводок,
-#: вопросов, вердиктов, замечаний и попыток у проекта нет: у него нет ни хода работы, ни
-#: проверок, ни исполнителя, а спрашивают и возражают в делах задач.
+#: Записи агента и человека в деле проекта (`CONCEPT.md`, 3.4, «Дело проекта») и в деле
+#: направления (3.7). Сводок, вопросов, вердиктов, замечаний и попыток у них нет: нет ни
+#: хода работы, ни проверок, ни исполнителя, а спрашивают и возражают в делах задач.
 PROJECT_ENTRY_TYPES: frozenset[EntryType] = frozenset(
     {EntryType.NOTE, EntryType.DECISION, EntryType.FINDING, EntryType.ARTIFACT}
 )
@@ -316,11 +330,13 @@ CLOSING_SUMMARY_PART = "unmeasured"
 #: измерили» идёт последним, после следующего шага, как приписка к подведённому итогу.
 CLOSING_SUMMARY_PARTS: tuple[str, ...] = (*SUMMARY_PARTS, CLOSING_SUMMARY_PART)
 
-#: Форма ссылки на запись в подробностях отказа: по ней агент чинит опечатку. Форм две —
-#: запись задачи и запись проекта; дефис есть только в ключе задачи.
+#: Форма ссылки на запись в подробностях отказа: по ней агент чинит опечатку. Форм три —
+#: запись задачи, проекта и направления; дефис есть только в ключе задачи, косая черта —
+#: только в адресе направления.
 ENTRY_REF_SHAPE = (
-    f"<PROJECT>-<task number>{ENTRY_REF_SEPARATOR}<entry number> or "
-    f"<PROJECT>{ENTRY_REF_SEPARATOR}<entry number>"
+    f"<PROJECT>-<task number>{ENTRY_REF_SEPARATOR}<entry number>, "
+    f"<PROJECT>{ENTRY_REF_SEPARATOR}<entry number> or "
+    f"<PROJECT>{ADDRESS_SEPARATOR}<direction>{ENTRY_REF_SEPARATOR}<entry number>"
 )
 
 #: Голова ссылки на запись проекта: ключ проекта по его шаблону.
@@ -332,7 +348,9 @@ _PROJECT_KEY_RE = re.compile(PROJECT_KEY_PATTERN)
 _URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]+:\S+$")
 
 #: Допустимые виды ссылки в подробностях отказа `not_a_reference`.
-REF_SHAPE = "TRK-42#12, TRK#7, TRK-7 or a URL with a scheme such as https://example.com"
+REF_SHAPE = (
+    "TRK-42#12, TRK#7, TRK/promotion#3, TRK-7 or a URL with a scheme such as https://example.com"
+)
 
 #: Чем обрезается слишком длинный выведенный заголовок. Обрезка, а не отказ: у сводки
 #: заголовок берётся из текста автора, и отклонять справку из-за длинной первой строки
@@ -690,7 +708,21 @@ class ProjectEntryRef:
     no: int
 
 
-type TrackerRef = TaskRef | EntryRef | ProjectEntryRef
+@dataclass(frozen=True, slots=True)
+class DirectionEntryRef:
+    """Ссылка на запись дела направления: `TRK/promotion#3`. Обе части канонизированы."""
+
+    project_key: str
+    direction_key: str
+    no: int
+
+    @property
+    def key(self) -> str:
+        """Адрес направления — та часть ссылки, что стоит перед номером."""
+        return format_direction_address(self.project_key, self.direction_key)
+
+
+type TrackerRef = TaskRef | EntryRef | ProjectEntryRef | DirectionEntryRef
 """Ссылка внутрь трекера: её существование проверяет сценарий."""
 
 
@@ -710,6 +742,19 @@ def parse_ref(ref: str) -> TrackerRef | None:
     нужна надёжной.
     """
     head, separator, tail = ref.partition(ENTRY_REF_SEPARATOR)
+    if separator and ADDRESS_SEPARATOR in head and tail.isascii() and tail.isdigit():
+        # Запись направления: голова — адрес с ключом проекта и ключом направления по
+        # шаблонам. Иначе это не ссылка трекера, и решает проверка на URL ниже.
+        address = parse_direction_address(head.strip())
+        if _PROJECT_KEY_RE.match(address.project_key) and is_direction_key(address.key):
+            return DirectionEntryRef(
+                project_key=address.project_key,
+                direction_key=address.key,
+                no=_entry_ref_no(ref, tail),
+            )
+        if _URL_RE.match(ref):
+            return None
+        raise FieldProblem("not_a_reference", ref=ref, expected=REF_SHAPE)
     try:
         key = normalize_task_key(head)
     except InvalidTaskKeyError:
@@ -831,8 +876,10 @@ def build_project_entry(
     body: Any = "",
     refs: Any = (),
     supersedes: Any = None,
+    decisions_supersede: bool = True,
 ) -> EntryDraft:
-    """Проверяет запись агента в дело проекта и приводит её к каноническому виду.
+    """Проверяет запись агента в дело проекта или направления и приводит её к
+    каноническому виду.
 
     Поля и их правила — те же функции, что у `build_entry`: заголовок, тело и ссылки
     записи проекта не отличаются от записи задачи ничем. Отличается набор типов
@@ -845,6 +892,11 @@ def build_project_entry(
     форма записи одна на все интерфейсы. У остальных типов `supersedes` отвергается, а не
     выбрасывается молча. Есть ли такие записи, решения ли это и действуют ли они,
     проверяет сценарий (`app/services/decisions.py`).
+
+    `decisions_supersede=False` — дело направления (`CONCEPT.md`, 3.7): механики решений
+    проекта у него нет, и `supersedes` отвергается у любого типа, а нагрузка решения
+    остаётся пустой, как у решения задачи. Первым параметром тогда приходит адрес
+    направления — им отказ называет, куда подшивали.
     """
     problems = FieldProblems()
     entry_type = _project_entry_type(type, problems)
@@ -856,7 +908,9 @@ def build_project_entry(
     replaced: list[int] = []
     with problems.field(SUPERSEDES_FIELD):
         replaced = _superseded_numbers(supersedes)
-    if replaced and entry_type is not None and entry_type is not EntryType.DECISION:
+    if replaced and not decisions_supersede:
+        problems.add(SUPERSEDES_FIELD, "not_allowed", allowed_in="project_case")
+    elif replaced and entry_type is not None and entry_type is not EntryType.DECISION:
         problems.add(
             SUPERSEDES_FIELD,
             "not_allowed",
@@ -867,7 +921,7 @@ def build_project_entry(
 
     assert entry_type is not None  # иначе замечание о типе уже прервало бы работу
     payload: dict[str, Any] = {}
-    if entry_type is EntryType.DECISION:
+    if entry_type is EntryType.DECISION and decisions_supersede:
         payload[SUPERSEDES_FIELD] = replaced
     return EntryDraft(
         type=entry_type,
@@ -986,11 +1040,11 @@ def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str,
 
     Так читаются три типа. Ответ, подшитый до появления исходов (`question_no` и ничего
     более), читается как `answered` без заменившего вопроса (TRK-563). Решение без
-    `supersedes` — решение задачи и решение проекта до замены (TRK-554) — ничего не
-    заменяет. Правка раздела без `check_no` — любая, кроме точечной правки проверки —
-    читается с `check_no: null` (TRK-565). Нагрузка остальных типов отдаётся как лежит:
-    трекер всегда кладёт в неё все ключи, которые есть у модели чтения (сверка TRK-565);
-    новый ключ в чужой нагрузке получает ветвь здесь же.
+    `supersedes` — решение задачи, решение направления (TRK-555) и решение проекта до
+    замены (TRK-554) — ничего не заменяет. Правка раздела без `check_no` — любая, кроме
+    точечной правки проверки — читается с `check_no: null` (TRK-565). Нагрузка остальных
+    типов отдаётся как лежит: трекер всегда кладёт в неё все ключи, которые есть у модели
+    чтения (сверка TRK-565); новый ключ в чужой нагрузке получает ветвь здесь же.
     """
     data = dict(payload)
     if entry_type is EntryType.ANSWER:
@@ -1114,7 +1168,7 @@ def _entry_refs(
 
 
 def _format_ref(target: TrackerRef) -> str:
-    if isinstance(target, EntryRef | ProjectEntryRef):
+    if isinstance(target, EntryRef | ProjectEntryRef | DirectionEntryRef):
         return format_entry_ref(target.key, target.no)
     return target.key
 

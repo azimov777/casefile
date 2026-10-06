@@ -1262,3 +1262,80 @@ async def test_the_waiting_migration_rolls_back_only_the_constraint(
         statuses = set(await connection.scalars(text("SELECT status FROM tasks")))
     assert revision == DROP_WAITING_REVISION
     assert statuses == {"open"}
+
+
+# --- Направления (TRK-555) ---------------------------------------------------------------
+
+#: Ревизия направлений и ревизия перед ней.
+DIRECTIONS_REVISION = "3cc02e043842"
+DIRECTIONS_PREVIOUS = DROP_WAITING_REVISION
+
+_INSERT_DIRECTION = text(
+    "INSERT INTO directions (project_id, key, title, created_by_kind, created_by_signature) "
+    "SELECT id, 'promotion', 'Популяризация', 'agent', 'claude' FROM projects WHERE key = 'OLD'"
+)
+_INSERT_DIRECTION_ENTRY = text(
+    "INSERT INTO entries (direction_id, no, type, title, created_by_kind, created_by_signature) "
+    "SELECT id, 1, 'created', 'Direction created', 'agent', 'claude' FROM directions"
+)
+
+
+async def test_a_direction_entry_has_exactly_one_owner_after_the_directions_migration(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Запись направления держит пустыми `task_id` и `project_id`; запись без владельца и
+    запись двух владельцев отклоняет `ck_entries_one_owner` о трёх колонках."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, DIRECTIONS_PREVIOUS)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+
+    await migrate(url, DIRECTIONS_REVISION)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_DIRECTION)
+        await connection.execute(_INSERT_DIRECTION_ENTRY)
+        owners = list(
+            await connection.execute(
+                text(
+                    "SELECT (task_id IS NULL), (project_id IS NULL), (direction_id IS NULL) "
+                    "FROM entries"
+                )
+            )
+        )
+    assert [tuple(row) for row in owners] == [(True, True, False)]
+
+    for wrong in (
+        "INSERT INTO entries (no, type, title, created_by_kind, created_by_signature) "
+        "VALUES (9, 'note', 'Ничья', 'agent', 'claude')",
+        "INSERT INTO entries (project_id, direction_id, no, type, title, created_by_kind, "
+        "created_by_signature) SELECT project_id, id, 9, 'note', 'Обоих', 'agent', 'claude' "
+        "FROM directions",
+    ):
+        with pytest.raises(Exception, match="ck_entries_one_owner"):
+            async with migration_engine.begin() as connection:
+                await connection.execute(text(wrong))
+    with pytest.raises(Exception, match="uq_directions_project_id_key"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(_INSERT_DIRECTION)
+
+
+async def test_the_directions_rollback_refuses_while_direction_entries_exist(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Без записей направлений откат и повтор проходят; с ними откат отказывает на
+    проверке владельца: запись без владельца базе не нужна, а удалить её нельзя."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, DIRECTIONS_PREVIOUS)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+    await migrate(url, DIRECTIONS_REVISION)
+
+    await migrate(url, DIRECTIONS_PREVIOUS, down=True)
+    await migrate(url, DIRECTIONS_REVISION)
+
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_DIRECTION)
+        await connection.execute(_INSERT_DIRECTION_ENTRY)
+
+    with pytest.raises(Exception, match="ck_entries_one_owner"):
+        await migrate(url, DIRECTIONS_PREVIOUS, down=True)

@@ -64,15 +64,15 @@ from app.domain.links import LinkKind
 from app.domain.tasks import FIRST_CHECK_NUMBER, TaskField, TaskStatus
 
 _REFS_DESCRIPTION = (
-    "References to task entries `KEY-N#M`, project entries `KEY#M`, tasks `KEY-N` and "
-    "URLs with a scheme (`https://…`). Any other string is refused; entry and task "
-    "references must exist, URLs are not checked"
+    "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries "
+    "`KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string "
+    "is refused; entry and task references must exist, URLs are not checked"
 )
 _TITLE_DESCRIPTION = "One line; this is what the case index shows"
 _BODY_DESCRIPTION = "Markdown; empty for service entries, whose content is the payload"
 _NO_DESCRIPTION = (
-    "Number inside the owning task or project, from 1; `TRK-42#12` for a task entry, "
-    "`TRK#7` for a project entry"
+    "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task "
+    "entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry"
 )
 _ACTION_ID_DESCRIPTION = (
     "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this "
@@ -766,6 +766,15 @@ class _EntryReadBase(BaseModel):
         examples=[None],
         description="Always `null`: entries of this type belong to a task, never to a project",
     )
+    # Умолчание `None` — не для клиента (поле приходит всегда), а для ответов создающих
+    # вызовов, сохранённых ключами идемпотентности до этого поля: повтор отвечает ими же
+    # сутки и поднимается этой моделью (`docs/notes/mcp.md`, «Сузить форму ответа
+    # создающего инструмента можно, расширить — нельзя»). Так же `action_id`.
+    direction: None = Field(
+        default=None,
+        examples=[None],
+        description="Always `null`: entries of this type belong to a task, never to a direction",
+    )
     author: AuthorRead
     title: str = Field(examples=["Status changed: backlog -> open"], description=_TITLE_DESCRIPTION)
     body: str = Field(examples=[""], description=_BODY_DESCRIPTION)
@@ -778,43 +787,67 @@ class _EntryReadBase(BaseModel):
     )
 
 
-class _ProjectOwnableEntryRead(_EntryReadBase):
-    """Общие поля записи, которая бывает и в деле задачи, и в деле проекта.
+_DIRECTION_OWNER_DESCRIPTION = (
+    "Address of the owning direction for an entry of a direction's case "
+    "(`TRK/promotion#3`); `null` for a task or project entry"
+)
 
-    Владелец записи — задача или проект, и непуст ровно один ключ, как колонки владельца
-    в базе (`ck_entries_one_owner`). Оба поля обязательны в схеме, а не пропускаются при
-    `null`: форма записи одна в любом ответе (`docs/notes/api.md`). Сужение только у этих
-    вариантов: типы, которых в деле проекта не бывает (сводка, вопрос, вердикт, переход и
-    прочие), всегда принадлежат задаче — их `task_key` остаётся строкой, а `project_key`
-    всегда `null`, и клиенту не нужно проверять на `null` ключ, который `null` быть не может.
+
+class _ProjectOwnableEntryRead(_EntryReadBase):
+    """Общие поля записи, которая бывает и в деле задачи, и в деле проекта или направления.
+
+    Владелец записи — задача, проект или направление, и непуст ровно один ключ, как колонки
+    владельца в базе (`ck_entries_one_owner`). Все три поля обязательны в схеме, а не
+    пропускаются при `null`: форма записи одна в любом ответе (`docs/notes/api.md`).
+    Сужение только у этих вариантов: типы, которых в деле проекта не бывает (сводка, вопрос,
+    вердикт, переход и прочие), всегда принадлежат задаче — их `task_key` остаётся строкой,
+    а `project_key` и `direction` всегда `null`, и клиенту не нужно проверять на `null`
+    ключ, который `null` быть не может.
     """
 
     task_key: str | None = Field(  # type: ignore[assignment]
         examples=["TRK-42"],
-        description="Key of the owning task; `null` for an entry of a project's case",
+        description=(
+            "Key of the owning task; `null` for an entry of a project's or a direction's case"
+        ),
     )
     project_key: str | None = Field(  # type: ignore[assignment]
         examples=[None],
         description=(
             "Key of the owning project for an entry of a project's case (`TRK#7`); "
-            "`null` for a task entry, whose project is part of `task_key`"
+            "`null` for a task entry, whose project is part of `task_key`, and for a "
+            "direction entry"
         ),
+    )
+    direction: str | None = Field(  # type: ignore[assignment]
+        default=None, examples=[None], description=_DIRECTION_OWNER_DESCRIPTION
     )
 
 
 class _ProjectEntryRead(_EntryReadBase):
-    """Общие поля записи, которая бывает только в деле проекта: об атрибутах.
+    """Общие поля записи, которая бывает только в деле проекта или направления: об
+    атрибутах и архиве.
 
-    Сужение в обратную сторону от задачных типов: `task_key` всегда `null`, `project_key`
-    всегда строка — атрибутов у задач нет (`CONCEPT.md`, 3.2).
+    Сужение в обратную сторону от задачных типов: `task_key` всегда `null` — атрибутов и
+    архива у задач нет (`CONCEPT.md`, 3.2). Владелец — проект или направление, и непуст
+    ровно один из `project_key` и `direction`.
     """
 
     task_key: None = Field(  # type: ignore[assignment]
         examples=[None],
-        description="Always `null`: entries of this type belong to a project, never to a task",
+        description=(
+            "Always `null`: entries of this type belong to a project or a direction, "
+            "never to a task"
+        ),
     )
-    project_key: str = Field(  # type: ignore[assignment]
-        examples=["TRK"], description="Key of the owning project; the entry address is `TRK#7`"
+    project_key: str | None = Field(  # type: ignore[assignment]
+        examples=["TRK"],
+        description=(
+            "Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry"
+        ),
+    )
+    direction: str | None = Field(  # type: ignore[assignment]
+        default=None, examples=[None], description=_DIRECTION_OWNER_DESCRIPTION
     )
 
 
@@ -1068,25 +1101,32 @@ _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
 
 
 def entry_read(
-    entry: Entry, *, task_key: str | None = None, project_key: str | None = None
+    entry: Entry,
+    *,
+    task_key: str | None = None,
+    project_key: str | None = None,
+    direction: str | None = None,
 ) -> EntryRead:
     """Собирает вариант ответа по типу записи.
 
-    Ключ владельца приходит от вызывающего: у записи связи с задачей и проектом нет,
-    только `task_id` или `project_id`. Передаётся ровно один — ключ задачи для записи
-    задачи, ключ проекта для записи дела проекта.
+    Ключ владельца приходит от вызывающего: у записи связи с задачей, проектом и
+    направлением нет, только `task_id`, `project_id` или `direction_id`. Передаётся ровно
+    один — ключ задачи для записи задачи, ключ проекта для записи дела проекта, адрес
+    направления для записи дела направления.
 
     Тип, которого нет в таблице, — это запись без формы нагрузки, то есть дефект
     объединения, а не рабочее состояние: `KeyError` здесь честнее молчаливого
     возврата записи со свободным `payload`, который фронт не разберёт.
     """
-    assert (task_key is None) != (project_key is None), "entry owner is exactly one key"
+    owners = [key for key in (task_key, project_key, direction) if key is not None]
+    assert len(owners) == 1, "entry owner is exactly one key"
     return _READ_MODELS.get(entry.type, PlainEntryRead)(
         id=entry.id,
         seq=entry.seq,
         no=entry.no,
         task_key=task_key,
         project_key=project_key,
+        direction=direction,
         type=entry.type,
         author=AuthorRead.model_validate(entry.author),
         title=entry.title,
@@ -1245,6 +1285,21 @@ class ProjectEntryCreate(_TitledEntryCreate):
             "`decision_not_in_force` with its successor"
         ),
     )
+
+
+class DirectionEntryCreate(_TitledEntryCreate):
+    """Запись агента или человека в деле направления: заметка, решение, находка, артефакт.
+
+    Те же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: механики
+    решений проекта у дела направления нет, и лишнее поле схема отвергает до сценария.
+    """
+
+    type: Literal[
+        EntryType.NOTE,
+        EntryType.DECISION,
+        EntryType.FINDING,
+        EntryType.ARTIFACT,
+    ]
 
 
 type ClosingEntryCreate = Annotated[

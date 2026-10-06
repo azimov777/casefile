@@ -24,6 +24,7 @@ from app.api.deps import get_actor, reject_unknown_query_params
 from app.api.routes import (
     accounts,
     bootstrap,
+    directions,
     installation,
     journal,
     links,
@@ -79,6 +80,7 @@ api_router.include_router(participants.router)
 api_router.include_router(tokens.router)
 api_router.include_router(accounts.router)
 api_router.include_router(projects.router)
+api_router.include_router(directions.router)
 api_router.include_router(tasks.router)
 api_router.include_router(links.router)
 api_router.include_router(questions.router)

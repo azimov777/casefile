@@ -1,16 +1,18 @@
-"""Инструмент `set_attribute`: завести атрибут проекта или изменить его значение."""
+"""Инструмент `set_attribute`: завести атрибут проекта или направления или изменить его
+значение."""
 
 from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from app.mcp.arguments import IdempotencyKeyArg, ProjectKeyArg
+from app.mcp.arguments import CaseOwnerKeyArg, IdempotencyKeyArg
 from app.mcp.idempotency import Once
 from app.mcp.tools.registries.arguments import AttributeNameArg
 from app.mcp.toolset import IDEMPOTENT_TASK_UPDATE, Toolset
 from app.services import attributes as attributes_service
-from app.services import projects as projects_service
+from app.services import directions as directions_service
 from app.services.attributes import AttributeSet
+from app.services.case import owner_name
 
 AttributeValueArg = Annotated[
     str,
@@ -39,17 +41,17 @@ AttributeSetReasonArg = Annotated[
 # но оно остаётся в ответе: без него «ничего не подшито» (`no: null`) не отличить от
 # «подшито не то».
 class AttributeSetView(BaseModel):
-    """Project attribute after the call; the project with all attributes is returned by
-    `get_project`.
+    """Attribute after the call; the project or direction with all attributes is returned
+    by `get_project`.
     """
 
-    project_key: str
+    project_key: str = Field(description="Project key or direction address")
     name: str = Field(description="Name as stored: the spelling the attribute was created with")
     value: str
     no: int | None = Field(
         description=(
-            "Number of the filed entry in the project's case (`TRK#7`); `null` when the "
-            "value equals the current one and nothing was filed"
+            "Number of the filed entry in its case (`TRK#7`); `null` when the value equals "
+            "the current one and nothing was filed"
         )
     )
 
@@ -70,15 +72,15 @@ def register(tools: Toolset) -> None:
 
     @tools.tool(title="Set attribute", annotations=IDEMPOTENT_TASK_UPDATE, creating=True)
     async def set_attribute(
-        key: ProjectKeyArg,
+        key: CaseOwnerKeyArg,
         name: AttributeNameArg,
         value: AttributeValueArg,
         reason: AttributeSetReasonArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AttributeSetView:
-        """Sets the value of a project attribute: a reference fact of the project such as
-        its repository or main branch. One call both creates and changes; which entry
-        it files follows from the attribute's state.
+        """Sets the value of an attribute: a reference fact such as the repository or the
+        main branch, kept by a project or direction. One call both creates and changes;
+        which entry it files in the owner's case follows from the attribute's state.
 
         - No attribute with this name, ignoring case: the attribute is created and an
           `attribute_created` entry is filed; the reason is optional.
@@ -93,18 +95,18 @@ def register(tools: Toolset) -> None:
         attributes.
         """
         async with runtime.call() as (session, actor):
-            project = await projects_service.get_project(session, key)
+            owner = await directions_service.get_owner(session, key)
 
             async def put() -> AttributeSetView:
                 result = await attributes_service.set_attribute(
-                    session, project, actor=actor, name=name, value=value, reason=reason
+                    session, owner, actor=actor, name=name, value=value, reason=reason
                 )
-                return attribute_set(result, project_key=project.key)
+                return attribute_set(result, project_key=owner_name(owner))
 
             return await Once.of(set_attribute, session, actor, idempotency_key).run(
                 result=AttributeSetView,
                 request={
-                    "project": project.key,
+                    "project": owner_name(owner),
                     "name": name.lower(),
                     "value": value,
                     "reason": reason,

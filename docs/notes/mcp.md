@@ -1305,3 +1305,25 @@ Claude Code, Codex, Cursor, чат Claude Desktop (расширение `casefil
 списком `list_tools` сервера из `create_server`, выгруженным в JSON (замер записан в деле
 TRK-561).
 **Где:** `app/mcp/tools/case/views.py`, `WarningFactsView`; `app/domain/case.py`, `WarningFacts`.
+
+## У направления нет своих инструментов: его ведут инструменты проекта по адресу (TRK-555)
+
+**Что:** `CaseOwnerKeyArg` — «ключ проекта или адрес направления» — у `get_project`,
+`update_project`, `archive_project`, `restore_project`, `set_attribute`, `remove_attribute`,
+`add_project_entry` и `read_project_entries`; кого искать, решает косая черта
+(`get_owner`). `create_project` с адресом заводит направление, `get_project` по адресу
+отдаёт направление той же формой `ProjectView` с пустыми `decisions` и `directions`. У
+`create_task` и `move_task` остаётся `ProjectKeyArg`.
+**Почему важно:** выбор сделан замером `tools/list` (tiktoken, кодировка o200k_base, JSON без
+пробелов, как TRK-539#7; цифры — в деле TRK-555). Отдельное чтение направления с описью
+повторило бы в `outputSchema` всю форму фактов описи — около 2 900 токенов; один
+`create_direction` стоил 483, а с ним прирост выходил за предел задачи в 1 000.
+**Как правильно:** новый инструмент проекта, чьё действие у направления то же, принимает
+`CaseOwnerKeyArg` и ищет владельца `get_owner`. Короткие ответы создающих инструментов
+(`AttributeSetView`, `AttributeRemovedView`, `AppendedProjectEntryView`, `ProjectKeyView`)
+несут адрес направления в прежнем поле ключа: новое обязательное поле уронило бы повтор
+вчерашнего вызова (запись «Сузить форму ответа создающего инструмента можно, расширить —
+нельзя»). Полная запись (`EntryView`) несёт адрес полем `direction`, как REST.
+**Где:** `app/mcp/arguments.py`, `CaseOwnerKeyArg`; `app/services/directions.py`, `get_owner`;
+`app/mcp/tools/registries/create_project.py`; `app/mcp/tools/registries/get_project.py`;
+`app/mcp/tools/case/views.py`, `EntryView`.
