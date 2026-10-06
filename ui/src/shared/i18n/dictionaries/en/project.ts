@@ -19,7 +19,8 @@ export const project = {
 
   attributes: 'Attributes',
   noAttributes: 'The project has no attributes.',
-  attributesHint: 'Select a name to see how the value changed and why.',
+  attributesHint:
+    'Select a name to see how the value changed and why; you can change or remove the attribute there too.',
   history: 'History of {{name}}',
   historyLoading: 'Reading the history…',
   historyEmpty: 'The project case holds no entries about this attribute.',
