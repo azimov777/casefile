@@ -92,6 +92,7 @@ export const errors = {
   summary_required: 'Выход из «in_progress» требует сводки.',
   task_already_in_project: 'Задача уже в этом проекте.',
   task_blocked: 'У задачи есть незакрытый блокер.',
+  task_checks_frozen: 'Проверки задачи, уже входившей в работу, не правятся.',
   task_closed: 'Задача закрыта: её поля и связи больше не меняются.',
   task_field_locked: 'Это поле в текущем статусе не правится.',
   task_fields_invalid: 'Поля задачи не прошли проверку.',
