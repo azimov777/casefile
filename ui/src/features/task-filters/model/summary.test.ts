@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { say } from '@testing/say';
 import { EMPTY_FILTERS, type TaskFilters } from './filters';
-import { describeFilters } from './summary';
+import { CONDITION_RESET, describeFilters } from './summary';
 
 /*
  * Подписи условий берутся из словаря тем же ключом, что и в коде: правка формулировки
@@ -72,5 +72,13 @@ describe('условия отбора словами', () => {
     expect(conditions).toEqual([
       { id: 'query', label: say.tasks('filters.condition.query', { query: 'status: open' }) },
     ]);
+  });
+
+  it('направление (TRK-557) — чипом с адресом, «без направления» — словами; снимается своим сбросом', () => {
+    expect(labels({ project: 'DEMO', direction: 'DEMO/promotion' })).toEqual([
+      say.tasks('filters.condition.direction', { value: 'DEMO/promotion' }),
+    ]);
+    expect(labels({ direction: 'empty()' })).toEqual([say.tasks('filters.condition.noDirection')]);
+    expect(CONDITION_RESET.direction).toEqual({ direction: '' });
   });
 });

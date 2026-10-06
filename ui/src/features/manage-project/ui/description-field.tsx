@@ -4,7 +4,9 @@ import { PROJECT_DESCRIPTION_LIMIT, descriptionLength } from '@/entities/project
 import { Textarea } from '@/shared/ui';
 
 /**
- * Поле описания проекта с остатком до предела (`PROJECT_DESCRIPTION_LIMIT`).
+ * Поле описания проекта или направления с остатком до предела (`PROJECT_DESCRIPTION_LIMIT`
+ * у проекта, `DIRECTION_DESCRIPTION_LIMIT` у направления — `limit`). Длину оба бэкенд
+ * меряет одинаково (`descriptionLength`), различаются предел и подсказка.
  *
  * Остаток — единственное, что окно считает само (`UI-175`, ограничения): он виден,
  * пока человек пишет, а не после отказа. Сверх предела поле помечено отказом, а
@@ -19,16 +21,21 @@ import { Textarea } from '@/shared/ui';
 export function DescriptionField({
   value,
   onChange,
+  limit = PROJECT_DESCRIPTION_LIMIT,
+  hint,
 }: {
   value: string;
   onChange: (value: string) => void;
+  limit?: number;
+  /** Подсказка под полем: куда едет описание. Без неё — подсказка проекта. */
+  hint?: string;
 }) {
   const id = useId();
   const hintId = useId();
   const countId = useId();
   const { t } = useTranslation('project');
 
-  const left = PROJECT_DESCRIPTION_LIMIT - descriptionLength(value);
+  const left = limit - descriptionLength(value);
   const over = left < 0;
 
   return (
@@ -45,15 +52,15 @@ export function DescriptionField({
         aria-describedby={`${hintId} ${countId}`}
       />
       <span className="text-meta text-muted" id={hintId}>
-        {t('description.hint')}
+        {hint ?? t('description.hint')}
       </span>
       {over ? (
         <span className="text-meta text-danger" id={countId} role="alert">
-          {t('description.over', { count: -left, limit: PROJECT_DESCRIPTION_LIMIT })}
+          {t('description.over', { count: -left, limit })}
         </span>
       ) : (
         <span className="text-meta text-muted tabular-nums" id={countId}>
-          {t('description.left', { count: left, limit: PROJECT_DESCRIPTION_LIMIT })}
+          {t('description.left', { count: left, limit })}
         </span>
       )}
     </div>

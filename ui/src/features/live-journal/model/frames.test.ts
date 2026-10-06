@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { parseFrame } from './frames';
 
 /** Тело кадра: та же запись, что отдаёт лента; поля, лишние для разбора, опущены. */
-function frame(owner: { task_key: string | null; project_key: string | null }): string {
+function frame(owner: {
+  task_key: string | null;
+  project_key: string | null;
+  direction?: string | null;
+}): string {
   return JSON.stringify({ seq: 7, no: 2, type: 'note', title: 'Заметка', ...owner });
 }
 
@@ -23,6 +27,12 @@ describe('parseFrame', () => {
       taskKey: null,
       projectKey: 'TRK',
     });
+  });
+
+  it('разбирает запись дела направления: назван его адрес (TRK-557)', () => {
+    expect(
+      parseFrame(frame({ task_key: null, project_key: null, direction: 'TRK/promotion' })),
+    ).toMatchObject({ taskKey: null, projectKey: null, direction: 'TRK/promotion' });
   });
 
   it('отбрасывает кадр без владельца: ни задачи, ни проекта', () => {

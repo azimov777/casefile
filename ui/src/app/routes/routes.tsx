@@ -3,6 +3,7 @@ import { AccessPage } from '@/pages/access';
 import { AccountPage } from '@/pages/account';
 import { CasePage } from '@/pages/case';
 import { ConnectPage } from '@/pages/connect';
+import { DirectionPage } from '@/pages/direction';
 import { LoginPage } from '@/pages/login';
 import { MovingPage } from '@/pages/moving';
 import { PeoplePage } from '@/pages/people';
@@ -46,6 +47,7 @@ export const routes: RouteObject[] = [
           { path: 'tasks/:key', element: <TaskPage /> },
           { path: 'tasks/:key/case', element: <CasePage /> },
           { path: 'projects/:key', element: <ProjectPage /> },
+          { path: 'projects/:key/directions/:direction', element: <DirectionPage /> },
           { path: '*', element: <NotFound /> },
         ],
       },

@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { NotebookPen } from 'lucide-react';
-import { EntryIndex, headingOfEntry, projectCaseQueryOptions } from '@/entities/entry';
-import { NoteForm } from '@/features/manage-project';
+import { EntryIndex, headingOfEntry, holderCaseQueryOptions } from '@/entities/entry';
 import { Button, QueryState } from '@/shared/ui';
+import type { Holder } from '../api/projects';
+import { EntryForm } from './entry-form';
 
 /** Блок-список: без своих полей, строки описи идут до краёв поверхности. */
 const LIST_BLOCK = 'flex flex-col gap-0 rounded-control border border-line bg-surface';
@@ -12,29 +13,35 @@ const LIST_BLOCK = 'flex flex-col gap-0 rounded-control border border-line bg-su
 /** Заголовок блока-списка: поля и линия под ним — у него, у блока их нет. */
 const BLOCK_HEAD = 'flex flex-wrap items-baseline gap-3 border-b border-b-line px-3 pt-3 pb-2';
 
-interface ProjectCaseProps {
-  projectKey: string;
-  /** Писать заметки в дело: запись открыта всем (`useProjectRights`). */
+interface CaseSectionProps {
+  /** Чьё дело: проекта или его направления (TRK-557). */
+  holder: Holder;
+  /** Писать записи в дело: запись открыта всем (`useProjectRights`). */
   canWrite: boolean;
-  /** Раскрытая запись из адреса (`?entry=N`): ссылка `TRK#7` приходит сюда. */
+  /** Раскрытая запись из адреса (`?entry=N`): ссылка `TRK#7` или `TRK/promotion#3` — сюда. */
   openAt: number | null;
   onOpenChange: (no: number | null) => void;
 }
 
 /**
- * Дело проекта описью: та же `EntryIndex`, что у карточки задачи, с владельцем-проектом.
+ * Дело проекта или направления описью: та же `EntryIndex`, что у карточки задачи, с
+ * владельцем-проектом или владельцем-направлением. Раздел живёт в действиях по той же
+ * причине, что атрибуты (`AttributesSection`): его рисуют два экрана.
  *
  * Описи в ответе проекта нет — строки собираются из записей дела (`headingOfEntry`), а
  * тело по клику читается отдельно адресом записи, как у задачи: опись не обещает, что
  * тело уже в памяти, и держать два пути к одному телу незачем.
  */
-export function ProjectCase({ projectKey, canWrite, openAt, onOpenChange }: ProjectCaseProps) {
-  const feed = useInfiniteQuery(projectCaseQueryOptions(projectKey));
+export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSectionProps) {
+  const feed = useInfiniteQuery(holderCaseQueryOptions(holder));
   const [writing, setWriting] = useState(false);
   const noteButton = useRef<HTMLButtonElement>(null);
   const formPlace = useRef<HTMLDivElement>(null);
   const opened = useRef(false);
   const { t } = useTranslation('project');
+  const { t: tDirection } = useTranslation('direction');
+  const direction = holder.kind === 'direction';
+  const headingId = `${holder.kind}-case`;
 
   /*
    * Кнопка «Написать заметку» уступает место форме, как у замечания к задаче, — и фокус
@@ -56,10 +63,10 @@ export function ProjectCase({ projectKey, canWrite, openAt, onOpenChange }: Proj
   const index = entries.map(headingOfEntry);
 
   return (
-    <section className={LIST_BLOCK} aria-labelledby="project-case">
+    <section className={LIST_BLOCK} aria-labelledby={headingId}>
       <div className={BLOCK_HEAD}>
-        <h2 className="text-screen" id="project-case">
-          {t('case')}
+        <h2 className="text-screen" id={headingId}>
+          {direction ? tDirection('case.title') : t('case')}
         </h2>
         {/* Число — только у дочитанного дела: у недочитанного оно было бы числом
             подгруженных страниц, а не записей, и врало бы тихо. */}
@@ -71,7 +78,7 @@ export function ProjectCase({ projectKey, canWrite, openAt, onOpenChange }: Proj
         {canWrite && !writing ? (
           <Button ref={noteButton} size="sm" className="ml-auto" onClick={() => setWriting(true)}>
             <NotebookPen className="size-(--ui-mark)" aria-hidden="true" />
-            {t('note.open')}
+            {direction ? tDirection('entry.open') : t('note.open')}
           </Button>
         ) : null}
       </div>
@@ -80,22 +87,20 @@ export function ProjectCase({ projectKey, canWrite, openAt, onOpenChange }: Proj
           подшито, и подтверждение встаёт на её место. */}
       {writing ? (
         <div ref={formPlace} className="border-b border-b-line px-3 py-3">
-          <NoteForm projectKey={projectKey} onCancel={() => setWriting(false)} />
+          <EntryForm holder={holder} onCancel={() => setWriting(false)} />
         </div>
       ) : null}
 
       {feed.data === undefined ? (
         <div className="px-3 py-2">
-          <QueryState query={feed} loading={t('caseLoading')} />
+          <QueryState
+            query={feed}
+            loading={direction ? tDirection('case.loading') : t('caseLoading')}
+          />
         </div>
       ) : (
         <>
-          <EntryIndex
-            owner={{ kind: 'project', key: projectKey }}
-            index={index}
-            openAt={openAt}
-            onOpenChange={onOpenChange}
-          />
+          <EntryIndex owner={holder} index={index} openAt={openAt} onOpenChange={onOpenChange} />
           {feed.hasNextPage ? (
             <div className="px-3 py-2">
               <Button

@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+import { NO_DIRECTION } from '@/entities/direction';
 import type { TaskFilters } from './filters';
 
 /**
@@ -8,6 +9,7 @@ import type { TaskFilters } from './filters';
  * проверка остаётся на месте.
  */
 export type ConditionId =
+  | 'direction'
   | 'status'
   | 'priority'
   | 'assignee'
@@ -33,6 +35,7 @@ export interface FilterCondition {
  * тем же путём, что и форма, и никакого второго состояния не заводит.
  */
 export const CONDITION_RESET = {
+  direction: { direction: '' },
   status: { status: [] },
   priority: { priority: [] },
   assignee: { assignee: '' },
@@ -75,6 +78,19 @@ export function describeFilters(filters: TaskFilters, t: TFunction<'tasks'>): Fi
 
   const conditions: FilterCondition[] = [];
   const board = filters.view === 'board';
+
+  // Направление — условие, а не место (TRK-557): оно сужает выдачу проекта, а не
+  // переносит человека в другое место панели, и снимается чипом, как статус.
+  const direction = filters.direction.trim();
+  if (direction !== '') {
+    conditions.push({
+      id: 'direction',
+      label:
+        direction === NO_DIRECTION
+          ? t('filters.condition.noDirection')
+          : t('filters.condition.direction', { value: direction }),
+    });
+  }
 
   // На доске статус — это столбец, и параметром он не уезжает (`filtersToListParams`).
   // Назвать его здесь значило бы соврать про выдачу: столбцы показаны все.

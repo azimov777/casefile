@@ -1,7 +1,12 @@
+import { http } from 'msw';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { API, collection, directionCard } from '@testing/msw/responses';
+import { server } from '@testing/msw/server';
 import { say } from '@testing/say';
+import { setToken } from '@/shared/api';
 import { EMPTY_FILTERS, type TaskFilters } from '../model/filters';
 import { FilterMenu } from './filter-menu';
 
@@ -14,15 +19,20 @@ import { FilterMenu } from './filter-menu';
 function renderMenu(filters: Partial<TaskFilters> = {}, board = false) {
   const onApply = vi.fn();
   const onAssignee = vi.fn();
+  // Направления проекта панель читает сама (TRK-557): без проекта запроса нет вовсе, а
+  // клиент запросов нужен хуку и тогда.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <FilterMenu
-      filters={{ ...EMPTY_FILTERS, ...filters }}
-      board={board}
-      assignee={filters.assignee ?? ''}
-      pending={false}
-      onAssignee={onAssignee}
-      onApply={onApply}
-    />,
+    <QueryClientProvider client={client}>
+      <FilterMenu
+        filters={{ ...EMPTY_FILTERS, ...filters }}
+        board={board}
+        assignee={filters.assignee ?? ''}
+        pending={false}
+        onAssignee={onAssignee}
+        onApply={onApply}
+      />
+    </QueryClientProvider>,
   );
   return { onApply, onAssignee };
 }
@@ -121,5 +131,64 @@ describe('панель «Фильтр»', () => {
 
     expect(screen.queryByText(say.tasks('filters.statusLegend'))).toBeNull();
     expect(toggle('priorityLabel', 'high')).toBeInTheDocument();
+  });
+
+  it('направление (TRK-557): без проекта — «любое» и «без направления», выбор уходит как есть', async () => {
+    const user = userEvent.setup();
+    const { onApply } = renderMenu({});
+
+    const field = screen.getByLabelText(say.tasks('filters.directionLegend'));
+    expect(field).toHaveValue('');
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      say.tasks('filters.directionAny'),
+      say.tasks('filters.directionNone'),
+    ]);
+
+    await user.selectOptions(field, say.tasks('filters.directionNone'));
+    expect(onApply).toHaveBeenLastCalledWith({ direction: 'empty()' });
+  });
+
+  it('направления проекта — с архивными и пометкой; чужой адрес из ссылки стоит своим адресом', async () => {
+    setToken('trk_test');
+    const seen: string[] = [];
+    server.use(
+      http.get(`${API}/api/v1/projects/DEMO/directions`, ({ request }) => {
+        seen.push(request.url);
+        return collection([
+          directionCard('DEMO/promotion'),
+          directionCard('DEMO/commerce', {
+            title: 'Коммерция',
+            archived_at: '2026-10-01T10:00:00Z',
+          }),
+        ]);
+      }),
+    );
+    const user = userEvent.setup();
+    const { onApply } = renderMenu({ project: 'DEMO', direction: 'OPS/infra' });
+
+    expect(
+      await screen.findByRole('option', {
+        name: say.tasks('filters.directionOption', {
+          title: 'Популяризация',
+          address: 'DEMO/promotion',
+        }),
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('option', {
+        name: say.tasks('filters.directionArchived', {
+          title: 'Коммерция',
+          address: 'DEMO/commerce',
+        }),
+      }),
+    ).toBeInTheDocument();
+    expect(new URL(seen[0] ?? '').searchParams.get('include_archived')).toBe('true');
+    expect(screen.getByLabelText(say.tasks('filters.directionLegend'))).toHaveValue('OPS/infra');
+
+    await user.selectOptions(
+      screen.getByLabelText(say.tasks('filters.directionLegend')),
+      'DEMO/promotion',
+    );
+    expect(onApply).toHaveBeenLastCalledWith({ direction: 'DEMO/promotion' });
   });
 });

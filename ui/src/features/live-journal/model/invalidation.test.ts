@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { directionKeys } from '@/entities/direction';
 import { questionKeys, type Entry, type EntryType } from '@/entities/entry';
 import { projectKeys } from '@/entities/project';
 import { sessionKeys } from '@/entities/session';
@@ -12,9 +13,9 @@ import { keysAfterReconnect, keysToInvalidate } from './invalidation';
  */
 function frame(
   type: EntryType,
-  owner: { taskKey: string | null; projectKey: string | null },
+  owner: { taskKey: string | null; projectKey: string | null; direction?: string | null },
 ): JournalFrame {
-  return { seq: 1, type, entry: {} as Entry, ...owner };
+  return { seq: 1, type, entry: {} as Entry, direction: null, ...owner };
 }
 
 describe('keysToInvalidate — запись дела проекта', () => {
@@ -36,6 +37,20 @@ describe('keysToInvalidate — запись дела проекта', () => {
 
     expect(archived.immediate).toEqual([projectKeys.detail('TRK')]);
     expect(restored.immediate).toEqual([projectKeys.detail('TRK')]);
+  });
+});
+
+describe('keysToInvalidate — запись дела направления (TRK-557)', () => {
+  it('перечитывает страницу направления и проект сразу, задачи и списки не трогает', () => {
+    const result = keysToInvalidate(
+      frame('archived', { taskKey: null, projectKey: null, direction: 'TRK/promotion' }),
+    );
+
+    expect(result).toEqual({
+      immediate: [directionKeys.detail('TRK/promotion'), projectKeys.detail('TRK')],
+      coalesced: [],
+      deferred: [],
+    });
   });
 });
 
@@ -81,6 +96,7 @@ describe('keysAfterReconnect', () => {
     expect(result.immediate).toEqual([
       ['task'],
       ['project'],
+      ['direction'],
       questionKeys.all,
       taskKeys.attention,
       sessionKeys.bootstrap,

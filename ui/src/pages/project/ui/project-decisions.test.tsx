@@ -42,6 +42,7 @@ function serve(decisions: ProjectDecision[]) {
   server.use(
     http.get(`${API}/api/v1/projects/DEMO`, () => data(projectDetail('DEMO', { decisions }))),
     http.get(`${API}/api/v1/projects/DEMO/entries`, () => collection([])),
+    http.get(`${API}/api/v1/projects/DEMO/directions`, () => collection([])),
   );
 }
 

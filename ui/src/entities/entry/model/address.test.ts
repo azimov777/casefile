@@ -19,4 +19,10 @@ describe('entryAddress', () => {
       'http://127.0.0.1:8080/projects/TRK?entry=7',
     );
   });
+
+  it('запись дела направления открывается на странице направления под проектом (TRK-557)', () => {
+    expect(
+      entryAddress({ kind: 'direction', key: 'TRK/promotion' }, 3, 'http://127.0.0.1:8080'),
+    ).toBe('http://127.0.0.1:8080/projects/TRK/directions/promotion?entry=3');
+  });
 });

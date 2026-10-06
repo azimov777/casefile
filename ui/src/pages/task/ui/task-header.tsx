@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { DirectionLink } from '@/entities/direction';
 import { DecisionStatusMark, decisionHref } from '@/entities/project';
 import {
   PriorityMark,
@@ -11,6 +12,7 @@ import {
   type LinkedTask,
   type TaskFeatures,
 } from '@/entities/task';
+import { ChangeTaskDirection } from '@/features/change-task-direction';
 import { RelativeTime } from '@/shared/ui';
 
 interface TaskHeaderProps {
@@ -20,6 +22,11 @@ interface TaskHeaderProps {
   parent: LinkedTask | null;
   /** Решения проекта, на которые опирается задача (`decisions` пакета, TRK-554). */
   decisions: CitedDecision[];
+  /**
+   * Может ли человек сменить направление (TRK-557): сеанс известен, задача не закрыта и
+   * её проект не в архиве. Иначе ячейка только читается — кнопки нет, а не «есть и падает».
+   */
+  canChangeDirection: boolean;
 }
 
 /** Отсутствующее значение: курсив вместо прочерка — его читают, а не сканируют. */
@@ -38,8 +45,9 @@ const DECISION_REF = 'font-mono text-mark whitespace-nowrap';
  * Шапка карточки — группы, которые читаются с первого взгляда (UI-143, вариант B,
  * выбранный владельцем в UI-143#10):
  *
- * 1. «Где» и «что» — проект, родители и название — одна группа с шагом 4 px: проект
- *    и родитель читаются надписью над названием, а не отдельной строкой.
+ * 1. «Где» и «что» — проект, направление, родители и название — одна группа с шагом
+ *    4 px: проект, направление и родитель читаются надписью над названием, а не
+ *    отдельной строкой.
  * 2. Состояние и время — полоса свойств между двумя линиями, в 12 px под названием.
  *    Каждое значение подписано (`dt`), поэтому статус принадлежит задаче по подписи,
  *    а не по близости к соседней строке. Время стоит в правом конце полосы: это тоже
@@ -50,7 +58,13 @@ const DECISION_REF = 'font-mono text-mark whitespace-nowrap';
  * действий от шапки отделяет 24 px (`mt-2` поверх шага страницы 16): больше любого
  * зазора внутри шапки.
  */
-export function TaskHeader({ task, features, parent, decisions }: TaskHeaderProps) {
+export function TaskHeader({
+  task,
+  features,
+  parent,
+  decisions,
+  canChangeDirection,
+}: TaskHeaderProps) {
   const { t } = useTranslation('task');
   const { t: brick } = useTranslation('ui');
 
@@ -61,6 +75,23 @@ export function TaskHeader({ task, features, parent, decisions }: TaskHeaderProp
           <Link to={`/tasks?project=${task.project.key}`}>
             {task.project.key} — {task.project.title}
           </Link>
+          {/*
+           * Направление — рядом с проектом (TRK-557, TRK#16, ч. 4): тоже ответ на вопрос
+           * «где», но другой оси, чем родитель, — «про что эта работа в проекте». Поэтому
+           * отделено точкой, а не косой чертой: шагом вниз по пути оно не является.
+           */}
+          {task.direction === null ? null : (
+            <>
+              <span className="text-faint" aria-hidden="true">
+                ·
+              </span>
+              <DirectionLink
+                address={task.direction.address}
+                title={task.direction.title}
+                archivedAt={task.direction.archived_at}
+              />
+            </>
+          )}
           {/*
            * Косая черта — шаг вниз по пути «проект / родитель / эта задача». Родитель у
            * задачи один: с TRK-135 это правило бэкенда (второй — `409 task_has_parent`),
@@ -106,6 +137,28 @@ export function TaskHeader({ task, features, parent, decisions }: TaskHeaderProp
           <dt className={LABEL}>{t('header.priority')}</dt>
           <dd>
             <PriorityMark priority={task.priority} labelled={false} />
+          </dd>
+        </div>
+        {/*
+         * Направление — сразу за приоритетом: поле обвязки, которое человек правит там же,
+         * где видит (TRK#16, ч. 4). Значение — адресом моноширинным: название уже стоит
+         * ссылкой над заголовком, а здесь — то, что уходит в поле задачи и в отбор.
+         */}
+        <div className={CELL}>
+          <dt className={LABEL}>{t('header.direction')}</dt>
+          <dd className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {task.direction === null ? (
+              <span className={EMPTY}>{t('header.noDirection')}</span>
+            ) : (
+              <span className="font-mono text-mark text-muted">{task.direction.address}</span>
+            )}
+            {canChangeDirection ? (
+              <ChangeTaskDirection
+                taskKey={task.key}
+                projectKey={task.project.key}
+                current={task.direction}
+              />
+            ) : null}
           </dd>
         </div>
         <div className={CELL}>

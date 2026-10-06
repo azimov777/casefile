@@ -26,6 +26,7 @@ describe('чтение отбора из адреса', () => {
     expect(readFilters(params)).toEqual({
       view: 'table',
       project: 'DEMO',
+      direction: '',
       status: ['open', 'in_progress'],
       priority: ['high'],
       assignee: 'owner',
@@ -242,5 +243,35 @@ describe('архив', () => {
 
     expect(after).toEqual(before);
     expect(JSON.stringify(after)).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+});
+
+describe('отбор по направлению (TRK-557)', () => {
+  it('адрес направления и «без направления» проходят круг «адрес → отбор → адрес» как есть', () => {
+    for (const direction of ['DEMO/promotion', 'empty()']) {
+      const params = writeFilters(filters({ project: 'DEMO', direction }));
+      expect(params.get('direction')).toBe(direction);
+      expect(readFilters(params).direction).toBe(direction);
+    }
+    expect(writeFilters(filters({ direction: '' })).has('direction')).toBe(false);
+  });
+
+  it('уходит структурным параметром `direction` — тем же условием, что у агента', () => {
+    expect(
+      filtersToListParams(filters({ project: 'DEMO', direction: 'DEMO/promotion' })).direction,
+    ).toEqual(['DEMO/promotion']);
+    expect(filtersToListParams(filters({ direction: 'empty()' })).direction).toEqual(['empty()']);
+    expect(filtersToListParams(filters()).direction).toBeUndefined();
+  });
+
+  it('направление — условие: пустая выдача с ним предлагает сброс, а не «в проекте пусто»', () => {
+    expect(hasConditions(filters({ project: 'DEMO', direction: 'DEMO/promotion' }))).toBe(true);
+  });
+
+  it('заполненный запрос отменяет и направление, как любой структурный отбор', () => {
+    expect(
+      filtersToListParams(filters({ direction: 'DEMO/promotion', query: 'status: open' }))
+        .direction,
+    ).toBeUndefined();
   });
 });

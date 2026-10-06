@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { EntryCard, projectCaseQueryOptions } from '@/entities/entry';
+import { EntryCard, holderCaseQueryOptions } from '@/entities/entry';
 import type { ProjectAttribute } from '@/entities/project';
-import { AddAttribute, ChangeAttribute, RemoveAttribute } from '@/features/manage-project';
 import { Button, QueryState, RelativeTime } from '@/shared/ui';
+import type { Holder } from '../api/projects';
+import { AddAttribute, ChangeAttribute, RemoveAttribute } from './attribute-dialogs';
 
 /** Блок-список, как у дела рядом: строки атрибутов идут до краёв поверхности. */
 const LIST_BLOCK = 'flex flex-col gap-0 rounded-control border border-line bg-surface';
@@ -11,8 +12,9 @@ const LIST_BLOCK = 'flex flex-col gap-0 rounded-control border border-line bg-su
 /** Заголовок блока-списка: поля и линия под ним. */
 const BLOCK_HEAD = 'flex flex-col gap-1 border-b border-b-line px-3 pt-3 pb-2';
 
-interface ProjectAttributesProps {
-  projectKey: string;
+interface AttributesSectionProps {
+  /** Чьи атрибуты: проекта или его направления (TRK-557) — правила у них одни. */
+  holder: Holder;
   attributes: ProjectAttribute[];
   /** Ставить, менять и снимать атрибуты: запись открыта всем (`useProjectRights`). */
   canWrite: boolean;
@@ -22,30 +24,36 @@ interface ProjectAttributesProps {
 }
 
 /**
- * Атрибуты проекта: имя и нынешнее значение, история — по клику на имя.
+ * Атрибуты проекта или направления: имя и нынешнее значение, история — по клику на имя.
+ *
+ * Раздел живёт в действиях, а не на экране: его рисуют два экрана — проект и
+ * направление (TRK-557), — а экраны друг друга не импортируют. Здесь же стоят его
+ * действия: «Добавить», «Изменить» и «Снять».
  *
  * Порядок — тот, что отдал бэкенд (по имени без учёта регистра). Значение — простой
  * текст, который трекер не толкует (`AttributeRead.value`): он показывается как есть,
  * с переносами строк, а не markdown-ом — ссылкой в нём станет только то, что напишут
  * ссылкой в деле.
  */
-export function ProjectAttributes({
-  projectKey,
+export function AttributesSection({
+  holder,
   attributes,
   canWrite,
   open,
   onOpenChange,
-}: ProjectAttributesProps) {
+}: AttributesSectionProps) {
   const { t } = useTranslation('project');
+  const { t: tDirection } = useTranslation('direction');
+  const headingId = `${holder.kind}-attributes`;
 
   return (
-    <section className={LIST_BLOCK} aria-labelledby="project-attributes">
+    <section className={LIST_BLOCK} aria-labelledby={headingId}>
       <div className={BLOCK_HEAD}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-screen" id="project-attributes">
+          <h2 className="text-screen" id={headingId}>
             {t('attributes')}
           </h2>
-          {canWrite ? <AddAttribute projectKey={projectKey} /> : null}
+          {canWrite ? <AddAttribute holder={holder} /> : null}
         </div>
         {attributes.length > 0 ? (
           <p className="text-meta text-muted">{t('attributesHint')}</p>
@@ -53,7 +61,9 @@ export function ProjectAttributes({
       </div>
 
       {attributes.length === 0 ? (
-        <p className="px-3 py-2 text-muted italic">{t('noAttributes')}</p>
+        <p className="px-3 py-2 text-muted italic">
+          {holder.kind === 'direction' ? tDirection('attributes.none') : t('noAttributes')}
+        </p>
       ) : (
         <ul className="flex list-none flex-col p-0">
           {attributes.map((attribute) => {
@@ -93,12 +103,12 @@ export function ProjectAttributes({
                     хуже, чем своя строка. */}
                 {canWrite ? (
                   <div className="flex flex-wrap gap-2">
-                    <ChangeAttribute projectKey={projectKey} attribute={attribute} />
-                    <RemoveAttribute projectKey={projectKey} attribute={attribute} />
+                    <ChangeAttribute holder={holder} attribute={attribute} />
+                    <RemoveAttribute holder={holder} attribute={attribute} />
                   </div>
                 ) : null}
                 {expanded ? (
-                  <AttributeHistory projectKey={projectKey} name={attribute.name} id={historyId} />
+                  <AttributeHistory holder={holder} name={attribute.name} id={historyId} />
                 ) : null}
               </li>
             );
@@ -110,7 +120,7 @@ export function ProjectAttributes({
 }
 
 /**
- * История одного атрибута: записи дела проекта о нём, по порядку номеров — заведение,
+ * История одного атрибута: записи дела проекта или направления о нём, по порядку номеров — заведение,
  * изменения с прежним и новым значением и снятие, каждая с причиной.
  *
  * Отбор — серверный параметр `attribute` (TRK-166): бэкенд сам сужает выдачу до трёх
@@ -120,17 +130,10 @@ export function ProjectAttributes({
  * Записи показаны теми же карточками, что в ленте дела задачи (`EntryCard`): «было /
  * стало» и причина под ним.
  */
-function AttributeHistory({
-  projectKey,
-  name,
-  id,
-}: {
-  projectKey: string;
-  name: string;
-  id: string;
-}) {
-  const feed = useInfiniteQuery(projectCaseQueryOptions(projectKey, { attribute: name }));
+function AttributeHistory({ holder, name, id }: { holder: Holder; name: string; id: string }) {
+  const feed = useInfiniteQuery(holderCaseQueryOptions(holder, { attribute: name }));
   const { t } = useTranslation('project');
+  const { t: tDirection } = useTranslation('direction');
 
   const history = feed.data?.pages.flatMap((page) => page.items) ?? [];
 
@@ -144,7 +147,9 @@ function AttributeHistory({
       {feed.data === undefined ? (
         <QueryState query={feed} loading={t('historyLoading')} />
       ) : history.length === 0 && !feed.hasNextPage ? (
-        <p className="text-muted italic">{t('historyEmpty')}</p>
+        <p className="text-muted italic">
+          {holder.kind === 'direction' ? tDirection('attributes.historyEmpty') : t('historyEmpty')}
+        </p>
       ) : (
         /* Нить времени — та же, что у ленты дела: точка рода каждой записи стоит на ней. */
         <div className="relative flex flex-col gap-2 pl-8 before:absolute before:top-2 before:bottom-2 before:left-2.5 before:w-px before:bg-line">

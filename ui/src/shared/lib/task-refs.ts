@@ -1,6 +1,6 @@
 /**
- * Ссылки на задачи и записи в свободном тексте: `TRK-42`, `TRK-42#12` и запись дела
- * проекта `TRK#7`.
+ * Ссылки на задачи и записи в свободном тексте: `TRK-42`, `TRK-42#12`, запись дела
+ * проекта `TRK#7` и запись дела направления `TRK/promotion#3`.
  *
  * Такие ссылки агенты пишут руками в телах записей, заголовках и разделах, а бэкенд
  * их не размечает: в контракте это просто текст (`refs` рядом — отдельный список,
@@ -29,8 +29,14 @@ export type TextPart =
  * ключ проекта и номер без номера задачи. Её не спутать с `TRK-42#3` — дефис есть
  * только в ключе задачи. Сам ключ проекта без номера записи (`TRK`) ссылкой не
  * становится: в прозе это обычное слово заглавными.
+ *
+ * Третья ветка — запись дела направления `TRK/promotion#3` (TRK-557, `../docs/CONCEPT.md`,
+ * 3.7): ключ проекта, косая черта, ключ направления по образцу бэкенда
+ * (`../app/domain/directions.py`, `DIRECTION_KEY_PATTERN`) и номер. Адрес направления без
+ * номера (`TRK/promotion`) ссылкой не становится: `API/v1` в прозе — путь, а не направление.
  */
-const TASK_REF = /\b([A-Z][A-Z0-9]{1,15})(?:-(\d+)(?:#(\d+))?|#(\d+))\b/g;
+const TASK_REF =
+  /\b([A-Z][A-Z0-9]{1,15})(?:-(\d+)(?:#(\d+))?|#(\d+)|\/([a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?)#(\d+))\b/g;
 
 /** Разбирает строку на обычный текст и ссылки, сохраняя порядок и исходное написание. */
 export function splitTaskRefs(text: string): TextPart[] {
@@ -41,17 +47,19 @@ export function splitTaskRefs(text: string): TextPart[] {
     const at = match.index;
     if (at > last) parts.push({ kind: 'text', value: text.slice(last, at) });
 
-    const [value, project = '', number, entry, projectEntry] = match;
+    const [value, project = '', number, entry, projectEntry, direction, directionEntry] = match;
     parts.push({
       kind: 'ref',
       value,
       href:
-        number === undefined
-          ? projectHref(project, Number(projectEntry))
-          : taskRefHref({
-              key: `${project}-${number}`,
-              entryNo: entry === undefined ? null : Number(entry),
-            }),
+        direction !== undefined
+          ? directionHref(`${project}/${direction}`, Number(directionEntry))
+          : number === undefined
+            ? projectHref(project, Number(projectEntry))
+            : taskRefHref({
+                key: `${project}-${number}`,
+                entryNo: entry === undefined ? null : Number(entry),
+              }),
     });
     last = at + value.length;
   }
@@ -69,6 +77,39 @@ export function splitTaskRefs(text: string): TextPart[] {
  */
 export function projectHref(key: string, entryNo: number | null = null): string {
   const path = `/projects/${key}`;
+  return entryNo === null ? path : `${path}?entry=${entryNo}`;
+}
+
+/** Направление по адресу `TRK/promotion`: ключ проекта и ключ направления. */
+export interface DirectionPath {
+  projectKey: string;
+  directionKey: string;
+}
+
+/**
+ * Адрес направления на две части: проект и ключ внутри него (`../docs/CONCEPT.md`, 3.7).
+ *
+ * Разбор адреса, а не вычисление за бэкенд: адрес по контракту и есть «проект / ключ»,
+ * а путь API и экрана собран из этих двух сегментов, потому что косая черта внутри
+ * сегмента потребовала бы экранирования (`../app/api/routes/directions.py`). Строка без
+ * косой черты — не адрес: ключ направления тогда пуст, и запрос по нему ответит
+ * `direction_not_found`, как ответил бы на опечатку.
+ */
+export function splitDirectionAddress(address: string): DirectionPath {
+  const slash = address.indexOf('/');
+  return slash < 0
+    ? { projectKey: address, directionKey: '' }
+    : { projectKey: address.slice(0, slash), directionKey: address.slice(slash + 1) };
+}
+
+/**
+ * Адрес страницы направления (TRK-557); с номером записи — страница с раскрытой записью
+ * его дела, тем же параметром `entry`, что у проекта и задачи. Путь — под проектом, как у
+ * API: `/projects/TRK/directions/promotion`.
+ */
+export function directionHref(address: string, entryNo: number | null = null): string {
+  const { projectKey, directionKey } = splitDirectionAddress(address);
+  const path = `/projects/${projectKey}/directions/${directionKey}`;
   return entryNo === null ? path : `${path}?entry=${entryNo}`;
 }
 

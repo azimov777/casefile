@@ -65,6 +65,7 @@ beforeEach(() => {
   server.use(
     http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
     http.get(`${API}/api/v1/projects/DEMO`, () => data(projectDetail())),
+    http.get(`${API}/api/v1/projects/DEMO/directions`, () => collection([])),
     http.get(`${API}/api/v1/projects/DEMO/entries`, ({ request }) => {
       const url = new URL(request.url);
       seen.push(url);

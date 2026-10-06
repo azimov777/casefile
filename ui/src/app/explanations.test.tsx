@@ -121,6 +121,7 @@ function installation(hints: Hints, archived: string | null = null) {
       data(projectDetail('DEMO', { archived_at: archived })),
     ),
     http.get(`${API}/api/v1/projects/DEMO/entries`, () => collection([])),
+    http.get(`${API}/api/v1/projects/DEMO/directions`, () => collection([])),
     http.get(`${API}/api/v1/tokens`, () => collection([])),
     http.get(`${API}/api/v1/participants`, () => collection([])),
     http.get(`${API}/api/v1/installation`, () => data({ mcp_url: 'http://localhost:8100/mcp' })),

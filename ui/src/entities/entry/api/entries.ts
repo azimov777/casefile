@@ -7,6 +7,7 @@ import {
   type components,
   type operations,
 } from '@/shared/api';
+import { splitDirectionAddress } from '@/shared/lib';
 import type { EntryOwner } from '../model/owner';
 
 /** Запись дела с телом и нагрузкой: объединение, размеченное полем `type`. */
@@ -100,6 +101,14 @@ export const entryKeys = {
   /** Дело проекта страницами, с отбором по типам или без. */
   projectCase: (projectKey: string, params: ProjectEntryListParams) =>
     ['project', projectKey, 'case', params] as const,
+  /**
+   * Тело одной записи дела направления — под префиксом направления `['direction',
+   * адрес]`, как тела проекта под его префиксом (TRK-557).
+   */
+  directionBody: (address: string, no: number) => ['direction', address, 'entries', no] as const,
+  /** Дело направления страницами, с отбором или без. */
+  directionCase: (address: string, params: ProjectEntryListParams) =>
+    ['direction', address, 'case', params] as const,
 };
 
 /** Параметры чтения дела проекта — из контракта. */
@@ -108,24 +117,30 @@ export type ProjectEntryListParams = NonNullable<
 >;
 
 /**
- * Тело одной записи дела — задачи или проекта.
+ * Тело одной записи дела — задачи, проекта или направления.
  *
  * Номер — часть ключа запроса, поэтому раскрытая запись читается один раз и живёт
  * в кэше: закрыть и открыть её снова второго запроса не стоит. У задачи тело читается
- * отбором `entries?nos=N` (тем же путём, что лента), у проекта — своим адресом записи
- * `entries/{no}`: у дела проекта он есть, и отбор ради одной записи был бы обходом.
+ * отбором `entries?nos=N` (тем же путём, что лента), у проекта и направления — своим
+ * адресом записи `entries/{no}`: у их дел он есть, и отбор ради одной записи был бы обходом.
  */
 export function entryQueryOptions(owner: EntryOwner, no: number) {
-  // Ключ объявлен общим типом: у двух владельцев разные префиксы (`task`, `project`), а
-  // запрос один — иначе вызывающий получил бы объединение двух видов опций.
+  // Ключ объявлен общим типом: у владельцев разные префиксы (`task`, `project`,
+  // `direction`), а запрос один — иначе вызывающий получил бы объединение видов опций.
   const queryKey: readonly unknown[] =
     owner.kind === 'project'
       ? entryKeys.projectBody(owner.key, no)
-      : entryKeys.bodies(owner.key, [no]);
+      : owner.kind === 'direction'
+        ? entryKeys.directionBody(owner.key, no)
+        : entryKeys.bodies(owner.key, [no]);
   return queryOptions({
     queryKey,
     queryFn: (): Promise<Entry | null> =>
-      owner.kind === 'project' ? readProjectEntry(owner.key, no) : readTaskEntry(owner.key, no),
+      owner.kind === 'project'
+        ? readProjectEntry(owner.key, no)
+        : owner.kind === 'direction'
+          ? readDirectionEntry(owner.key, no)
+          : readTaskEntry(owner.key, no),
   });
 }
 
@@ -146,6 +161,15 @@ function readProjectEntry(projectKey: string, no: number): Promise<Entry> {
   );
 }
 
+function readDirectionEntry(address: string, no: number): Promise<Entry> {
+  const { projectKey, directionKey } = splitDirectionAddress(address);
+  return unwrap(
+    apiClient.GET('/api/v1/projects/{project_key}/directions/{direction_key}/entries/{entry_no}', {
+      params: { path: { project_key: projectKey, direction_key: directionKey, entry_no: no } },
+    }),
+  );
+}
+
 /**
  * Дело проекта одной страницы на запрос: предел контракта — 200 записей. Дело
  * проекта короткое (ни сводок, ни вопросов, ни вердиктов), и больше страницы оно
@@ -158,21 +182,82 @@ export function projectCaseQueryOptions(projectKey: string, params: ProjectEntry
   return infiniteQueryOptions({
     queryKey: entryKeys.projectCase(projectKey, params),
     queryFn: ({ pageParam }): Promise<Page<Entry>> =>
-      unwrapPage(
-        apiClient.GET('/api/v1/projects/{project_key}/entries', {
-          params: {
-            path: { project_key: projectKey },
-            query: {
-              limit: PROJECT_ENTRY_PAGE_SIZE,
-              ...params,
-              cursor: pageParam === '' ? undefined : pageParam,
-            },
-          },
-        }),
-      ),
+      readProjectCasePage(projectKey, params, pageParam),
     initialPageParam: '',
-    getNextPageParam: (last: Page<Entry>) =>
-      last.meta?.has_more === true ? (last.meta.next_cursor ?? undefined) : undefined,
+    getNextPageParam: nextCursor,
+  });
+}
+
+/** Курсор следующей страницы дела или `undefined`, если страниц больше нет. */
+function nextCursor(last: Page<Entry>): string | undefined {
+  return last.meta?.has_more === true ? (last.meta.next_cursor ?? undefined) : undefined;
+}
+
+function readProjectCasePage(
+  projectKey: string,
+  params: ProjectEntryListParams,
+  cursor: string,
+): Promise<Page<Entry>> {
+  return unwrapPage(
+    apiClient.GET('/api/v1/projects/{project_key}/entries', {
+      params: {
+        path: { project_key: projectKey },
+        query: {
+          limit: PROJECT_ENTRY_PAGE_SIZE,
+          ...params,
+          cursor: cursor === '' ? undefined : cursor,
+        },
+      },
+    }),
+  );
+}
+
+function readDirectionCasePage(
+  address: string,
+  params: ProjectEntryListParams,
+  cursor: string,
+): Promise<Page<Entry>> {
+  const { projectKey, directionKey } = splitDirectionAddress(address);
+  return unwrapPage(
+    apiClient.GET('/api/v1/projects/{project_key}/directions/{direction_key}/entries', {
+      params: {
+        path: { project_key: projectKey, direction_key: directionKey },
+        query: {
+          limit: PROJECT_ENTRY_PAGE_SIZE,
+          ...params,
+          cursor: cursor === '' ? undefined : cursor,
+        },
+      },
+    }),
+  );
+}
+
+/**
+ * Дело проекта или направления (TRK-557) — одним вызовом для разделов, которые рисуют
+ * оба (`features/manage-project`, `AttributesSection`, `CaseSection`). Дело направления
+ * читается так же, как дело проекта: одна страница до 200 записей на запрос, следующая по
+ * кнопке, те же отборы, включая историю одного атрибута (`attribute`), — бэкенд читает оба
+ * дела одним сценарием.
+ *
+ * Ключ объявлен общим типом по той же причине, что у `entryQueryOptions`: префиксы у
+ * владельцев разные (`project`, `direction`), а запрос один.
+ */
+export function holderCaseQueryOptions(
+  holder: { kind: 'project' | 'direction'; key: string },
+  params: ProjectEntryListParams = {},
+) {
+  const queryKey: readonly unknown[] =
+    holder.kind === 'direction'
+      ? entryKeys.directionCase(holder.key, params)
+      : entryKeys.projectCase(holder.key, params);
+  return infiniteQueryOptions({
+    queryKey,
+    queryFn: ({ pageParam }): Promise<Page<Entry>> =>
+      holder.kind === 'direction'
+        ? readDirectionCasePage(holder.key, params, pageParam)
+        : readProjectCasePage(holder.key, params, pageParam),
+    initialPageParam: '',
+    getNextPageParam: nextCursor,
   });
 }
 
