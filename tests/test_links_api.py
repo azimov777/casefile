@@ -348,14 +348,24 @@ async def test_a_waiting_child_holds_both_ways_of_closing_a_parent(
     auth_client: AsyncClient,
     project: Project,
 ) -> None:
-    """`waiting` ребёнка не закрывает: это незаконченная работа, а не отменённая.
+    """Ребёнок, ждущий ответа, не закрыт: это незаконченная работа, а не отменённая.
 
-    Проверяются оба закрытия сразу — правило одно, и разойтись им нельзя.
+    Ждёт он в `open` с вопросом `blocking` — статуса ожидания нет с TRK-573. Проверяются
+    оба закрытия сразу — правило одно, и разойтись им нельзя.
     """
     parent = await create(auth_client, "родитель")
     child = await create(auth_client, "ребёнок")
     assert (await link(auth_client, parent, "parent", child)).status_code == 201
-    assert (await move(auth_client, child, "waiting", reason="жду ответа")).status_code == 200
+    assert (await move(auth_client, child, "open")).status_code == 200
+    asked = await auth_client.post(
+        f"/api/v1/tasks/{child}/entries",
+        json={
+            "type": "question",
+            "title": "Жду ответа",
+            "payload": {"addressees": ["owner"], "blocking": True},
+        },
+    )
+    assert asked.status_code == 201, asked.text
 
     assert (await move(auth_client, parent, "open")).status_code == 200
     assert (await move(auth_client, parent, "in_progress")).status_code == 200

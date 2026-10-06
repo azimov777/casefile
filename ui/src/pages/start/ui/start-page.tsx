@@ -70,9 +70,10 @@ export function StartPage() {
       return owner === null || agentNames.has(owner);
     });
 
-  // Шаг 2: агент начал работу, если у него есть хоть одна задача не в `backlog`/`open`.
+  // Шаг 2: агент начал работу, если у него есть хоть одна задача в `in_progress` или `done`.
+  // Статуса ожидания нет (TRK-573): ждущая задача стоит в `open` и сюда не считается.
   const started = useQuery(
-    tasksQueryOptions({ status: ['in_progress', 'waiting', 'done'], limit: 1, fields: ['status'] }),
+    tasksQueryOptions({ status: ['in_progress', 'done'], limit: 1, fields: ['status'] }),
   );
   const workStarted = started.isSuccess && started.data.items.length > 0;
 

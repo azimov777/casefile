@@ -251,7 +251,7 @@ class TransitionNotAllowedError(ConflictError):
 
 
 class TransitionReasonRequiredError(ValidationError):
-    """Шаг назад по цепочке статусов, отмена и уход в `waiting` требуют причины `reason`."""
+    """Шаг назад по цепочке статусов и отмена требуют причины `reason`."""
 
     code = "transition_reason_required"
     message = "Transition requires a reason"
@@ -514,13 +514,25 @@ class TaskBlockedError(ConflictError):
     """Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`.
 
     Конфликт состояния, а не ошибка формы запроса: тот же переход пройдёт, как только
-    блокеры закроются. Задача при этом не «ждёт»: разница со статусом `waiting`
-    названа в `check_no_open_blockers` (`app/domain/tasks.py`) — здесь блокера
-    дожидается назначатель, читающий ленту.
+    блокеры закроются. Закрытие блокера статус задачи не меняет: его дожидается
+    назначатель, читающий ленту (`CONCEPT.md`, 4.6).
     """
 
     code = "task_blocked"
     message = "Task has an open blocker"
+
+
+class TaskHasOpenBlockingQuestionsError(ConflictError):
+    """Вход в `in_progress` при открытом вопросе `blocking`: номера вопросов в `details.questions`.
+
+    Без статуса ожидания дверь в работу держит сам носитель (`CONCEPT.md`, 3.3; решение
+    владельца `TRK-569#9`, развилка 3), как блокер держит её у `task_blocked`. Конфликт
+    состояния: тот же переход пройдёт после `answer` на каждый из названных вопросов —
+    ответом по существу или снятием (`withdrawn`). Неблокирующий вопрос вход не держит.
+    """
+
+    code = "task_has_open_blocking_questions"
+    message = "Task has open blocking questions"
 
 
 class AssigneeRequiredError(ConflictError):

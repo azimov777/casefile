@@ -18,7 +18,7 @@ import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import { setToken } from '@/shared/api';
 import { i18n } from '@/shared/i18n';
-import { TASK_PAGE_SIZE, TASK_STATUSES, taskKeys } from '@/entities/task';
+import { BOARD_COLUMNS, TASK_PAGE_SIZE, taskKeys } from '@/entities/task';
 
 /** Адреса всех запросов прогона: по ним проверяется, что лишних не было. */
 let seen: string[] = [];
@@ -285,30 +285,34 @@ describe('список задач', () => {
     expect(calm).not.toHaveTextContent(say.ui('task.awaitingAnswer'));
   });
 
-  it('ожидание видно в строке своим знаком', async () => {
+  it('ждущая задача стоит в строке своим статусом и пометкой, статуса ожидания нет (TRK-573)', async () => {
     server.use(
       listing(() =>
         taskPage([
-          task('DEMO-5', { status: 'waiting' }),
-          task('DEMO-6', { status: 'in_progress' }),
+          task('DEMO-5', {
+            status: 'open',
+            features: {
+              blocked: false,
+              open_questions: 1,
+              open_blocking_questions: 1,
+              open_remarks: 0,
+              open_warnings: 0,
+              last_summary_at: null,
+              last_entry_at: '2026-09-01T10:00:00Z',
+            },
+          }),
         ]),
       ),
     );
 
     open('/tasks?project=DEMO');
 
+    // Ожидание держит вопрос, а не статус: в строке — `open` и пометка «ждёт ответа»,
+    // знак паузы носит только столбец доски «Ждёт ответа».
     const waiting = await screen.findByRole('row', { name: /DEMO-5/ });
-    expect(waiting).toHaveTextContent(`${say.ui('task.statusLabel')} waiting`);
-
-    // Форма, а не только цвет: ожидание не повторяет работу рисунком — на
-    // чёрно-белом экране рисунок остаётся единственным различием между ними.
-    const shapeOf = (row: HTMLElement) =>
-      row.querySelector('[data-mark="status"] svg')?.innerHTML ?? '';
-    const working = screen.getByRole('row', { name: /DEMO-6/ });
-    expect(shapeOf(waiting)).not.toBe(shapeOf(working));
-    expect(shapeOf(waiting)).not.toBe('');
-    // Отбор «что ждёт меня» — один переключатель панели: его нажатие проверяет
-    // `filter-menu.test.tsx`, а путь до адреса и запроса — `e2e/filters.spec.ts`.
+    expect(waiting).toHaveTextContent(`${say.ui('task.statusLabel')} open`);
+    expect(waiting).toHaveTextContent(say.ui('task.awaitingAnswer'));
+    expect(waiting).not.toHaveTextContent(`${say.ui('task.statusLabel')} waiting`);
   });
 
   it('в задачу ведёт вся строка: клик по ячейке без ссылок уходит в её задачу', async () => {
@@ -1177,7 +1181,7 @@ describe('архив', () => {
     // Число выдачи, раскрытые столбцы и числа свёрнутых — каждый читает сам: запрос
     // на столбец и один на всю выдачу. Правило обязано доехать до каждого, иначе
     // свёрнутый `done` считал бы в своём числе и архив.
-    await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
+    await waitFor(() => expect(seen).toHaveLength(BOARD_COLUMNS.length + 1));
     // Условие столбца (TRK-571) стоит перед правилом по «и»: правило архива идёт последним.
     const endsWithRule = new RegExp(String.raw`(?:^|\) and \()${OUTSIDE_ARCHIVE}\)?$`);
     for (const url of seen) {

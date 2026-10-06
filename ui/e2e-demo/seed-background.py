@@ -4,7 +4,7 @@
 Run on the host with plain python3 (stdlib only, no deps) against the isolated
 backend's REST API — see `README.md` in this folder for how that backend is
 raised. Creates project APP ("Checkout service") and nine background tasks spanning
-backlog (3) / open (2) / in_progress (2) / waiting (1) / done (1), so the busiest
+backlog (3) / open (2) / in_progress (2) / awaiting an answer (1) / done (1), so the busiest
 column already stands close to as tall as the task-page scene (~700px of 800) —
 one card per column left the board mostly empty below the fold, and no amount of
 cropping fixes that: the board's own column height is `100dvh`-driven regardless
@@ -255,7 +255,8 @@ def main() -> None:
     transition(inventory_key, "in_progress")
     print(f"{inventory_key} in_progress created")
 
-    # 4. waiting, with a blocking question to owner
+    # 4. awaiting an answer: a blocking question to owner, then back to `open` (the board
+    #    shows it in «Waiting for an answer»; there is no waiting status since TRK-573)
     uuid_key = create_task(
         project="APP",
         title="Migrate orders to UUID primary keys",
@@ -295,8 +296,8 @@ def main() -> None:
             },
         },
     )
-    transition(uuid_key, "waiting", reason="Blocked on owner: confirm the 5-minute freeze window")
-    print(f"{uuid_key} waiting created")
+    transition(uuid_key, "open", reason="Blocked on owner: confirm the 5-minute freeze window")
+    print(f"{uuid_key} awaiting an answer created")
 
     # 5. done, closed with two passed verdicts
     rounding_key = create_task(

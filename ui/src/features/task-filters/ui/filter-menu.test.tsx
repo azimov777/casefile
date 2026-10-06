@@ -52,8 +52,18 @@ describe('панель «Фильтр»', () => {
     await user.click(toggle('priorityLabel', 'critical'));
     expect(onApply).toHaveBeenLastCalledWith({ priority: ['high', 'critical'] });
 
-    await user.click(toggle('statusLabel', 'waiting'));
-    expect(onApply).toHaveBeenLastCalledWith({ status: ['waiting'] });
+    await user.click(toggle('statusLabel', 'in_progress'));
+    expect(onApply).toHaveBeenLastCalledWith({ status: ['in_progress'] });
+  });
+
+  it('статуса ожидания среди статусов нет: «Ждёт ответа» — столбец доски, а не статус', () => {
+    renderMenu({});
+
+    // Хранимый статус снят бэкендом (TRK-573): отбор `status: waiting` он бы отклонил.
+    expect(
+      screen.queryByRole('button', { name: `${say.ui('task.statusLabel')} waiting` }),
+    ).not.toBeInTheDocument();
+    expect(toggle('statusLabel', 'open')).toBeInTheDocument();
   });
 
   it('признаки уходят каждый своим полем отбора', async () => {

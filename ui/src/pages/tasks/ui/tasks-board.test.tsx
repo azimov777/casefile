@@ -7,7 +7,7 @@ import { server } from '@testing/msw/server';
 import { reachEnd, watched } from '@testing/intersection';
 import { renderApp } from '@testing/render';
 import { say } from '@testing/say';
-import { TASK_COLUMN_PAGE_SIZE, TASK_STATUSES } from '@/entities/task';
+import { BOARD_COLUMNS, TASK_COLUMN_PAGE_SIZE, WAITING_COLUMN } from '@/entities/task';
 import { setToken } from '@/shared/api';
 
 /** Запросы списка за прогон: доска читает столбцами, и считать их приходится. */
@@ -20,12 +20,28 @@ beforeEach(() => {
 });
 
 /**
- * Выдача, разложенная по статусам: по одной задаче на каждое значение перечисления
- * контракта. Набор строится из `TASK_STATUSES`, а не перечисляется здесь: тест доски
- * не должен знать список статусов лучше, чем сгенерированный клиент.
+ * Выдача, разложенная по столбцам: по одной задаче на каждый столбец доски. Набор
+ * строится из `BOARD_COLUMNS`, а не перечисляется здесь: тест доски не должен знать
+ * список статусов лучше, чем сгенерированный клиент. В «Ждёт ответа» стоит задача из
+ * `open` с открытым вопросом `blocking` — статуса ожидания нет (TRK-573).
  */
 function tasksForEveryStatus() {
-  return TASK_STATUSES.map((status, index) => task(`DEMO-${index + 1}`, { status }));
+  return BOARD_COLUMNS.map((column, index) =>
+    column === WAITING_COLUMN
+      ? task(`DEMO-${index + 1}`, {
+          status: 'open',
+          features: {
+            blocked: false,
+            open_questions: 1,
+            open_blocking_questions: 1,
+            open_remarks: 0,
+            open_warnings: 0,
+            last_summary_at: null,
+            last_entry_at: '2026-09-01T10:00:00Z',
+          },
+        })
+      : task(`DEMO-${index + 1}`, { status: column }),
+  );
 }
 
 /**
@@ -83,9 +99,9 @@ describe('доска', () => {
 
     renderApp('/tasks?project=DEMO&view=board');
 
-    await screen.findByRole('region', { name: TASK_STATUSES[0] as string });
+    await screen.findByRole('region', { name: BOARD_COLUMNS[0] as string });
 
-    for (const [index, status] of TASK_STATUSES.entries()) {
+    for (const [index, status] of BOARD_COLUMNS.entries()) {
       const key = `DEMO-${index + 1}`;
       const section = column(status);
       // Свёрнутый столбец карточек не показывает: разворачиваем и проверяем содержимое.
@@ -150,12 +166,13 @@ describe('доска', () => {
       expect(await keysIn('waiting')).toEqual([]);
     });
 
-    it('in_progress с вопросом blocking — в «Ждёт ответа»; старый статус waiting — тоже', async () => {
-      server.use(listing([asking('DEMO-1', 'in_progress', 1), asking('DEMO-2', 'waiting', 0)]));
+    it('in_progress и backlog с вопросом blocking — тоже в «Ждёт ответа»', async () => {
+      server.use(listing([asking('DEMO-1', 'in_progress', 1), asking('DEMO-2', 'backlog', 1)]));
       renderApp('/tasks?project=DEMO&view=board');
 
       await waitFor(async () => expect(await keysIn('waiting')).toEqual(['DEMO-1', 'DEMO-2']));
       expect(await keysIn('in_progress')).toEqual([]);
+      expect(await keysIn('backlog')).toEqual([]);
     });
 
     it('столбец называется «Ждёт ответа», а не именем статуса', async () => {
@@ -172,7 +189,7 @@ describe('доска', () => {
 
     renderApp('/tasks?project=DEMO&view=board');
     await screen.findByRole('region', { name: 'open' });
-    await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
+    await waitFor(() => expect(seen).toHaveLength(BOARD_COLUMNS.length + 1));
 
     // Раскрытый столбец читает карточки, свёрнутый — только своё число, и лишнего
     // запроса нет ни у одного: `done` и `cancelled` свёрнуты по умолчанию.
@@ -225,7 +242,7 @@ describe('доска', () => {
     expect(within(top).getAllByRole('link')).toHaveLength(1);
 
     // Столько же запросов, сколько до UI-119: по одному на столбец и один на число.
-    await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
+    await waitFor(() => expect(seen).toHaveLength(BOARD_COLUMNS.length + 1));
     // Карточки читаются с родителями в наборе полей — тем же запросом, что и столбец.
     for (const url of readRequests()) {
       expect(url.searchParams.getAll('fields')).toContain('parent');
@@ -258,7 +275,7 @@ describe('доска', () => {
 
     renderApp('/tasks?project=DEMO&view=board&status=open&assignee=owner&sort=key');
     await screen.findByRole('region', { name: 'open' });
-    await waitFor(() => expect(seen).toHaveLength(TASK_STATUSES.length + 1));
+    await waitFor(() => expect(seen).toHaveLength(BOARD_COLUMNS.length + 1));
 
     for (const url of seen) {
       // Ни один запрос не несёт чужого статуса: у столбца стоит его собственный,

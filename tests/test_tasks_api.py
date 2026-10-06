@@ -124,7 +124,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
     assert package["links"] == []
     assert package["decisions"] == []
     assert package["task"]["key"] == "TRK-1"
-    assert package["transitions"] == ["open", "waiting", "cancelled"]
+    assert package["transitions"] == ["open", "cancelled"]
     assert package["summary"] is None
     assert package["questions"] == []
     assert package["features"] == {
@@ -192,7 +192,103 @@ async def test_a_move_outside_the_table_is_a_conflict_with_the_allowed_list(
     assert response.status_code == 409
     error = response.json()["error"]
     assert error["code"] == "transition_not_allowed"
-    assert error["details"]["allowed"] == ["in_progress", "waiting", "backlog", "cancelled"]
+    assert error["details"]["allowed"] == ["in_progress", "backlog", "cancelled"]
+
+
+async def test_waiting_is_refused_as_a_target_by_the_value_check(
+    auth_client: AsyncClient, project: Project
+) -> None:
+    """Обзорная проверка 1 TRK-573 через REST: `to: waiting` не проходит проверку значения.
+
+    Статус снят без псевдонима: отказ — `422 validation_error` схемы запроса, а не
+    `transition_not_allowed`, потому что такого статуса нет вовсе. В перечне допустимых
+    значений `waiting` нет, и задача стоит, где стояла.
+    """
+    await create(auth_client)
+    await move(auth_client, "TRK-1", "open")
+
+    response = await auth_client.post("/api/v1/tasks/TRK-1/transition", json={"to": "waiting"})
+
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["code"] == "validation_error"
+    (problem,) = error["details"]["errors"]
+    assert problem["loc"] == ["body", "to"]
+    assert problem["type"] == "enum"
+    assert problem["ctx"]["expected"] == "'backlog', 'open', 'in_progress', 'done' or 'cancelled'"
+    task = (await auth_client.get("/api/v1/tasks/TRK-1")).json()["data"]["task"]
+    assert task["status"] == "open"
+
+
+async def ask(client: AsyncClient, key: str, *, blocking: bool) -> int:
+    """Вопрос владельцу; возвращает номер записи — по нему ответ и отказ называют вопрос."""
+    response = await client.post(
+        f"/api/v1/tasks/{key}/entries",
+        json={
+            "type": "question",
+            "title": "Блокирующий" if blocking else "Попутный",
+            "payload": {"addressees": ["owner"], "blocking": blocking},
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["data"]["no"]
+
+
+async def test_an_open_blocking_question_keeps_the_task_out_of_work(
+    auth_client: AsyncClient, project: Project
+) -> None:
+    """Обзорная проверка 4 TRK-573: вход в работу держит открытый вопрос с `blocking`.
+
+    Отказ — `409` с кодом из таблицы валидаций `CONCEPT.md`, 3.3, и номером вопроса в
+    `details.questions`. Неблокирующий вопрос вход не держит; ответ на блокирующий его
+    открывает — сам ответ статус не меняет, задачу берёт в работу её исполнитель.
+    """
+    await create(auth_client)
+    await move(auth_client, "TRK-1", "open")
+    blocking = await ask(auth_client, "TRK-1", blocking=True)
+    side = await ask(auth_client, "TRK-1", blocking=False)
+
+    refused = await auth_client.post("/api/v1/tasks/TRK-1/transition", json={"to": "in_progress"})
+    assert refused.status_code == 409, refused.text
+    error = refused.json()["error"]
+    assert error["code"] == "task_has_open_blocking_questions"
+    assert error["details"] == {
+        "key": "TRK-1",
+        "from": "open",
+        "to": "in_progress",
+        "questions": [blocking],
+    }
+
+    answered = await auth_client.post(
+        "/api/v1/tasks/TRK-1/entries",
+        json={"type": "answer", "body": "Год", "payload": {"question_no": blocking}},
+    )
+    assert answered.status_code == 201, answered.text
+    task = (await auth_client.get("/api/v1/tasks/TRK-1")).json()["data"]
+    assert task["task"]["status"] == "open", "ответ статус не меняет"
+    # Неблокирующий вопрос остаётся открытым и вход не держит.
+    assert [question["no"] for question in task["questions"]] == [side]
+    assert task["features"]["open_blocking_questions"] == 0
+
+    passed = await auth_client.post("/api/v1/tasks/TRK-1/transition", json={"to": "in_progress"})
+    assert passed.status_code == 200, passed.text
+    assert passed.json()["data"]["status"] == "in_progress"
+
+
+async def test_a_non_blocking_question_alone_does_not_hold_the_way_into_work(
+    auth_client: AsyncClient, project: Project
+) -> None:
+    """Обзорная проверка 4 TRK-573, вторая часть: открытый неблокирующий вопрос — вход проходит."""
+    await create(auth_client)
+    await move(auth_client, "TRK-1", "open")
+    await ask(auth_client, "TRK-1", blocking=False)
+
+    passed = await auth_client.post("/api/v1/tasks/TRK-1/transition", json={"to": "in_progress"})
+
+    assert passed.status_code == 200, passed.text
+    package = (await auth_client.get("/api/v1/tasks/TRK-1")).json()["data"]
+    assert package["features"]["open_questions"] == 1
+    assert package["features"]["open_blocking_questions"] == 0
 
 
 async def test_a_step_back_needs_a_reason_that_lands_in_the_case(
@@ -393,7 +489,7 @@ async def test_the_task_scope_runs_the_cycle(
 
     package = (await client.get(f"/api/v1/tasks/{task.key}")).json()["data"]
     assert package["task"]["status"] == "in_progress"
-    assert package["transitions"] == ["done", "waiting", "open", "backlog", "cancelled"]
+    assert package["transitions"] == ["done", "open", "backlog", "cancelled"]
 
 
 async def test_entries_are_paged_by_number(auth_client: AsyncClient, project: Project) -> None:

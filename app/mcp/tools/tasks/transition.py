@@ -15,10 +15,10 @@ ReasonArg = Annotated[
     Field(
         description=(
             "Why the task moves. Required for any step back along `backlog < open < "
-            "in_progress < done`, for `cancelled` and for `waiting` "
-            "(`transition_reason_required` otherwise), optional elsewhere. For `waiting` "
-            "it is the only record of what the task waits for. Filed in the "
-            "`status_changed` entry"
+            "in_progress < done` and for `cancelled` (`transition_reason_required` "
+            "otherwise), optional elsewhere. Filed in the `status_changed` entry as text "
+            "only: a wait is held by its carrier, an open `blocking` question or "
+            "`blocked_by`, and not by the reason"
         )
     ),
 ]
@@ -41,16 +41,18 @@ def register(tools: Toolset) -> None:
         Refusals: leaving `in_progress` without a summary filed since the last entry
         into it — `summary_required`; entering `in_progress` without an assignee —
         `assignee_required`, by anyone but the assignee — `assignee_mismatch` (assignee
-        and caller signature in `details`), with an open blocker — `task_blocked`;
-        `open` with incomplete sections — `task_sections_incomplete`; `cancelled` with
-        open children — `task_has_unclosed_children`; `done` —
-        `closing_not_a_transition`, since a task is closed by `close_task`; a move
-        outside the table — `transition_not_allowed`, the allowed targets in
-        `details.allowed`.
+        and caller signature in `details`), with an open blocker — `task_blocked`, with
+        an unanswered `blocking` question — `task_has_open_blocking_questions` (question
+        numbers in `details.questions`); `open` with incomplete sections —
+        `task_sections_incomplete`; `cancelled` with open children —
+        `task_has_unclosed_children`; `done` — `closing_not_a_transition`, since a task
+        is closed by `close_task`; a move outside the table — `transition_not_allowed`,
+        the allowed targets in `details.allowed`.
 
-        The tracker never moves a task into or out of `waiting` by itself: both moves
-        are the caller's. Each entry into `in_progress`, from any status including
-        `waiting`, starts a new pass of the task.
+        A task waiting in `open` stays there when its carrier closes: neither an answer
+        nor a closed blocker moves it, and it becomes a candidate again with no
+        `status_changed` entry. Each entry into `in_progress` starts a new pass of the
+        task.
 
         `cancelled` takes no verdicts. It clears the `blocked` feature of the tasks this
         one blocked (`blocks`), with no entry in their cases.

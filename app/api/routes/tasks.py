@@ -401,7 +401,9 @@ async def transition_task(
     (имя участника токена или метка `X-Actor-Label`) — `409 assignee_mismatch` с
     `details.assignee` и `details.requester`. Вход в
     `in_progress` отклоняется и при открытом блокере (`409 task_blocked`, их ключи в
-    `details.blockers`), закрытие — и `done`, и `cancelled` — при детях не в `done` и
+    `details.blockers`), и при вопросе с `blocking` без ответа (`409
+    task_has_open_blocking_questions`, номера вопросов в `details.questions`; ни вопрос,
+    ни ответ статус не меняют), закрытие — и `done`, и `cancelled` — при детях не в `done` и
     не в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).
     Переход подшивает `status_changed` с `from`, `to` и `reason`.
 

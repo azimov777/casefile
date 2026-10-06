@@ -1,8 +1,10 @@
 import {
+  BOARD_COLUMNS,
   OPEN_WARNINGS_CONDITION,
   TASK_PAGE_SIZE,
   TASK_PRIORITIES,
   TASK_STATUSES,
+  type BoardColumn,
   type TaskListRequest,
   type TaskPriority,
   type TaskStatus,
@@ -50,7 +52,7 @@ export interface TaskFilters {
    * ссылка на доску должна открыться тем же самым, а не разворачивать столбцы,
    * которые отправитель свернул.
    */
-  collapsed: TaskStatus[];
+  collapsed: BoardColumn[];
   /**
    * Показывать архив — закрытые задачи, в делах которых давно не писали (UI-97).
    *
@@ -76,7 +78,7 @@ export interface TaskFilters {
  * единственный столбец, адресованный лично ему: столбец вычисляется из открытых
  * вопросов `blocking` (`entities/task/model/waiting.ts`), а не из хранимого статуса.
  */
-export const DEFAULT_COLLAPSED: TaskStatus[] = ['done', 'cancelled'];
+export const DEFAULT_COLLAPSED: BoardColumn[] = ['done', 'cancelled'];
 
 /**
  * Порядок по умолчанию: где агенты работают прямо сейчас. Считается по
@@ -180,7 +182,7 @@ export function readFilters(params: URLSearchParams): TaskFilters {
     sort: isTaskSort(sort) ? sort : DEFAULT_SORT,
     page: readPage(params.get('page')),
     collapsed: params.has('collapsed')
-      ? keepKnown(params.getAll('collapsed'), TASK_STATUSES)
+      ? keepKnown(params.getAll('collapsed'), BOARD_COLUMNS)
       : DEFAULT_COLLAPSED,
     // Любое другое значение — умолчание: архив скрыт. Опечатка в адресе не вправе
     // вывалить человеку всю историю проекта.
@@ -221,8 +223,8 @@ function isTaskSort(value: string | null): value is TaskSort {
   return value !== null && (TASK_SORTS as readonly string[]).includes(value);
 }
 
-/** Одинаковы ли наборы статусов: порядок в них ничего не значит. */
-function sameStatuses(left: TaskStatus[], right: TaskStatus[]): boolean {
+/** Одинаковы ли наборы столбцов: порядок в них ничего не значит. */
+function sameStatuses(left: BoardColumn[], right: BoardColumn[]): boolean {
   return left.length === right.length && left.every((status) => right.includes(status));
 }
 

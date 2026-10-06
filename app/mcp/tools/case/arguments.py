@@ -146,8 +146,9 @@ SummaryBlockersArg = Annotated[
     str,
     Field(
         description=(
-            "What stands in the way, or `nothing`. In a summary before `waiting` it names "
-            "what is awaited and from whom"
+            "What stands in the way, or `nothing`. In a summary before a wait in `open` it "
+            "names what is awaited, from whom, and its carrier: a `blocking` question or "
+            "`blocked_by`"
         )
     ),
 ]
@@ -156,8 +157,8 @@ SummaryNextStepArg = Annotated[
     str,
     Field(
         description=(
-            "The one concrete action a successor starts with. In a summary before "
-            "`waiting` it is the action taken once the awaited arrives. A doubt about a "
+            "The one concrete action a successor starts with. In a summary before a wait "
+            "in `open` it is the action taken once the awaited arrives. A doubt about a "
             "decision or a result is recorded here, as what to look at and why, rather "
             "than as a verdict"
         )

@@ -7,7 +7,7 @@ import { expect, test, type Page } from '@playwright/test';
  *
  * Не часть `pnpm e2e` — своя папка (`testDir` в `playwright.demo.config.ts`), свой
  * конфиг без глобального подъёма контура. Бэкенд, участник `claude` и девять фоновых
- * задач (`APP-1`…`APP-9`: 3 backlog, 2 open, 2 in_progress, 1 waiting, 1 done —
+ * задач (`APP-1`…`APP-9`: 3 backlog, 2 open, 2 in_progress, 1 «Ждёт ответа», 1 done —
  * столько, чтобы колонки не пустовали под записью, TRK-82) подготовлены заранее
  * отдельным контуром и скриптом `seed-background.py` — команды целиком в
  * `e2e-demo/README.md`. Здесь только то, что должно попасть в кадр: агент своим

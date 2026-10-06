@@ -18,6 +18,7 @@
 """
 
 import json
+import re
 import uuid
 from itertools import pairwise
 from typing import Any
@@ -434,7 +435,7 @@ async def test_get_task_carries_the_index_and_the_transitions_of_the_table(
 
     assert package["task"]["key"] == task.key
     assert [heading["type"] for heading in package["index"]] == ["created"]
-    assert package["transitions"] == ["open", "waiting", "cancelled"]
+    assert package["transitions"] == ["open", "cancelled"]
     assert package["features"] == {
         "blocked": False,
         "open_questions": 0,
@@ -474,6 +475,51 @@ async def test_transitions_are_the_table_and_not_the_moves_that_would_pass_now(
     assert "in_progress" in package["transitions"]
     assert package["features"]["blocked"] is True
     assert "task_blocked" in refused
+
+
+async def test_transition_refuses_waiting_by_the_value_check(
+    mcp_session: Connect, task_secret: str, open_task: Task
+) -> None:
+    """Обзорная проверка 1 TRK-573 через MCP: `to="waiting"` не проходит проверку значения.
+
+    Статус снят без псевдонима: схема аргумента `to` в `tools/list` его не перечисляет, а
+    вызов с ним — отказ проверки аргументов, где допустимые значения названы без
+    `waiting`. Задача остаётся в `open`.
+    """
+    key = open_task.key
+    async with mcp_session(task_secret) as session:
+        listed = {tool.name: tool for tool in (await session.list_tools()).tools}
+        refused = await refuse(session, "transition", key=key, to="waiting")
+        package = await call(session, "get_task", key=key)
+
+    declared = listed["transition"].input_schema["properties"]["to"]["enum"]
+    assert declared == ["backlog", "open", "in_progress", "done", "cancelled"]
+    allowed = re.search(r"Input should be (.+?) \[type=enum", refused)
+    assert allowed is not None, refused
+    assert allowed.group(1) == "'backlog', 'open', 'in_progress', 'done' or 'cancelled'"
+    assert package["task"]["status"] == "open"
+
+
+async def test_transition_refuses_work_over_an_open_blocking_question(
+    mcp_session: Connect, task_secret: str, open_task: Task
+) -> None:
+    """Обзорная проверка 4 TRK-573 через MCP: отказ называет код и номер вопроса.
+
+    Тот же сценарий, что у REST: инструмент зовёт ту же функцию сервиса, и отказ доходит
+    до агента кодом и `details`, а не пересказом.
+    """
+    key = open_task.key
+    async with mcp_session(task_secret) as session:
+        question = await call(
+            session, "ask", key=key, addressees=["owner"], title="Блокирует", blocking=True
+        )
+        refused = await refuse(session, "transition", key=key, to="in_progress")
+        await call(session, "answer", key=key, question_no=question["no"], body="Решено")
+        moved = await call(session, "transition", key=key, to="in_progress")
+
+    assert "task_has_open_blocking_questions" in refused
+    assert f'"questions": [{question["no"]}]' in refused
+    assert moved["status"] == "in_progress"
 
 
 async def test_read_entries_filters_the_case_the_same_way_rest_does(

@@ -188,9 +188,10 @@ def register(tools: Toolset) -> None:
         stays in `remarks` and in `open_remarks` until `resolve` gives it an outcome.
 
         `transitions` lists the targets of the transition table from the current status,
-        not moves checked in advance: sections, summary, verdicts, blockers and children
-        are checked by the `transition` call itself. Whether `in_progress` is open shows
-        in the `blocked` feature.
+        not moves checked in advance: sections, summary, verdicts, blockers, `blocking`
+        questions and children are checked by the `transition` call itself. Whether
+        `in_progress` is open shows in the `blocked` and `open_blocking_questions`
+        features.
         """
         async with runtime.call() as (session, actor):
             return task_package(await tasks_service.read_task_package(session, key, actor=actor))

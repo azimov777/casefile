@@ -894,8 +894,10 @@ async def _transition_facts(
     if from_status is TaskStatus.IN_PROGRESS and to_status is TaskStatus.DONE:
         pending_checks = await case_service.verdict_gaps(session, task)
     blockers: list[str] | None = None
+    blocking_questions: list[int] | None = None
     if to_status is TaskStatus.IN_PROGRESS:
         blockers = await links_service.open_blockers(session, task)
+        blocking_questions = await case_service.open_blocking_question_nos(session, task)
     children: list[str] | None = None
     if is_closed(to_status):
         children = await links_service.unclosed_children(session, task)
@@ -916,6 +918,7 @@ async def _transition_facts(
         has_summary_since_in_progress=has_summary,
         checks_without_passed_verdict=pending_checks,
         open_blockers=blockers,
+        open_blocking_questions=blocking_questions,
         unclosed_children=children,
         closing=closing,
         # Исполнитель — уже после полей этого вызова: переход проверяется после их
