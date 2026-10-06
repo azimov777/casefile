@@ -65,7 +65,7 @@ def committing_sessions(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]
 async def committed_secret(
     committing_sessions: async_sessionmaker[AsyncSession],
 ) -> AsyncIterator[str]:
-    """Секрет токена набора `main`, видимый другим соединениям, и уборка за собой.
+    """Секрет токена, видимый другим соединениям, и уборка за собой.
 
     Токен обязан быть закоммичен: сервер MCP здесь ходит настоящими сессиями, а строки
     из откатываемой транзакции теста для них не существуют.

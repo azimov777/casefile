@@ -55,7 +55,7 @@ async def register_participant(
 ) -> DataResponse[ParticipantRead]:
     """Заводит человека или постоянного агента. Токен ему выпускается отдельным запросом.
 
-    Требует набора `main`. Имя уникально без учёта регистра и дальше неизменяемо: оно
+    Имя уникально без учёта регистра и дальше неизменяемо: оно
     стоит подписью в записях дела, и переименование порвало бы эти подписи задним числом.
     Повтор с тем же `Idempotency-Key` отвечает первым участником, а не `409
     participant_name_taken`.
@@ -92,7 +92,7 @@ async def update_participant(
     session: SessionDep,
     actor: ActorDep,
 ) -> DataResponse[ParticipantRead]:
-    """Меняет описание участника; имя и род неизменяемы. Требует набора `main`."""
+    """Меняет описание участника; имя и род неизменяемы."""
     participant = await service.get_participant(session, participant_name)
     # `exclude_unset` — единственный фильтр: явный `null` схема уже отвергла,
     # поэтому «не передано» здесь не может притвориться «передано как null».
