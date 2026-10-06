@@ -55,7 +55,8 @@ from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.repositories import EntryRepository, TaskRepository
-from app.domain.case import EntryHeading
+from app.domain import state as state_domain
+from app.domain.case import EntryHeading, is_blocking_question
 from app.domain.errors import (
     DirectionProjectMismatchError,
     TaskAlreadyInProjectError,
@@ -66,6 +67,7 @@ from app.domain.errors import (
     TaskNotFoundError,
     TaskVersionConflictError,
 )
+from app.domain.links import LinkKind
 from app.domain.tasks import (
     BACKLOG_ONLY_FIELDS,
     CHECK_EDIT_FIELD,
@@ -221,6 +223,9 @@ class TaskPackage:
     """
 
     task: Task
+    #: Состояние на момент чтения: считается из того, что пакет читает и так, и не хранится
+    #: (`CONCEPT.md`, 4.2; TRK-579).
+    state: state_domain.TaskState
     #: Родитель и дети — отдельными полями, а не видами в `links` (TRK-135): в связи вид
     #: назван ролью **своей** задачи, и `{kind: parent, other: X}` читали как «родитель —
     #: X». Имя поля отвечает на вопрос «кто родитель» без разбора направления.
@@ -281,8 +286,19 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     # запроса ради признака здесь по-прежнему нет ни одного.
     index = await case_service.case_index(session, task, actor=actor)
     decisions = await decisions_service.cited_decisions(session, task.decisions, actor=actor)
+    last_change = await case_service.last_status_change(session, task, actor=actor)
     return TaskPackage(
         task=task,
+        state=_task_state(
+            task,
+            index=index,
+            last_change=last_change,
+            summary=summary,
+            questions=questions,
+            remarks=remarks,
+            links=links,
+            children=hierarchy.children,
+        ),
         parent=hierarchy.parent,
         children=hierarchy.children,
         links=hierarchy.others,
@@ -295,6 +311,67 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
         remarks=remarks,
         transitions=allowed_transitions(task.status),
         index=index,
+    )
+
+
+def _task_state(
+    task: Task,
+    *,
+    index: Sequence[EntryHeading],
+    last_change: Entry | None,
+    summary: Entry | None,
+    questions: Sequence[Entry],
+    remarks: Sequence[Entry],
+    links: Sequence[links_service.TaskLink],
+    children: Sequence[links_service.TaskLink],
+) -> state_domain.TaskState:
+    """Блок `state` из прочитанного пакетом: записи и связи переводятся во входы домена."""
+    return state_domain.build_state(
+        status=task.status,
+        index=index,
+        last_change=None
+        if last_change is None
+        else state_domain.status_change(
+            no=last_change.no,
+            author=last_change.author,
+            created_at=last_change.created_at,
+            payload=last_change.payload,
+        ),
+        summary=None
+        if summary is None
+        else state_domain.SummaryParts(
+            no=summary.no,
+            created_at=summary.created_at,
+            next_step=str(summary.payload.get("next_step", "")),
+            blockers=str(summary.payload.get("blockers", "")),
+            unmeasured=(
+                str(summary.payload["unmeasured"])
+                if summary.payload.get("unmeasured") is not None
+                else None
+            ),
+        ),
+        questions=[
+            state_domain.OpenQuestion(
+                no=question.no,
+                addressees=list(question.payload.get("addressees") or []),
+                blocking=is_blocking_question(question.payload),
+                title=question.title,
+            )
+            for question in questions
+        ],
+        remarks=[
+            state_domain.OpenRemark(no=remark.no, author=remark.author, title=remark.title)
+            for remark in remarks
+        ],
+        open_blockers=[
+            link.other.key
+            for link in links
+            if link.kind is LinkKind.BLOCKED_BY and not is_closed(link.other.status)
+        ],
+        children=[
+            state_domain.ChildStatus(key=link.other.key, status=link.other.status)
+            for link in children
+        ],
     )
 
 

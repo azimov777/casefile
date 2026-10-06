@@ -239,6 +239,11 @@ async def last_summary(session: AsyncSession, task: Task, *, actor: Actor) -> En
     return await EntryRepository(session).last_summary(task.id)
 
 
+async def last_status_change(session: AsyncSession, task: Task, *, actor: Actor) -> Entry | None:
+    """Последний переход статуса задачи: причину перехода в опись не кладут, она в записи."""
+    return await EntryRepository(session).last_status_change(task.id)
+
+
 async def open_questions(session: AsyncSession, task: Task, *, actor: Actor) -> list[Entry]:
     """Вопросы задачи без ответа целиком. Из них же считаются оба счётчика признаков."""
     return await EntryRepository(session).open_questions(task.id)

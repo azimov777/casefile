@@ -492,6 +492,16 @@ class EntryRepository:
         """Последняя сводка задачи. Последняя главнее предыдущих (`CONCEPT.md`, 3.4)."""
         return (await self._session.scalars(latest_summary(task_id, Entry))).first()
 
+    async def last_status_change(self, task_id: uuid.UUID) -> Entry | None:
+        """Последняя запись о переходе статуса: из её нагрузки блок `state` берёт причину."""
+        statement = (
+            select(Entry)
+            .where(Entry.task_id == task_id, Entry.type == EntryType.STATUS_CHANGED)
+            .order_by(Entry.no.desc())
+            .limit(1)
+        )
+        return (await self._session.scalars(statement)).first()
+
     async def open_questions(self, task_id: uuid.UUID) -> list[Entry]:
         """Вопросы задачи без ответа, в порядке подшивки.
 
