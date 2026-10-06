@@ -76,6 +76,7 @@ describe('панель «Фильтр»', () => {
       withQuestions: false,
       withRemarks: true,
       withWarnings: false,
+      withWaiting: false,
     });
 
     // Предупреждение (TRK-561) — тем же порядком, своим полем.
@@ -85,6 +86,21 @@ describe('панель «Фильтр»', () => {
       withQuestions: false,
       withRemarks: false,
       withWarnings: true,
+      withWaiting: false,
+    });
+  });
+
+  it('«ждёт ответа» (TRK-577) уходит своим полем отбора', async () => {
+    const user = userEvent.setup();
+    const { onApply } = renderMenu({});
+
+    await user.click(screen.getByRole('button', { name: say.tasks('filters.withWaiting') }));
+    expect(onApply).toHaveBeenLastCalledWith({
+      blocked: false,
+      withQuestions: false,
+      withRemarks: false,
+      withWarnings: false,
+      withWaiting: true,
     });
   });
 

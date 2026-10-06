@@ -25,6 +25,12 @@ const HAS_BLOCKING = 'open_blocking_questions: > 0';
 const NO_BLOCKING = 'open_blocking_questions: 0';
 
 /**
+ * Условие «Ждёт ответа» на языке запросов: то же, что у столбца доски. Им же отбирает
+ * флажок панели «Фильтр» таблицы (TRK-577): второго определения нет.
+ */
+export const WAITING_CONDITION = `status: in ${HELD_STATUSES.join(', ')} and ${HAS_BLOCKING}`;
+
+/**
  * Столбцы доски по порядку: статусы из перечисления контракта, а «Ждёт ответа» — сразу
  * за последним из статусов, чьи задачи он забирает. Статусы берутся из контракта, а не
  * своим списком (`docs/FRONTEND.md`, «Доска без доски»): статус, добавленный или снятый
@@ -44,9 +50,7 @@ export function boardColumns(statuses: readonly TaskStatus[]): BoardColumn[] {
  * - `done`, `cancelled`: вопросы им не мешают.
  */
 export function columnCondition(column: BoardColumn): string | null {
-  if (column === WAITING_COLUMN) {
-    return `status: in ${HELD_STATUSES.join(', ')} and ${HAS_BLOCKING}`;
-  }
+  if (column === WAITING_COLUMN) return WAITING_CONDITION;
   if ((HELD_STATUSES as readonly string[]).includes(column)) return NO_BLOCKING;
   return null;
 }

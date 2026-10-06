@@ -16,6 +16,7 @@ export type ConditionId =
   | 'questions'
   | 'remarks'
   | 'warnings'
+  | 'waiting'
   | 'query';
 
 export interface FilterCondition {
@@ -40,6 +41,7 @@ export const CONDITION_RESET = {
   questions: { withQuestions: false },
   remarks: { withRemarks: false },
   warnings: { withWarnings: false },
+  waiting: { withWaiting: false },
   query: { query: '' },
 } satisfies Record<ConditionId, Partial<TaskFilters>>;
 
@@ -117,6 +119,10 @@ export function describeFilters(filters: TaskFilters, t: TFunction<'tasks'>): Fi
 
   if (filters.withWarnings) {
     conditions.push({ id: 'warnings', label: t('filters.condition.warnings') });
+  }
+
+  if (filters.withWaiting) {
+    conditions.push({ id: 'waiting', label: t('filters.condition.waiting') });
   }
 
   return conditions;

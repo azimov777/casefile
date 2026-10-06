@@ -1038,6 +1038,31 @@ describe('отбор по замечаниям', () => {
   });
 });
 
+describe('отбор «ждёт ответа» (TRK-577)', () => {
+  it('адрес с флажком даёт запрос с условием по незакрытым статусам и чип в строке отбора', async () => {
+    const asked: URL[] = [];
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+      http.get(`${API}/api/v1/tasks`, ({ request }) => {
+        asked.push(new URL(request.url));
+        return taskPage([task('DEMO-1')]);
+      }),
+    );
+    // Нажатие флажка проверяет `filter-menu.test.tsx` (панель Radix в jsdom не раскрывается).
+    open('/tasks?waiting=true');
+
+    await screen.findByText('DEMO-1');
+    await waitFor(() =>
+      expect(asked.at(-1)?.searchParams.get('query')).toMatch(
+        hidingArchive('status: in backlog, open, in_progress and open_blocking_questions: > 0'),
+      ),
+    );
+    expect(screen.getByRole('list', { name: say.tasks('filters.conditions') })).toHaveTextContent(
+      say.tasks('filters.condition.waiting'),
+    );
+  });
+});
+
 describe('переключение вида', () => {
   it('переносит на доску весь отбор, а не только адрес раздела', async () => {
     const user = userEvent.setup();
