@@ -4,7 +4,7 @@
 # Портал Anthropic смотрит на «отслеживаемую ветку» и сканирует всё её дерево: пределы
 # 512 файлов и 256 КиБ на файл не-картинки (TRK-457#6). Весь репозиторий в них не входит,
 # а плагину нужны только `.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json` (расширение
-# Gemini CLI, TRK-497), `skills/` (без своей карты `AGENTS.md`), `LICENSE` и `README.md`. Ту же сборку берёт шаг конвейера выпуска
+# Gemini CLI, TRK-497), `mcp.json` (коннектор по стандарту Open Plugins, TRK-584), `skills/` (без своей карты `AGENTS.md`), `LICENSE` и `README.md`. Ту же сборку берёт шаг конвейера выпуска
 # (`.github/workflows/images.yml`, джоб `channel`) и человек для проверки.
 #
 #   scripts/build-plugin-branch.sh [--commit ТЕГ [--parent REF]] КАТАЛОГ
@@ -39,7 +39,7 @@ for path in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor
         sys.exit(f"версия плагина {version} ({path}) не равна версии выпуска {release}")
 PY
 
-for path in .claude-plugin/plugin.json .codex-plugin/plugin.json .cursor-plugin/plugin.json gemini-extension.json skills/casefile/SKILL.md LICENSE README.md; do
+for path in .claude-plugin/plugin.json .codex-plugin/plugin.json .cursor-plugin/plugin.json gemini-extension.json mcp.json skills/casefile/SKILL.md LICENSE README.md; do
   [ -f "$root/$path" ] || { echo "нет файла $path" >&2; exit 1; }
 done
 
@@ -47,7 +47,7 @@ rm -rf "$dest"
 mkdir -p "$dest"
 dest="$(cd "$dest" && pwd)"
 cp -R "$root/.claude-plugin" "$root/.codex-plugin" "$root/.cursor-plugin" "$root/skills" "$dest/"
-cp "$root/LICENSE" "$root/README.md" "$root/gemini-extension.json" "$dest/"
+cp "$root/LICENSE" "$root/README.md" "$root/gemini-extension.json" "$root/mcp.json" "$dest/"
 rm -f "$dest/skills/AGENTS.md"
 
 count=$(find "$dest" -type f | wc -l | tr -d ' ')

@@ -195,9 +195,15 @@ def test_cursor_manifest_is_last_in_the_codex_search_order() -> None:
     assert not (ROOT / "plugin.json").exists()
 
 
-def test_no_connector_file_in_the_repository_root() -> None:
-    """Корневой `.mcp.json` читают и Claude Code в этом репозитории, и Codex у плагина."""
+def test_no_dotted_connector_file_in_the_repository_root() -> None:
+    """Корневой `.mcp.json` с точкой читают и Claude Code в этом репозитории, и Codex у плагина."""
     assert not (ROOT / ".mcp.json").exists()
+
+
+def test_root_mcp_json_for_open_plugins_scan_equals_the_cursor_connector() -> None:
+    """Корневой `mcp.json` без точки (TRK-584): его ищет автоскан cursor.directory."""
+    root_file = (ROOT / "mcp.json").read_bytes()
+    assert root_file == (ROOT / ".cursor-plugin" / "mcp.json").read_bytes()
 
 
 def test_codex_manifest_matches_the_claude_plugin_and_has_listing_fields() -> None:

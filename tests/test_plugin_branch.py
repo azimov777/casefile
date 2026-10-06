@@ -24,6 +24,7 @@ TREE_ROOTS = {
     ".codex-plugin",
     ".cursor-plugin",
     "gemini-extension.json",
+    "mcp.json",
     "skills",
     "LICENSE",
     "README.md",
@@ -79,7 +80,7 @@ def test_the_tree_holds_only_the_plugin_within_the_portal_limits(tmp_path: Path)
         ".cursor-plugin/plugin.json",
         "gemini-extension.json",
     }
-    assert manifests | {"LICENSE"} <= files
+    assert manifests | {"LICENSE", "mcp.json"} <= files
     assert "skills/casefile/SKILL.md" in files
     assert "skills/AGENTS.md" not in files
     assert all(f.split("/")[0] in TREE_ROOTS for f in files)
