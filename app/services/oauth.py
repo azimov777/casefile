@@ -476,7 +476,8 @@ async def redeem_code(
     """Гасит код и выпускает по нему подключение со сроком `access_ttl` и refresh-токен.
 
     PKCE, адрес возврата и срок сверил SDK до вызова. Погашение атомарное: второй обмен
-    того же кода, пришедший одновременно, получает `invalid_grant`.
+    того же кода, пришедший одновременно, получает `invalid_grant`. Выпустив новое подключение,
+    отзывает прежние живые подключения того же участника этому же клиенту.
     """
     moment = now or datetime.now(UTC)
     repository = OAuthRepository(session)
@@ -501,6 +502,13 @@ async def redeem_code(
         family_id=uuid.uuid4(),
         scopes=code.scopes,
         resource=code.resource,
+    )
+    # Новый вход заменяет прежний: брошенные подключения не копятся в «Доступах» (TRK-560).
+    await repository.revoke_prior_connections(
+        participant_id=code.participant_id,
+        client_id=code.client_id,
+        keep_token_id=token.id,
+        moment=moment,
     )
     return IssuedPair(
         access_token=secret,

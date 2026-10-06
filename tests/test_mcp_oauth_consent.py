@@ -135,7 +135,7 @@ async def test_local_sign_in_is_granted_at_once_to_the_participant_of_the_client
             response = await _exchange(client, registered["client_id"], answer["code"], verifier)
             assert response.status_code == 200, response.text
             issued.append(response.json()["access_token"])
-        works = await _initialize(client, issued[0])
+        works = await _initialize(client, issued[-1])  # первое заменено вторым (TRK-560)
 
     assert works.status_code == 200, works.text
     participant = await _participant(db_session, expected)

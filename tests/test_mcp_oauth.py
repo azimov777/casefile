@@ -24,9 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.applications import Starlette
 
 from app.core.config import Settings, get_settings
+from app.db.models.author import created_by_columns
 from app.db.models.oauth import OAuthCode, OAuthRefreshToken
+from app.db.models.participant import Participant
 from app.db.models.token import Token
+from app.domain.authors import Author, AuthorKind
 from app.domain.oauth import REFRESH_REUSE_WINDOW
+from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenKind, hash_token
 from app.mcp.runtime import Runtime, SessionFactory
 from app.mcp.server import create_server
@@ -739,6 +743,87 @@ async def test_revoking_through_the_tokens_registry_cuts_the_client_off(
     assert refused.headers["www-authenticate"].endswith(', scope="casefile"')
     assert refresh.status_code == 400
     assert refresh.json()["error"] == "invalid_grant"
+
+
+# --- TRK-560: новый вход заменяет прежний ------------------------------------------
+
+
+async def _log_in_again(client: AsyncClient, client_id: str) -> dict[str, Any]:
+    """Ещё один вход по коду тем же уже зарегистрированным клиентом."""
+    verifier, challenge = _pkce()
+    code = _query(await _authorize(client, client_id, challenge))["code"]
+    response = await _exchange(client, client_id, code, verifier)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+async def _stored(session: AsyncSession, secret: str) -> Token:
+    token = await session.scalar(select(Token).where(Token.token_hash == hash_token(secret)))
+    assert token is not None
+    await session.refresh(token)
+    return token
+
+
+async def test_a_second_sign_in_of_the_same_client_revokes_the_previous_connection(
+    mcp_sessions: SessionFactory, db_session: AsyncSession
+) -> None:
+    async with _http(_server(mcp_sessions)) as client:
+        client_id, first = await _sign_in(client)
+        second = await _log_in_again(client, client_id)
+        old = await _initialize(client, first["access_token"])
+        new = await _initialize(client, second["access_token"])
+        renewed = await _refresh(client, client_id, first["refresh_token"])
+
+    assert (await _stored(db_session, first["access_token"])).revoked_at is not None
+    assert (await _stored(db_session, second["access_token"])).revoked_at is None
+    assert old.status_code == 401
+    assert old.json()["details"] == {"reason": "token_revoked"}
+    assert new.status_code == 200, new.text
+    assert renewed.status_code == 400
+    assert renewed.json()["error"] == "invalid_grant"
+
+
+async def test_a_sign_in_does_not_revoke_other_clients_or_other_participants(
+    mcp_sessions: SessionFactory, db_session: AsyncSession
+) -> None:
+    async with _http(_server(mcp_sessions)) as client:
+        client_id, first = await _sign_in(client)
+        # Другая регистрация с тем же именем: тот же участник, другой клиент.
+        _, other_client = await _sign_in(client)
+        # Подключение того же клиента, но другого участника: переписываем владельца первого.
+        owner = (await _stored(db_session, first["access_token"])).participant_id
+        stranger = Participant(
+            kind=ParticipantKind.AGENT,
+            name="stranger",
+            **created_by_columns(Author(kind=AuthorKind.TRACKER)),
+        )
+        db_session.add(stranger)
+        await db_session.flush()
+        assert stranger.id != owner
+        (await _stored(db_session, first["access_token"])).participant_id = stranger.id
+        await db_session.flush()
+        await _log_in_again(client, client_id)
+
+        first_still = await _initialize(client, first["access_token"])
+        other_still = await _initialize(client, other_client["access_token"])
+
+    assert first_still.status_code == 200, first_still.text
+    assert other_still.status_code == 200, other_still.text
+
+
+async def test_a_refresh_does_not_run_the_replacement_rule(
+    mcp_sessions: SessionFactory, db_session: AsyncSession
+) -> None:
+    async with _http(_server(mcp_sessions)) as client:
+        client_id, first = await _sign_in(client)
+        second = await _log_in_again(client, client_id)
+        renewed = await _refresh(client, client_id, second["refresh_token"])
+        assert renewed.status_code == 200, renewed.text
+        fresh = await _initialize(client, renewed.json()["access_token"])
+
+    assert fresh.status_code == 200, fresh.text
+    assert (await _stored(db_session, renewed.json()["access_token"])).revoked_at is None
+    assert (await _stored(db_session, first["access_token"])).revoked_at is not None
 
 
 @pytest.mark.parametrize("secret", ["", "   "])
