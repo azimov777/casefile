@@ -10,6 +10,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.oauth import OAuthClient, OAuthCode, OAuthRefreshToken
+from app.db.models.token import Token
+from app.domain.tokens import TokenKind
 
 
 class OAuthRepository:
@@ -95,6 +97,37 @@ class OAuthRepository:
             .execution_options(populate_existing=True)
         )
         return (await self._session.scalars(statement)).unique().all()
+
+    async def revoke_prior_connections(
+        self,
+        *,
+        participant_id: uuid.UUID,
+        client_id: uuid.UUID,
+        keep_token_id: uuid.UUID,
+        moment: datetime,
+    ) -> int:
+        """Отзывает живые подключения (`kind = oauth`) участника, выпущенные этому клиенту.
+
+        Связь токена с клиентом — через его refresh-токены (своей колонки клиента у
+        `tokens` нет). `keep_token_id` — только что выпущенное подключение, его не трогаем.
+        Возвращает число отозванных.
+        """
+        of_client = select(OAuthRefreshToken.token_id).where(
+            OAuthRefreshToken.client_id == client_id
+        )
+        statement = (
+            update(Token)
+            .where(
+                Token.participant_id == participant_id,
+                Token.kind == TokenKind.OAUTH,
+                Token.revoked_at.is_(None),
+                Token.id != keep_token_id,
+                Token.id.in_(of_client),
+            )
+            .values(revoked_at=moment)
+            .returning(Token.id)
+        )
+        return len((await self._session.execute(statement)).all())
 
     async def add[T: (OAuthClient, OAuthCode, OAuthRefreshToken)](self, row: T) -> T:
         self._session.add(row)
