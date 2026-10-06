@@ -3696,3 +3696,23 @@ TRK-362 не трогала, доски не касается, а из-за `dep
 `document.fonts.load` (см. выше); обращения к чужим узлам ловить `page.on('request')`.
 Новый шрифт или начертание — файл в `fonts/`, лицензия рядом, блок в `fonts.css`.
 **Где:** `e2e/fonts.spec.ts`, `src/shared/styles/fonts.css`.
+
+## «Ждёт ответа» на доске вычисляется из вопросов и складывается с запросом в одном месте
+
+**Что:** столбец `waiting` не отбирается по статусу: его отбор — условие языка запросов
+(`status: in backlog, open, in_progress and open_blocking_questions: > 0`, плюс переходное
+`or status: waiting`), а столбцы `backlog`, `open`, `in_progress` исключают такие задачи
+(`open_blocking_questions: 0`). Условие приклеивается к запросу человека на отправке
+(`fetchTasks`, признак `column` в параметрах), как правило архива.
+**Почему важно:** хранимый статус `waiting` снимает бэкенд (TRK-573), а ожидание теперь
+несёт вопрос с `blocking`. Размазанное по экранам «статус равен waiting» пришлось бы
+искать глазами; склеивать условие в самом столбце — значит развести его отказ с
+позицией в строке человека и с правилом архива, которое стоит поверх.
+**Как правильно:** условие столбца и пометка списка живут в
+`src/entities/task/model/waiting.ts` (`columnCondition`, `columnRequest`,
+`isAwaitingAnswer`); строки не склеивать руками — `composeWith` из `src/entities/task/model/archive.ts` возвращает
+и склейку, и обратный путь отказа. Хранимый `waiting` в интерфейсе — только
+`LEGACY_WAITING` там же и ключ столбца `WAITING_COLUMN` (его убирает перегенерация
+клиента в TRK-573). Мок `taskListing` узнаёт ровно эти два условия.
+**Где:** `src/entities/task/model/waiting.ts`, `src/entities/task/api/tasks.ts`;
+проверки — `src/pages/tasks/ui/tasks-board.test.tsx`, `e2e/board-column.spec.ts`.

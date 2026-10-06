@@ -86,8 +86,15 @@ const OPENING = '(';
  * глубины языка в склейке этот предел перешагнёт. Руками такого не пишут.
  */
 export function hideArchive(query: string | null | undefined, now: Date): ArchiveQuery {
-  const rule = outsideArchive(now);
+  return composeWith(query, outsideArchive(now));
+}
 
+/**
+ * Складывает запрос с любым правилом по «и» — то же, что `hideArchive`, для правила
+ * не архива: условие столбца доски (`./waiting.ts`) складывается тем же путём и теми же
+ * объяснениями отказа.
+ */
+export function composeWith(query: string | null | undefined, rule: string): ArchiveQuery {
   if (query === undefined || query === null || query.trim() === '') {
     return { query: rule, relocate: unchanged };
   }

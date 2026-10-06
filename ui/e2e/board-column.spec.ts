@@ -264,7 +264,10 @@ test('в покое доска не спрашивает ничего: ни пу
   expect(calls.length, 'пустой столбец продолжает спрашивать').toBe(onEmpty);
 
   // Столбец короче экрана: карточки есть, но дочитывать нечего — сторожа над ним нет.
-  const short = await countTasks(request, { status: 'waiting' });
+  const short = await countTasks(request, {
+    query:
+      'status: waiting or (status: in backlog, open, in_progress and open_blocking_questions: > 0)',
+  });
   expect(short, 'в демо не осталось короткого столбца').toBeLessThan(COLUMN_PAGE);
 
   calls.length = 0;
@@ -275,4 +278,63 @@ test('в покое доска не спрашивает ничего: ни пу
   const onShort = calls.length;
   await page.waitForTimeout(REST);
   expect(calls.length, 'короткий столбец продолжает спрашивать').toBe(onShort);
+});
+
+/**
+ * «Ждёт ответа» вычисляется из открытого вопроса `blocking`, а не из статуса (TRK-571):
+ * задача, оставшаяся в `backlog`, переезжает в столбец с вопросом и возвращается в свой
+ * столбец, как только на вопрос ответили, — без чьего-либо перехода.
+ */
+test('открытый вопрос blocking переносит задачу в «Ждёт ответа», ответ возвращает назад', async ({
+  page,
+  request,
+}) => {
+  const headers = { Authorization: `Bearer ${token}` };
+  const created = await request.post('/api/v1/tasks', {
+    headers,
+    data: {
+      project: 'DEMO',
+      title: 'Подопытная задача: ожидание по вопросу blocking (TRK-571)',
+      description: 'Заведена сквозным тестом TRK-571 и снимается им же.',
+    },
+  });
+  expect(created.status()).toBe(201);
+  const key = ((await created.json()) as { data: { key: string } }).data.key;
+
+  try {
+    await silenceJournal(page);
+    const asked = await request.post(`/api/v1/tasks/${key}/entries`, {
+      headers,
+      data: {
+        type: 'question',
+        title: 'Вопрос, на который ждут ответа',
+        body: 'Тело вопроса: задача держится им в «Ждёт ответа».',
+        payload: { addressees: ['owner'], blocking: true },
+      },
+    });
+    expect(asked.status()).toBe(201);
+    const no = ((await asked.json()) as { data: { no: number } }).data.no;
+
+    await page.goto('/tasks?project=DEMO&view=board');
+    const card = (status: string) =>
+      column(page, status).getByRole('article').filter({ hasText: key });
+    await expect(card('waiting')).toBeVisible();
+    await expect(card(LONG)).toHaveCount(0);
+
+    const answered = await request.post(`/api/v1/tasks/${key}/entries`, {
+      headers,
+      data: { type: 'answer', body: 'Ответ сквозного теста.', payload: { question_no: no } },
+    });
+    expect(answered.status()).toBe(201);
+
+    // Перечитывание — следующее чтение, а не чей-то переход: статус задачи не менялся.
+    await page.reload();
+    await expect(card(LONG)).toBeVisible();
+    await expect(card('waiting')).toHaveCount(0);
+  } finally {
+    await request.post(`/api/v1/tasks/${key}/transition`, {
+      headers,
+      data: { to: 'cancelled', reason: 'Уборка сквозного теста TRK-571' },
+    });
+  }
 });

@@ -93,6 +93,8 @@ interface StatusMarkProps {
    * иначе диктор прочёл бы его дважды подряд.
    */
   labelled?: boolean;
+  /** Подпись вместо имени статуса из контракта: у вычисляемого столбца доски своя (TRK-571). */
+  name?: string;
   className?: string;
 }
 
@@ -101,6 +103,7 @@ export function StatusMark({
   status,
   withName = true,
   labelled = true,
+  name,
   className,
 }: StatusMarkProps) {
   const { t } = useTranslation('ui');
@@ -137,7 +140,7 @@ export function StatusMark({
             : 'sr-only'
         }
       >
-        {status}
+        {name ?? status}
       </span>
     </span>
   );

@@ -225,6 +225,8 @@ export const ui = {
     priorityLabel: 'приоритет',
     emptyCase: 'в деле пусто',
     cardUnassigned: 'не назначена',
+    // Пометка у статуса в списке: у задачи открыт вопрос с blocking (TRK-571).
+    awaitingAnswer: 'ждёт ответа',
     features: {
       blocked: 'заблокирована: есть связь blocked_by на незакрытую задачу',
       questions_one: '{{count, number}} вопрос без ответа',
