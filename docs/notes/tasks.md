@@ -440,7 +440,7 @@ task_field_locked`, хотя ничего не изменилось бы.
 **Как правильно:** новую часть блока считать из уже прочитанного чистой функцией домена и
 добавлять входом `build_state`, а не новым запросом; длинный текст обрезать `clip` по
 границе слова (причина, `next_step`, `blockers` — 160 знаков, `unmeasured` — 200, заголовок
-записи — 120); блок в REST и MCP — одна и та же форма поле в поле.
+записи — 100); блок в REST и MCP — одна и та же форма поле в поле.
 **Где:** `app/domain/state.py`, `build_state`; `app/services/tasks.py`, `_task_state`,
 `read_task_package`; `app/api/schemas/tasks.py`, `TaskStateRead`;
 `app/mcp/tools/tasks/state.py`.

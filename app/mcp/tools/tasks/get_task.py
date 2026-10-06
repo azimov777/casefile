@@ -174,7 +174,9 @@ def brief_package(package: TaskPackage) -> CallToolResult:
 
     Поля, которых в кратком ответе нет, не присылаются вовсе, а не пустыми: ключ с `null`
     стоил бы токенов, ради которых режим и заведён. Ответ собирается вручную, потому что
-    SDK сериализует модель с её умолчаниями; форму он по-прежнему сверяет со схемой.
+    SDK сериализует модель с её умолчаниями; форму он по-прежнему сверяет со схемой. Текст —
+    компактный JSON без отступов: ради токенов режим и заведён, а отступ в два пробела
+    прибавляет к краткому ответу четверть.
     """
     item = package.task
     data = {
@@ -194,7 +196,7 @@ def brief_package(package: TaskPackage) -> CallToolResult:
         "transitions": list(package.transitions),
     }
     structured = pydantic_core.to_jsonable_python(data)
-    text = pydantic_core.to_json(data, indent=2).decode()
+    text = pydantic_core.to_json(data).decode()
     return CallToolResult(
         content=[TextContent(type="text", text=text)], structured_content=structured
     )
