@@ -49,7 +49,7 @@ from app.domain.errors import AccountEmailTakenError, ParticipantNotFoundError
 from app.domain.participants import ParticipantKind, normalize_participant_name
 from app.domain.passwords import PasswordHash
 from app.domain.tokens import TokenKind, hash_token
-from app.services.auth import TRACKER_ACTOR
+from app.services.auth import TRACKER_ACTOR, Actor
 from app.services.participants import register_participant
 from app.services.tokens import issue_token, revoke_token
 
@@ -151,8 +151,13 @@ async def ensure_local_token(
     participant_name: str = DEFAULT_OWNER_NAME,
     token_name: str = DEFAULT_LOCAL_TOKEN_NAME,
     legacy_password_hash: PasswordHash | None = None,
+    adopt_connections: bool = False,
 ) -> LocalToken:
     """Приводит установку к состоянию «у интерфейса есть действующий ключ».
+
+    `adopt_connections` — локальный режим (`settings.login == "local"`): живые
+    подключения OAuth и ключи, выданные установкой, переходят на человека этой машины
+    (`adopt_local_connections`). Шаг идёт на каждом подъёме и идемпотентен.
 
     И к состоянию «у этого человека есть учётная запись администратора»: её сценарий
     заводит, если её нет, а `legacy_password_hash` — прежний `TRACKER_PASSWORD_HASH` —
@@ -189,6 +194,8 @@ async def ensure_local_token(
         account, imported = await ensure_admin_account(
             session, known.participant, legacy_password_hash
         )
+        if adopt_connections:
+            await adopt_local_connections(session, known.participant)
         return LocalToken(
             outcome=LocalTokenOutcome.KEPT,
             token=known,
@@ -227,6 +234,8 @@ async def ensure_local_token(
         empty=empty,
     )
     account, imported = await ensure_admin_account(session, participant, legacy_password_hash)
+    if adopt_connections:
+        await adopt_local_connections(session, participant)
     return LocalToken(
         outcome=replaced.outcome,
         token=replaced.token,
@@ -243,6 +252,7 @@ async def ensure_agent_token(
     known_secret: str | None,
     participant_name: str = DEFAULT_AGENT_NAME,
     token_name: str = DEFAULT_AGENT_TOKEN_NAME,
+    issued_by_person: bool = False,
 ) -> LocalToken:
     """Приводит установку к состоянию «у агента этой машины есть действующий токен».
 
@@ -258,6 +268,9 @@ async def ensure_agent_token(
       записью администратора. Установка начинается с человека, и `ensure_local_token`,
       позванный следом, найдёт его, а не откажет, — порядок двух команд перестаёт
       иметь значение.
+
+    `issued_by_person` — локальный режим: ключ выпускает человек этой машины
+    (`find_local_person`), а не трекер; без такого человека выпускает трекер.
     """
     tokens = TokenRepository(session)
 
@@ -289,7 +302,44 @@ async def ensure_agent_token(
             description=DEFAULT_AGENT_DESCRIPTION,
         )
 
-    return await _replace_token(session, agent, token_name=token_name, empty=empty)
+    issuer = TRACKER_ACTOR
+    if issued_by_person:
+        person = await find_local_person(session)
+        if person is not None:
+            issuer = Actor(author=person.author, participant=person)
+    return await _replace_token(session, agent, token_name=token_name, empty=empty, issuer=issuer)
+
+
+async def find_local_person(session: AsyncSession) -> Participant | None:
+    """Человек этой машины: участник, за которым живой ключ интерфейса `local-ui`.
+
+    Нужна ещё действующая учётная запись: без неё человек не вправе выпускать токены
+    (`app/services/tokens.py`). Нет ключа или записи — `None`, и выпускает трекер.
+    """
+    holders = await TokenRepository(session).list_live_named_of_kind(
+        DEFAULT_LOCAL_TOKEN_NAME, TokenKind.SESSION
+    )
+    for token in holders:
+        person = token.participant
+        if person is None or person.kind is not ParticipantKind.HUMAN:
+            continue
+        account = await AccountRepository(session).get_by_participant(person.id)
+        if account is not None and not account.is_disabled:
+            return person
+    return None
+
+
+async def adopt_local_connections(session: AsyncSession, person: Participant) -> int:
+    """Выданное установкой становится человека машины (локальный режим, TRK-559).
+
+    Живые подключения OAuth и ключи с выпускающим `tracker` получают выпускающим
+    `person`: «Доступы» → «Мои» показывает их, и они остаются его, если установку
+    переведут в сетевой режим. Отозванные и сеансы не трогаются. Хозяина участников-агентов
+    это не меняет. Возвращает число переписанных строк.
+    """
+    return await TokenRepository(session).reassign_tracker_issued(
+        (TokenKind.OAUTH, TokenKind.KEY), person.author
+    )
 
 
 async def ensure_admin_account(
@@ -344,6 +394,7 @@ async def _replace_token(
     kind: TokenKind = TokenKind.KEY,
     token_name: str,
     empty: bool,
+    issuer: Actor = TRACKER_ACTOR,
 ) -> LocalToken:
     """Отзывает прежние неотозванные токены участника с этим именем и выпускает новый."""
     name = token_name.strip()
@@ -353,7 +404,7 @@ async def _replace_token(
 
     issued = await issue_token(
         session,
-        actor=TRACKER_ACTOR,
+        actor=issuer,
         participant=participant,
         name=name,
         kind=kind,

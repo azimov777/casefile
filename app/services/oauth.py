@@ -100,7 +100,7 @@ from app.domain.tokens import TokenKind, hash_token
 from app.services.auth import TRACKER_ACTOR, Actor
 from app.services.client_documents import ClientDocuments
 from app.services.participants import agent_of, register_participant
-from app.services.setup import DEFAULT_AGENT_DESCRIPTION, DEFAULT_AGENT_NAME
+from app.services.setup import DEFAULT_AGENT_DESCRIPTION, DEFAULT_AGENT_NAME, find_local_person
 from app.services.tokens import issue_token
 
 __all__ = [
@@ -175,8 +175,9 @@ class LocalConsent:
     """Локальный режим: согласие сразу, без страницы, участник — по клиенту (`TRK-446#14`).
 
     Claude Code получает участника `claude`, Codex — `codex`, прочие — агента по умолчанию
-    `agent`; недостающий заводится сам, без хозяина. Выпускает трекер: человек своей
-    машины ничего не вводит.
+    `agent`; недостающий заводится сам, без хозяина. Выпускает человек машины (участник с
+    ключом `local-ui`, TRK-559): подключение — его, «Доступы» → «Мои» его показывают; он
+    ничего не вводит. Нет такого человека — выпускает трекер.
 
     Только на петле, и дважды. `bind_loopback` — порты установки опубликованы только на
     петле (`TRACKER_BIND`): иначе до `/authorize` дотянулся бы любой в сети и получил
@@ -201,7 +202,9 @@ class LocalConsent:
                 "sign-in without a consent page is granted to a loopback redirect_uri only",
             )
         family = client_family(client.client_id, client.client_name)
-        return Grant(participant=await _local_agent(session, family), issuer=TRACKER_ACTOR.author)
+        person = await find_local_person(session)
+        issuer = TRACKER_ACTOR.author if person is None else person.author
+        return Grant(participant=await _local_agent(session, family), issuer=issuer)
 
 
 @dataclass(frozen=True, slots=True)
