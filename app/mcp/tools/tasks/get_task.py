@@ -120,11 +120,7 @@ def parent_card(value: TaskLink) -> ParentCardView:
 
 # Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.
 class TaskPackageView(BaseModel):
-    """Everything about one task: `state` first, then card, parent and children, links,
-    features, latest summary, open questions, unresolved remarks, transition targets and
-    case index. With `brief=true` only `state`, a short `task` header, `parent`, `features`
-    and `transitions` are present; the other fields are absent.
-    """
+    """Task package, `state` first; `brief=true` leaves out all but the fields it names."""
 
     state: TaskStateView
     task: TaskView | TaskBriefCardView
@@ -206,12 +202,7 @@ def brief_package(package: TaskPackage) -> CallToolResult:
 
 BriefArg = Annotated[
     bool,
-    Field(
-        description=(
-            "`true` returns only `state`, a short `task` header, `parent`, `features` and "
-            "`transitions`; to take a task into work, call without it"
-        )
-    ),
+    Field(description="`true`: `state`, a short header, `parent`, `features`, `transitions` only"),
 ]
 
 
@@ -221,12 +212,16 @@ def register(tools: Toolset) -> None:
 
     @tools.tool(title="Get task", annotations=READ_ONLY)
     async def get_task(key: TaskKeyArg, brief: BriefArg = False) -> TaskPackageView:
-        """Returns everything about one task in a single call: `state` (where it stands now,
-        computed on read), card, parent and children, links from both sides, the project
-        decisions it relies on, computed features, latest summary, open questions,
-        unresolved remarks, case index and transition targets. With `brief=true` the
-        answer is `state`, a short header, `parent`, features and transitions; taking a
-        task into work needs the sections, so it is called without `brief`.
+        """Returns everything about one task in a single call: `state` first, card, parent
+        and children, links from both sides, the project decisions it relies on, computed
+        features, latest summary, open questions, unresolved remarks, case index and
+        transition targets.
+
+        `state` is computed on read: last transition with its reason, parts of the latest
+        summary, entries after it, open questions and remarks, blockers, children by status
+        and the decisions filed after the sections were last edited. `brief=true` returns
+        `state`, a short `task` header, `parent`, `features` and `transitions`; the sections
+        that set the work come without it.
 
         `parent` and `children` are fields of their own and are absent from `links`,
         which holds `blocks`, `blocked_by` and `relates`, each named by this task's

@@ -2,51 +2,54 @@
 
 Поле в поле те же, что `TaskStateRead` и `TaskBriefRead` в REST: агент и человек видят одно
 состояние задачи. Блок считает домен (`app/domain/state.py`), здесь только форма.
+
+Описаний у полей почти нет намеренно: схема ответа едет в `tools/list` каждому агенту, и
+каждая строка описания стоит токенов в каждом сеансе. Смысл полей сказан в описании
+`get_task` и в `CONCEPT.md`, 4.2; имена говорят сами за себя. Статусы — строками, а не
+перечислением: перечисление встало бы в схему копией у каждого поля.
 """
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domain.state import REASON_LIMIT, RECENT_LIMIT, UNMEASURED_LIMIT, TaskState
-from app.mcp.enums import TaskPrioritySchema, TaskStatusSchema
+from app.domain.state import TaskState
+
+
+def _without_titles(schema: dict[str, Any]) -> None:
+    """Снимает из схемы модели заголовки полей: «After Summary» повторяет имя `after_summary`."""
+    for prop in schema.get("properties", {}).values():
+        prop.pop("title", None)
+
+
+#: Общая настройка форм этого файла: схема без заголовков полей (токены в каждом сеансе).
+COMPACT = ConfigDict(json_schema_extra=_without_titles)
 
 
 class StateTransitionView(BaseModel):
-    """Last status change: when, by whom and why."""
+    model_config = COMPACT
 
     no: int
-    from_status: TaskStatusSchema | None
-    to_status: TaskStatusSchema | None
+    from_status: str | None
+    to_status: str | None
     at: str
     by: str
-    reason: str | None = Field(description=f"Cut at {REASON_LIMIT} characters")
+    reason: str | None
 
 
 class StateSummaryView(BaseModel):
-    """Parts of the latest summary."""
+    model_config = COMPACT
 
     no: int
     at: str
-    next_step: str = Field(description=f"Cut at {REASON_LIMIT} characters")
-    blockers: str = Field(description=f"Cut at {REASON_LIMIT} characters")
-    unmeasured: str | None = Field(
-        description=f"Cut at {UNMEASURED_LIMIT} characters; `null` unless it closed the task"
-    )
-
-
-class StateRecentView(BaseModel):
-    """Entries of agents and humans after the latest summary; all of them without one."""
-
-    after_summary: int | None
-    total: int
-    lines: list[str] = Field(
-        description=f"Up to {RECENT_LIMIT} latest, `#no type author time: title`"
-    )
+    next_step: str
+    blockers: str
+    unmeasured: str | None
 
 
 class StateQuestionView(BaseModel):
-    """Open question."""
+    model_config = COMPACT
 
     no: int
     to: list[str]
@@ -55,38 +58,31 @@ class StateQuestionView(BaseModel):
 
 
 class StateNoteView(BaseModel):
-    """Open remark or warning."""
+    model_config = COMPACT
 
     no: int
     by: str
     title: str
 
 
-class StateChildrenView(BaseModel):
-    """Children by status and the keys of those not closed."""
-
-    total: int
-    by_status: dict[str, int]
-    unclosed: list[str]
-
-
 class TaskStateView(BaseModel):
     """Where the task stands now, computed on read from the case and the links."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, json_schema_extra=_without_titles)
 
-    status: TaskStatusSchema
+    status: str
     last_transition: StateTransitionView | None
     last_summary: StateSummaryView | None
-    recent: StateRecentView
+    after_summary: int | None
+    recent: list[str] = Field(description="`#no type author time: title`, latest last")
+    recent_total: int
     questions: list[StateQuestionView]
     remarks: list[StateNoteView]
     warning: StateNoteView | None
-    blockers: list[str] = Field(description="Keys of open `blocked_by` tasks")
-    children: StateChildrenView
-    decisions_after_card: list[int] = Field(
-        description="`decision` entries filed after the last edit of the sections"
-    )
+    blockers: list[str]
+    children: dict[str, int]
+    children_unclosed: list[str]
+    decisions_after_card: list[int]
 
 
 def task_state(value: TaskState) -> TaskStateView:
@@ -95,13 +91,15 @@ def task_state(value: TaskState) -> TaskStateView:
 
 
 class TaskBriefCardView(BaseModel):
-    """Card header of the short answer."""
+    """Card header in the short answer."""
+
+    model_config = COMPACT
 
     key: str
     title: str
-    status: TaskStatusSchema
+    status: str
     assignee: str | None
-    priority: TaskPrioritySchema
-    direction: str | None = Field(description="Address of the direction")
+    priority: str
+    direction: str | None
     version: int
     updated_at: datetime

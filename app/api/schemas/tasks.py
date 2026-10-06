@@ -289,24 +289,6 @@ class StateSummaryRead(BaseModel):
     )
 
 
-class StateRecentRead(BaseModel):
-    """Свежие записи агентов и человека: что подшито после последней сводки."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    after_summary: int | None = Field(
-        description="Number of the latest summary the entries are counted after; `null` without one"
-    )
-    total: int = Field(
-        description="How many entries of agents and humans follow it (all, without a summary)"
-    )
-    lines: list[str] = Field(
-        description=(
-            f"Up to {RECENT_LIMIT} latest of them, in order: `#no type author time: title`"
-        )
-    )
-
-
 class StateQuestionRead(BaseModel):
     """Открытый вопрос: кого спросили и мешает ли он работе."""
 
@@ -328,16 +310,6 @@ class StateNoteRead(BaseModel):
     title: str
 
 
-class StateChildrenRead(BaseModel):
-    """Дети задачи: счёт по статусам и ключи незакрытых."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    total: int
-    by_status: dict[str, int]
-    unclosed: list[str]
-
-
 class TaskStateRead(BaseModel):
     """Состояние задачи на момент чтения (`CONCEPT.md`, 4.2; TRK-579).
 
@@ -351,12 +323,22 @@ class TaskStateRead(BaseModel):
     status: TaskStatus
     last_transition: StateTransitionRead | None
     last_summary: StateSummaryRead | None
-    recent: StateRecentRead
+    after_summary: int | None = Field(
+        description="Summary the entries below follow; `null` without one"
+    )
+    recent: list[str] = Field(
+        description=(
+            f"Up to {RECENT_LIMIT} latest entries of agents and humans after the summary "
+            "(all of them without one), in order: `#no type author time: title`"
+        )
+    )
+    recent_total: int = Field(description="How many such entries there are in all")
     questions: list[StateQuestionRead] = Field(description="Open questions")
     remarks: list[StateNoteRead] = Field(description="Open remarks")
     warning: StateNoteRead | None = Field(description="Open warning, if the task has one")
     blockers: list[str] = Field(description="Keys of open `blocked_by` tasks")
-    children: StateChildrenRead
+    children: dict[str, int] = Field(description="Children by status; empty without children")
+    children_unclosed: list[str] = Field(description="Keys of children not `done` or `cancelled`")
     decisions_after_card: list[int] = Field(
         description=(
             "Numbers of `decision` entries filed after the last edit of the sections: "

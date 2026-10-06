@@ -143,20 +143,6 @@ class StateSummary:
 
 
 @dataclass(frozen=True, slots=True)
-class StateRecent:
-    """Записи агентов и человека после последней сводки; без сводки — последние в деле.
-
-    `after_summary` — номер сводки, после которой считано, или `None`, если сводки нет.
-    `lines` — до `RECENT_LIMIT` самых поздних записей строками `#no тип автор время:
-    заголовок` по возрастанию номера; `total` — сколько их всего.
-    """
-
-    after_summary: int | None
-    total: int
-    lines: list[str]
-
-
-@dataclass(frozen=True, slots=True)
 class StateQuestion:
     no: int
     to: list[str]
@@ -174,27 +160,27 @@ class StateNote:
 
 
 @dataclass(frozen=True, slots=True)
-class StateChildren:
-    """Дети: сколько всего, счёт по статусам и ключи незакрытых."""
-
-    total: int
-    by_status: dict[str, int]
-    unclosed: list[str]
-
-
-@dataclass(frozen=True, slots=True)
 class TaskState:
     """Блок `state`: состояние задачи на момент чтения, собранное из дела и связей."""
 
     status: TaskStatus
     last_transition: StateTransition | None
     last_summary: StateSummary | None
-    recent: StateRecent
+    #: Номер сводки, после которой считаны записи, или `None`, если сводки нет.
+    after_summary: int | None
+    #: До `RECENT_LIMIT` самых поздних записей агентов и человека после сводки (без сводки —
+    #: в деле) строками `#no тип автор время: заголовок` по возрастанию номера.
+    recent: list[str]
+    #: Сколько таких записей всего: строки показывают только хвост.
+    recent_total: int
     questions: list[StateQuestion]
     remarks: list[StateNote]
     warning: StateNote | None
     blockers: list[str]
-    children: StateChildren
+    #: Дети по статусам: `{"done": 2, "open": 1}`; без детей — пусто.
+    children: dict[str, int]
+    #: Ключи детей не в `done` и не в `cancelled`.
+    children_unclosed: list[str]
     decisions_after_card: list[int]
 
 
@@ -231,18 +217,14 @@ def _line(heading: EntryHeading) -> str:
     )
 
 
-def _recent(index: Sequence[EntryHeading], summary_no: int | None) -> StateRecent:
-    """Записи агента и человека после сводки, а без сводки — все; показаны самые поздние."""
+def _recent(index: Sequence[EntryHeading], summary_no: int | None) -> tuple[list[str], int]:
+    """Записи агента и человека после сводки, а без сводки — все: хвост строками и счёт."""
     entries = [
         heading
         for heading in index
         if heading.type in AGENT_ENTRY_TYPES and (summary_no is None or heading.no > summary_no)
     ]
-    return StateRecent(
-        after_summary=summary_no,
-        total=len(entries),
-        lines=[_line(heading) for heading in entries[-RECENT_LIMIT:]],
-    )
+    return [_line(heading) for heading in entries[-RECENT_LIMIT:]], len(entries)
 
 
 def decisions_after_card(index: Sequence[EntryHeading]) -> list[int]:
@@ -279,6 +261,7 @@ def build_state(
     for child in children:
         counts[child.status.value] = counts.get(child.status.value, 0) + 1
     warning = open_warning(index)
+    recent, recent_total = _recent(index, None if summary is None else summary.no)
     return TaskState(
         status=status,
         last_transition=None
@@ -302,7 +285,9 @@ def build_state(
             if summary.unmeasured is None
             else clip(summary.unmeasured, UNMEASURED_LIMIT),
         ),
-        recent=_recent(index, None if summary is None else summary.no),
+        after_summary=None if summary is None else summary.no,
+        recent=recent,
+        recent_total=recent_total,
         questions=[
             StateQuestion(
                 no=question.no,
@@ -324,10 +309,7 @@ def build_state(
             no=warning.no, by=_signature(warning.author), title=clip(warning.title, TITLE_LIMIT)
         ),
         blockers=list(open_blockers),
-        children=StateChildren(
-            total=len(children),
-            by_status=counts,
-            unclosed=[child.key for child in children if child.status not in CLOSED_STATUSES],
-        ),
+        children=counts,
+        children_unclosed=[child.key for child in children if child.status not in CLOSED_STATUSES],
         decisions_after_card=decisions_after_card(index),
     )

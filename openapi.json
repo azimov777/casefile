@@ -6915,7 +6915,7 @@
           "tasks"
         ],
         "summary": "Read a task",
-        "description": "Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.\n\nКарточка, связи с обеих сторон со статусом задачи на другой стороне, решения проекта,\nна которые опирается задача, со статусом и преемником, вычисляемые признаки, последняя\nсводка целиком, открытые вопросы и неразобранные замечания\nцеликом, опись дела и переходы по таблице. Тела остальных записей читаются отдельно\nв `GET /tasks/{key}/entries`.\nПереходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,\nблокеры, дети) проверяются в момент перехода, а не при чтении.",
+        "description": "Пакет преемника: всё, что нужно агенту с чистым контекстом, одним вызовом.\n\nПервым идёт блок `state` — где задача стоит сейчас, он считается при чтении и нигде\nне хранится. Карточка, связи с обеих сторон со статусом задачи на другой стороне,\nрешения проекта, на которые опирается задача, со статусом и преемником, вычисляемые\nпризнаки, последняя сводка целиком, открытые вопросы и неразобранные замечания\nцеликом, опись дела и переходы по таблице. Тела остальных записей читаются отдельно\nв `GET /tasks/{key}/entries`.\nПереходы перечислены по таблице; валидации (заполненные разделы, сводка, вердикты,\nблокеры, дети) проверяются в момент перехода, а не при чтении.\n\nС `brief=true` — краткий ответ (`TaskBriefRead`): шапка, родитель, признаки, `state`\nи переходы.",
         "operationId": "read_task",
         "security": [
           {
@@ -6936,6 +6936,18 @@
               "title": "Task Key"
             },
             "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
+          },
+          {
+            "name": "brief",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "`true` returns the short answer: the card header, parent, features, `state` and transitions, without sections, links, the case index, the project card and the summary in full. To take a task into work, read it without `brief`",
+              "default": false,
+              "title": "Brief"
+            },
+            "description": "`true` returns the short answer: the card header, parent, features, `state` and transitions, without sections, links, the case index, the project card and the summary in full. To take a task into work, read it without `brief`"
           },
           {
             "name": "X-Actor-Label",
@@ -6965,7 +6977,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataResponse_TaskPackageRead_"
+                  "$ref": "#/components/schemas/DataResponse_Union_TaskPackageRead__TaskBriefRead__"
                 }
               }
             }
@@ -12277,18 +12289,6 @@
         ],
         "title": "DataResponse[TaskMoveBatchRead]"
       },
-      "DataResponse_TaskPackageRead_": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/TaskPackageRead"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "title": "DataResponse[TaskPackageRead]"
-      },
       "DataResponse_TaskRead_": {
         "properties": {
           "data": {
@@ -12312,6 +12312,26 @@
           "data"
         ],
         "title": "DataResponse[TokenIssued]"
+      },
+      "DataResponse_Union_TaskPackageRead__TaskBriefRead__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskPackageRead"
+              },
+              {
+                "$ref": "#/components/schemas/TaskBriefRead"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[Union[TaskPackageRead, TaskBriefRead]]"
       },
       "DecisionEntryRead": {
         "properties": {
@@ -16423,6 +16443,176 @@
         "title": "SessionRead",
         "description": "Живой сеанс: токен вкладки, его срок и учётная запись за ним."
       },
+      "StateNoteRead": {
+        "properties": {
+          "no": {
+            "type": "integer",
+            "title": "No"
+          },
+          "by": {
+            "type": "string",
+            "title": "By"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "no",
+          "by",
+          "title"
+        ],
+        "title": "StateNoteRead",
+        "description": "Открытое замечание или предупреждение: номер записи, автор, заголовок."
+      },
+      "StateQuestionRead": {
+        "properties": {
+          "no": {
+            "type": "integer",
+            "title": "No"
+          },
+          "to": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "To",
+            "description": "Addressees"
+          },
+          "blocking": {
+            "type": "boolean",
+            "title": "Blocking"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "no",
+          "to",
+          "blocking",
+          "title"
+        ],
+        "title": "StateQuestionRead",
+        "description": "Открытый вопрос: кого спросили и мешает ли он работе."
+      },
+      "StateSummaryRead": {
+        "properties": {
+          "no": {
+            "type": "integer",
+            "title": "No"
+          },
+          "at": {
+            "type": "string",
+            "title": "At",
+            "description": "UTC, to the minute",
+            "examples": [
+              "2026-10-06T11:59Z"
+            ]
+          },
+          "next_step": {
+            "type": "string",
+            "title": "Next Step",
+            "description": "Cut at 160 characters"
+          },
+          "blockers": {
+            "type": "string",
+            "title": "Blockers",
+            "description": "Cut at 160 characters"
+          },
+          "unmeasured": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unmeasured",
+            "description": "Cut at 200 characters; `null` unless the summary closed the task"
+          }
+        },
+        "type": "object",
+        "required": [
+          "no",
+          "at",
+          "next_step",
+          "blockers",
+          "unmeasured"
+        ],
+        "title": "StateSummaryRead",
+        "description": "Части последней сводки, нужные для входа: следующий шаг, мешающее, `unmeasured`."
+      },
+      "StateTransitionRead": {
+        "properties": {
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number of the `status_changed` entry"
+          },
+          "from_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "at": {
+            "type": "string",
+            "title": "At",
+            "description": "UTC, to the minute",
+            "examples": [
+              "2026-10-06T11:59Z"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "title": "By",
+            "description": "Signature of the author"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Reason of the move, cut at 160 characters; `null` if none"
+          }
+        },
+        "type": "object",
+        "required": [
+          "no",
+          "from_status",
+          "to_status",
+          "at",
+          "by",
+          "reason"
+        ],
+        "title": "StateTransitionRead",
+        "description": "Последний переход статуса: когда, кто и почему (TRK-579)."
+      },
       "StatusChangedEntryRead": {
         "properties": {
           "id": {
@@ -16955,6 +17145,112 @@
         ],
         "title": "TaskAlreadyThereRead",
         "description": "Задача списка уже лежит в целевом проекте: `task_already_in_project`, записи нет."
+      },
+      "TaskBriefCardRead": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/TaskPriority"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Address of the direction, or `null`"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "title",
+          "status",
+          "assignee",
+          "priority",
+          "direction",
+          "version",
+          "updated_at"
+        ],
+        "title": "TaskBriefCardRead",
+        "description": "Шапка задачи в кратком ответе: без разделов, проекта и описания."
+      },
+      "TaskBriefRead": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/TaskStateRead"
+          },
+          "task": {
+            "$ref": "#/components/schemas/TaskBriefCardRead"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinkTaskRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "features": {
+            "$ref": "#/components/schemas/TaskFeaturesRead"
+          },
+          "transitions": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStatus"
+            },
+            "type": "array",
+            "title": "Transitions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "task",
+          "parent",
+          "features",
+          "transitions"
+        ],
+        "title": "TaskBriefRead",
+        "description": "Краткий ответ чтения задачи, `brief=true` (`CONCEPT.md`, 4.2; TRK-579).\n\nШапка, родитель без цели, признаки, `state` и переходы: 200–500 токенов вместо\n2–8 тысяч. Разделов, связей, описи, карточки проекта и сводки целиком здесь нет:\nчтобы взять задачу в работу, читают полный ответ."
       },
       "TaskClosing": {
         "properties": {
@@ -17594,6 +17890,10 @@
       },
       "TaskPackageRead": {
         "properties": {
+          "state": {
+            "$ref": "#/components/schemas/TaskStateRead",
+            "description": "Where the task stands now, computed on read; first in the answer"
+          },
           "task": {
             "$ref": "#/components/schemas/TaskRead"
           },
@@ -17687,6 +17987,7 @@
         },
         "type": "object",
         "required": [
+          "state",
           "task",
           "children",
           "links",
@@ -18204,6 +18505,135 @@
         ],
         "title": "TaskSearchRead",
         "description": "Задача в выдаче списка. Приезжают только запрошенные поля.\n\nКлюч приходит всегда: выдача без него бесполезна — по ней нельзя ни прочитать\nзадачу, ни сослаться на неё."
+      },
+      "TaskStateRead": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "last_transition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StateTransitionRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StateSummaryRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "after_summary": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Summary",
+            "description": "Summary the entries below follow; `null` without one"
+          },
+          "recent": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recent",
+            "description": "Up to 4 latest entries of agents and humans after the summary (all of them without one), in order: `#no type author time: title`"
+          },
+          "recent_total": {
+            "type": "integer",
+            "title": "Recent Total",
+            "description": "How many such entries there are in all"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/StateQuestionRead"
+            },
+            "type": "array",
+            "title": "Questions",
+            "description": "Open questions"
+          },
+          "remarks": {
+            "items": {
+              "$ref": "#/components/schemas/StateNoteRead"
+            },
+            "type": "array",
+            "title": "Remarks",
+            "description": "Open remarks"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StateNoteRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Open warning, if the task has one"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blockers",
+            "description": "Keys of open `blocked_by` tasks"
+          },
+          "children": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Children",
+            "description": "Children by status; empty without children"
+          },
+          "children_unclosed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Children Unclosed",
+            "description": "Keys of children not `done` or `cancelled`"
+          },
+          "decisions_after_card": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Decisions After Card",
+            "description": "Numbers of `decision` entries filed after the last edit of the sections: the statement may not account for them"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "last_transition",
+          "last_summary",
+          "after_summary",
+          "recent",
+          "recent_total",
+          "questions",
+          "remarks",
+          "warning",
+          "blockers",
+          "children",
+          "children_unclosed",
+          "decisions_after_card"
+        ],
+        "title": "TaskStateRead",
+        "description": "Состояние задачи на момент чтения (`CONCEPT.md`, 4.2; TRK-579).\n\nНикто не пишет и ничего не хранится: блок считается из дела и связей при каждом\nчтении, поэтому не устаревает. Он так же информативен, как то, что агенты уже пишут:\nпричина перехода, `next_step`, заголовки записей."
       },
       "TaskStatus": {
         "type": "string",

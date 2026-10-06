@@ -93,19 +93,17 @@ def test_recent_shows_the_last_entries_after_the_summary_only() -> None:
     index += [_heading(no, EntryType.NOTE, f"после {no}") for no in range(7, 7 + RECENT_LIMIT + 2)]
 
     state = _state(index, summary=None)
-    assert state.recent.after_summary is None
-    assert state.recent.total == 3 + 1 + RECENT_LIMIT + 2
+    assert state.after_summary is None
+    assert state.recent_total == 3 + 1 + RECENT_LIMIT + 2
 
     summary = SummaryParts(
         no=5, created_at=MOMENT, next_step="шаг", blockers="нет", unmeasured=None
     )
     state = _state(index, summary=summary)
-    assert state.recent.after_summary == 5
-    assert state.recent.total == RECENT_LIMIT + 2
-    assert len(state.recent.lines) == RECENT_LIMIT
-    assert state.recent.lines[-1].startswith(
-        f"#{7 + RECENT_LIMIT + 1} note claude 2026-10-06T11:59Z:"
-    )
+    assert state.after_summary == 5
+    assert state.recent_total == RECENT_LIMIT + 2
+    assert len(state.recent) == RECENT_LIMIT
+    assert state.recent[-1].startswith(f"#{7 + RECENT_LIMIT + 1} note claude 2026-10-06T11:59Z:")
 
 
 def test_decisions_after_card_count_from_the_last_section_edit() -> None:
@@ -174,13 +172,14 @@ async def test_state_reflects_the_wait_the_answer_and_the_open_question(
     assert state["last_transition"]["from_status"] == "in_progress"
     assert state["last_summary"]["next_step"] == "Ждать ответа"
     assert state["last_summary"]["unmeasured"] is None
-    assert state["recent"]["after_summary"] == state["last_summary"]["no"]
-    assert state["recent"]["total"] == 2
-    assert state["recent"]["lines"][-1].endswith(": Свежая находка")
+    assert state["after_summary"] == state["last_summary"]["no"]
+    assert state["recent_total"] == 2
+    assert state["recent"][-1].endswith(": Свежая находка")
     assert state["questions"] == [
         {"no": 5, "to": ["owner"], "blocking": True, "title": "Брать вариант 3?"}
     ]
-    assert state["children"] == {"total": 0, "by_status": {}, "unclosed": []}
+    assert state["children"] == {}
+    assert state["children_unclosed"] == []
     assert state["blockers"] == []
 
     response = await auth_client.get(f"/api/v1/tasks/{key}")
@@ -216,11 +215,8 @@ async def test_state_names_blockers_children_and_the_closing_unmeasured(
 
     state = package["state"]
     assert state["blockers"] == [blocker["key"]]
-    assert state["children"] == {
-        "total": 1,
-        "by_status": {"backlog": 1},
-        "unclosed": [child["key"]],
-    }
+    assert state["children"] == {"backlog": 1}
+    assert state["children_unclosed"] == [child["key"]]
 
 
 async def test_brief_has_only_the_header_state_features_and_transitions(
