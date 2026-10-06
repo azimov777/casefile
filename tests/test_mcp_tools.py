@@ -20,6 +20,7 @@
 import json
 import re
 import uuid
+from datetime import UTC, datetime
 from itertools import pairwise
 from typing import Any
 
@@ -33,6 +34,7 @@ from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.repositories import EntryRepository
+from app.domain.authors import AuthorKind
 from app.domain.case import EntryType
 from app.domain.errors import InvalidSearchQueryError
 from app.domain.links import LinkKind
@@ -1601,6 +1603,96 @@ async def test_an_answer_filed_before_outcomes_reads_the_same_through_mcp_and_re
     assert index[old_no]["outcome"] == "answered"
     assert index[old_no]["replaced_by"] is None
     assert package["features"]["open_questions"] == 0
+
+
+# TRK-565: полезная нагрузка каждого типа, у которого модель чтения REST имеет умолчание, в
+# том виде, в каком её подшивал трекер. Старая запись — это запись без ключа, у которого
+# в модели чтения стоит `default`: REST дописал бы его, MCP отдал бы как лежит.
+_OLD_SHAPE_PAYLOADS: list[tuple[EntryType, dict[str, Any]]] = [
+    (EntryType.DECISION, {}),
+    (EntryType.DECISION, {"supersedes": []}),
+    (EntryType.RESOLUTION, {"remark_no": 1, "outcome": "fixed", "task": None}),
+    (EntryType.STATUS_CHANGED, {"from": "backlog", "to": "open", "reason": None}),
+    (EntryType.SECTION_CHANGED, {"field": "goal", "before": "a", "after": "b"}),
+    (
+        EntryType.SECTION_CHANGED,
+        {"field": "checks", "check_no": 1, "before": "a", "after": "b"},
+    ),
+    (EntryType.FIELD_CHANGED, {"field": "priority", "before": "low", "after": "high"}),
+    (EntryType.ASSIGNEE_CHANGED, {"before": None, "after": "claude"}),
+    (EntryType.LINK_ADDED, {"kind": "relates", "other": "TRK-7"}),
+    (EntryType.REMARK, {}),
+    (EntryType.ACCEPTANCE, {}),
+]
+
+
+@pytest.mark.parametrize(("entry_type", "payload"), _OLD_SHAPE_PAYLOADS)
+def test_both_doors_read_a_task_entry_payload_alike(
+    entry_type: EntryType, payload: dict[str, Any]
+) -> None:
+    """TRK-565: нагрузка читается одним правилом и в REST (`entry_read`), и в MCP (`entry`)."""
+    from app.api.schemas.entries import entry_read
+    from app.mcp.tools.case.views import entry as mcp_entry
+
+    row = Entry(
+        id=uuid.uuid4(),
+        seq=1,
+        no=1,
+        type=entry_type,
+        title="t",
+        body="",
+        payload=payload,
+        refs=[],
+        created_at=datetime.now(UTC),
+        created_by_kind=AuthorKind.AGENT,
+        created_by_signature="claude",
+        action_id=None,
+    )
+    rest = entry_read(row, task_key="TRK-1").model_dump(mode="json", by_alias=True)["payload"]
+    mcp = mcp_entry(row, task_key="TRK-1").model_dump(mode="json")["payload"]
+
+    assert rest == mcp
+
+
+@pytest.mark.parametrize(
+    ("entry_type", "payload"),
+    [
+        (EntryType.DECISION, {}),
+        (EntryType.SECTION_CHANGED, {"field": "goal", "before": "a", "after": "b"}),
+    ],
+)
+async def test_an_old_entry_reads_the_same_through_mcp_and_rest(
+    mcp_session: Connect,
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    task_secret: str,
+    task: Task,
+    entry_type: EntryType,
+    payload: dict[str, Any],
+) -> None:
+    """TRK-565: решение без `supersedes` и правка раздела без `check_no` — через обе двери."""
+    key, created_by = task.key, created_by_columns(task.created_by)
+    repository = EntryRepository(db_session)
+    no = await repository.allocate_no(task.id)
+    await repository.add(
+        Entry(
+            task_id=task.id,
+            no=no,
+            type=entry_type,
+            title="Старая запись",
+            body="",
+            payload=payload,
+            **created_by,
+        )
+    )
+    await db_session.flush()
+
+    async with mcp_session(task_secret) as session:
+        from_mcp = await call(session, "read_entries", key=key, nos=[no])
+    response = await auth_client.get(f"/api/v1/tasks/{key}/entries/{no}")
+    assert response.status_code == 200, response.text
+
+    assert from_mcp["items"][0]["payload"] == response.json()["data"]["payload"]
 
 
 async def test_asking_an_unknown_participant_is_refused(
