@@ -93,6 +93,7 @@ export const errors = {
   summary_required: 'Leaving “in_progress” requires a summary.',
   task_already_in_project: 'The task is already in this project.',
   task_blocked: 'The task has an open blocker.',
+  task_checks_frozen: 'Checks cannot be changed after the task has entered work.',
   task_closed: 'The task is closed: its fields and links no longer change.',
   task_field_locked: 'This field is not editable in the current status.',
   task_fields_invalid: 'The task fields did not pass validation.',
