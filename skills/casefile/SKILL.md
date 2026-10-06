@@ -98,7 +98,7 @@ silently: file a `finding` and answer where it came from.
 
 A task stays `in_progress` only while the next move is yours. Hand it off explicitly.
 
-**A human has to decide.** Ask, summarize, wait:
+**A human has to decide.** Ask, summarize, hand the task back as `open`:
 
 ```
 ask(key="TRK-42", addressees=["<name from list_participants>"], blocking=True,
@@ -107,11 +107,18 @@ ask(key="TRK-42", addressees=["<name from list_participants>"], blocking=True,
 add_summary(key="TRK-42", done="…", remaining="…",
             blockers="Answer to TRK-42#9 from <name>",
             next_step="Apply the chosen option in api/routes.py")
-transition(key="TRK-42", to="waiting", reason="Waiting for the answer to TRK-42#9")
+transition(key="TRK-42", to="open", reason="Waiting for the answer to TRK-42#9")
 ```
 
 Put the options and your recommendation in the question so it can be answered in one
-line. Mark it `blocking` only when the work truly cannot go on without it.
+line. Mark it `blocking` only when the work truly cannot go on without it: the open
+`blocking` question is what holds the task, and the answer is what releases it. Do not
+take a task that still has an unanswered `blocking` question into work.
+
+**An outside event has to happen** — a catalogue review, someone else's pull request. Ask
+the same way: a `blocking` question to whoever will learn of the event, with what to
+check and where. Whoever learns of it may answer, an agent included. Then the same
+summary and `open`.
 
 **Waiting inside the session.** Do not poll `get_task`; one call blocks until an entry lands:
 
@@ -119,10 +126,11 @@ line. Mark it `blocking` only when the work truly cannot go on without it.
 wait_journal(task="TRK-42", types=["answer"], after=<last seq you saw>, timeout=60)
 ```
 
-An empty result means nothing happened yet; call again from the same `after`. If you
-cannot wait, end your turn and tell the person which question is open. When the answer
-arrives, move the task back yourself — `transition(key="TRK-42", to="in_progress")` —
-and remember it starts a new pass: verdicts filed before no longer count.
+An empty result means nothing happened yet; call again from the same `after`. The task
+stays `in_progress` while you wait. If you cannot wait, file the question, the summary
+and `open` as above, end your turn and tell the person which question is open. The answer
+makes the task a candidate for work again; whoever takes it up moves it to `in_progress`,
+which starts a new pass: verdicts filed before no longer count.
 
 **Another task has to finish first.** Block only on a real dependency:
 
