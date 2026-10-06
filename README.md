@@ -244,7 +244,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 |---|---|
 | Update right now | run the install line again |
 | Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env`, then `docker compose up -d --no-deps updater` in `~/casefile` |
-| Stay on one release | `CASEFILE_VERSION=0.11.0` in `~/casefile/.env` |
+| Stay on one release | `CASEFILE_VERSION=0.11.1` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
 | Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |
