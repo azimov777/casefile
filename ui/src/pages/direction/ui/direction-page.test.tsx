@@ -329,3 +329,46 @@ describe('страница направления', () => {
     ).toHaveAttribute('href', '/projects/DEMO');
   });
 });
+
+describe('фильтр по типу в деле направления (TRK-621)', () => {
+  /** Дело направления с отбором по `types`, как у бэкенда. */
+  function filtered() {
+    return http.get(`${API}${PATH}/entries`, ({ request }) => {
+      const url = new URL(request.url);
+      seen.push(url);
+      const types = url.searchParams.getAll('types');
+      return collection(types.length === 0 ? CASE : CASE.filter((e) => types.includes(e.type)));
+    });
+  }
+
+  it('без выбора запрос дела уходит без types', async () => {
+    server.use(filtered());
+    renderApp('/projects/DEMO/directions/promotion', { language: 'ru' });
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 3 }) });
+
+    const reads = seen.filter((url) => url.pathname === `${PATH}/entries`);
+    expect(reads.length).toBeGreaterThan(0);
+    for (const url of reads) expect(url.searchParams.has('types')).toBe(false);
+  });
+
+  it('с выбором запрос дела уходит с types', async () => {
+    server.use(filtered());
+    renderApp('/projects/DEMO/directions/promotion?type=decision', { language: 'ru' });
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 1 }) });
+
+    const reads = seen.filter((url) => url.pathname === `${PATH}/entries`);
+    expect(reads.at(-1)?.searchParams.getAll('types')).toEqual(['decision']);
+  });
+
+  it('пустая выдача по отбору — честное пустое состояние со сбросом', async () => {
+    const user = userEvent.setup();
+    server.use(filtered());
+    renderApp('/projects/DEMO/directions/promotion?type=note', { language: 'ru' });
+
+    expect(await screen.findByText(say.case('emptyByTypes'))).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: say.case('filters.reset') }));
+
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 3 }) });
+    expect(address.current).toBe('/projects/DEMO/directions/promotion');
+  });
+});
