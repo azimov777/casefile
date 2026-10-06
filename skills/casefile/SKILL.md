@@ -191,11 +191,13 @@ accepts it or returns the task with a remark — you write nothing extra.
 close_task(key="TRK-42",
   verdicts=[{"check_no": 1, "outcome": "passed",
              "evidence": "pytest tests/test_parser.py: 41 passed"},
-            {"check_no": 2, "outcome": "unverifiable",
+            {"check_no": 2, "outcome": "partial",
+             "evidence": "Importer reads 3 of 4 record kinds; attachments are not read yet."},
+            {"check_no": 3, "outcome": "unverifiable",
              "evidence": "No Safari here; ran Chromium at 390 px: no horizontal scroll."}],
-  summary={"done": "Parser accepts the new format; Safari not checked.",
+  summary={"done": "Parser accepts the new format; attachments and Safari remain.",
            "remaining": "nothing", "blockers": "nothing", "next_step": "no steps",
-           "unmeasured": "Safari on the owner's phone: check 2 is unverifiable."})
+           "unmeasured": "Attachments (check 2) and Safari on the owner's phone (check 3)."})
 ```
 
 If a check fails, do not close: file it with `add_verdict` as `failed`, file a summary,
