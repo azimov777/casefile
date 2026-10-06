@@ -69,7 +69,7 @@ def test_setup_skill_has_no_install_secrets_or_outside_scripts() -> None:
 
 def test_setup_skill_links_only_to_the_public_repository_and_has_no_private_paths() -> None:
     text = SETUP_FILE.read_text(encoding="utf-8")
-    links = re.findall(r"https?://[^\s)]+", text)
+    links = re.findall(r"https?://[^\s)`]+", text)
     assert GUIDE_URL in text and MCPB_URL in text
     for link in links:
         assert link.startswith(REPOSITORY) or link == "http://127.0.0.1:8100/mcp", link
