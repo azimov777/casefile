@@ -14,7 +14,7 @@
 это состояние, открывает `/tasks` напрямую — так делает большинство файлов ниже, кроме
 `install-key.spec.ts` (её первый сценарий идёт через `/` нарочно) и `start-onboarding.spec.ts`.
 
-Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `filter-stability.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `directions.spec.ts`, `moving.spec.ts`, `explanations.spec.ts`, `screen-explanations.spec.ts`, `start-onboarding.spec.ts` и `warning.spec.ts`, только читают
+Все сценарии, кроме `access.spec.ts`, `answer.spec.ts`, `remark.spec.ts`, `live.spec.ts`, `paging.spec.ts`, `filter-stability.spec.ts`, `layout.spec.ts`, `live-list.spec.ts`, `live-board.spec.ts`, `case-readable.spec.ts`, `case-latest.spec.ts`, `board-column.spec.ts`, `task-list-screen.spec.ts`, `task-move.spec.ts`, `parents-long.spec.ts`, `link-groups.spec.ts`, `section-edits.spec.ts`, `service-i18n.spec.ts`, `long-word.spec.ts`, `key-wrap.spec.ts`, `reason-line.spec.ts`, `group-chevron-align.spec.ts`, `hierarchy.spec.ts`, `project-actions.spec.ts`, `project-archive.spec.ts`, `directions.spec.ts`, `moving.spec.ts`, `explanations.spec.ts`, `screen-explanations.spec.ts`, `start-onboarding.spec.ts`, `warning.spec.ts` и `not-before.spec.ts`, только читают
 и потому идут параллельно в обеих темах. Пишущие вынесены в проект `запись`: он идёт
 после читающих и по одному сценарию за раз (`playwright.config.ts`).
 
@@ -76,6 +76,7 @@ invalid_search_query`); ограничение снято (TRK-21).
   на экране, в окне секрета и в обеих темах. Заводит участника (удалить его нельзя), поэтому
   проект «запись»
 - `connect.spec.ts` — экран «Подключить агента»: вход из навигации ключом установки и ключом агента на `/login`, адрес во фрагментах — из ответа установки контура (нарочно не умолчание), копирование кладёт в буфер текст фрагмента, флажок общего токена в адресе, ни одного нарушения `axe` в обоих видах
+- `not-before.spec.ts` — момент «можно взять с …» (TRK-593): демо-задача DEMO-9 со значком отложенной на списке и доске, на странице задачи «Снять» убирает значок везде, «Отложить…» с моментом через день возвращает; снимки только с `SHOTS_DIR` в обеих темах; проект «запись»
 - `tasks.spec.ts` — список: отбор по статусу, признаки строки, пустая выдача, страница за концом выдачи, адрес, `axe`
 - `archive.spec.ts` — архив со сдвинутыми часами браузера (`page.clock`): закрытые демо уходят из таблицы и с доски и возвращаются флажком; без сдвига скрыта только закрытая без записей; выбор в адресе переживает перезагрузку и ссылку; покой без лишних запросов; порог пересекается при следующем чтении, а не по часам; запрос человека по «и» с правилом и позиция опечатки в его строке; `axe` серьёзных нарушений и отдельно — `axe` вовсе без единого нарушения на доске и в таблице (UI-99)
 - `board-column.spec.ts` — дочитывание столбца прокруткой: страница в разметке сразу после
