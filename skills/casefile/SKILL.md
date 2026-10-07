@@ -22,7 +22,7 @@ harness may show them with a prefix.
 
 - The casefile tools are in your tool list. If they are not, see the last section.
 - You know the task key. If the person gave you a topic instead, find it:
-  `search_tasks(query="project: TRK and status: open and blocked: false")`. If nothing
+  `search_tasks(query="project: TRK and status: open and blocked: false and open_blocking_questions: 0 and deferred: false")`. If nothing
   matches the work, file it with `create_task` first (step 4 shows the form): work with a
   result or a decision belongs in a task even when one session holds it all.
 
@@ -139,6 +139,27 @@ link(key="TRK-42", kind="blocked_by", other="TRK-40")
 add_summary(key="TRK-42", done="…", remaining="…", blockers="TRK-40 not done", next_step="…")
 transition(key="TRK-42", to="open", reason="Needs the schema from TRK-40")
 ```
+
+**A moment in time has to come** — your next move is possible no earlier than some date
+and time. Set `not_before` by the clock of your own machine, with the UTC offset
+(`date -Iseconds` prints it; a string without an offset is refused), file the summary and
+hand the task back as `open`:
+
+```
+update_task(key="TRK-42", changes={"not_before": "2026-10-08T09:00:00+02:00"})
+add_summary(key="TRK-42", done="…", remaining="…",
+            blockers="Not before 2026-10-08T09:00+02:00 (not_before)",
+            next_step="Run the migration check")
+transition(key="TRK-42", to="open", reason="Not before 2026-10-08 09:00 +02:00")
+```
+
+The field holds the wait, the reason only names the moment. Nothing happens when the
+moment comes: no entry, no move. The feature `deferred` turns `false` on the next read
+and the task is a candidate again, so do not take a task while `deferred` is `true`:
+`in_progress` answers `task_deferred`. Select candidates with `deferred: false` (step
+"Before you start"). To lift the wait earlier, `update_task(key="TRK-42",
+changes={"not_before": null})`. `get_task` shows `deferred` in `features` and, without `brief`, the
+date as `not_before`; `search_tasks` returns it in `fields`. It is not a deadline: the tracker reminds no one.
 
 **A question addressed to you** gets `answer(key=…, question_no=…, body=…)` in its own task.
 
