@@ -1,4 +1,4 @@
-"""Направление: бесконечная часть работы внутри одного проекта."""
+"""Область: бесконечная часть работы внутри одного проекта."""
 
 from __future__ import annotations
 
@@ -11,44 +11,44 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import BaseModel
 from app.db.models.author import CreatedByMixin
 from app.db.models.project import Project
-from app.domain.directions import (
-    MAX_DIRECTION_DESCRIPTION_LENGTH,
-    MAX_DIRECTION_KEY_LENGTH,
-    format_direction_address,
+from app.domain.areas import (
+    MAX_AREA_DESCRIPTION_LENGTH,
+    MAX_AREA_KEY_LENGTH,
+    format_area_address,
 )
 
 
-class Direction(BaseModel, CreatedByMixin):
-    """Строка реестра направлений (`CONCEPT.md`, 3.7; решения владельца `TRK#16`, `TRK#17`).
+class Area(BaseModel, CreatedByMixin):
+    """Строка реестра областей (`CONCEPT.md`, 3.7; решения владельца `TRK#16`, `TRK#17`).
 
-    Устроено как проект, только меньше: ключ, название, короткое описание и время архива;
-    атрибуты — `direction_attributes`, дело — записи `entries` с `direction_id`. Статуса,
-    исполнителя и проверок нет. Родительского направления нет тоже: направления пока
+    Устроена как проект, только меньше: ключ, название, короткое описание и время архива;
+    атрибуты — `area_attributes`, дело — записи `entries` с `area_id`. Статуса,
+    исполнителя и проверок нет. Родительской области нет тоже: области пока
     плоские (`TRK#17`), и колонки под вложенность здесь нет намеренно.
 
     Удаления нет, проект и ключ неизменяемы: адрес `TRK/promotion` стоит в ссылках записей.
     """
 
-    __tablename__ = "directions"
+    __tablename__ = "areas"
     __table_args__ = (
-        # Ключ хранится канонизированным (нижний регистр, `app/domain/directions.py`), и
+        # Ключ хранится канонизированным (нижний регистр, `app/domain/areas.py`), и
         # уникальность без учёта регистра внутри проекта держит обычное `UNIQUE` — как у
         # ключа проекта. Тот же индекс отвечает на поиск по адресу.
         UniqueConstraint("project_id", "key"),
         # Предел проверяет домен и отвечает предметным кодом; ограничение — страховка от
         # записи мимо сценариев (приём архива переноса), как у проекта.
         CheckConstraint(
-            f"char_length(description) <= {MAX_DIRECTION_DESCRIPTION_LENGTH}",
+            f"char_length(description) <= {MAX_AREA_DESCRIPTION_LENGTH}",
             name="description_length",
         ),
     )
 
     # Без `ondelete`: проекты не удаляются, а если однажды — база откажет.
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"), nullable=False)
-    key: Mapped[str] = mapped_column(String(MAX_DIRECTION_KEY_LENGTH), nullable=False)
+    key: Mapped[str] = mapped_column(String(MAX_AREA_KEY_LENGTH), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
-    # Время архивирования или `NULL` у живого направления. Заморозку по нему проверяет одна
+    # Время архивирования или `NULL` у живой области. Заморозку по нему проверяет одна
     # точка — `app/services/freeze.py`.
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -58,5 +58,5 @@ class Direction(BaseModel, CreatedByMixin):
 
     @property
     def address(self) -> str:
-        """Адрес направления: `TRK/promotion`. Им направление называют везде."""
-        return format_direction_address(self.project.key, self.key)
+        """Адрес области: `TRK/promotion`. Им область называют везде."""
+        return format_area_address(self.project.key, self.key)

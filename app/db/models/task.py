@@ -30,8 +30,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseModel, string_enum
+from app.db.models.area import Area
 from app.db.models.author import CreatedByMixin
-from app.db.models.direction import Direction
 from app.db.models.project import Project
 from app.domain.tasks import (
     INITIAL_STATUS,
@@ -107,8 +107,8 @@ class Task(BaseModel, CreatedByMixin):
             postgresql_using="gin",
             postgresql_ops={"decisions": "jsonb_path_ops"},
         ),
-        # «Задачи направления» — отбор `direction:` (`CONCEPT.md`, 4.4) и число задач.
-        Index("ix_tasks_direction_id", "direction_id"),
+        # «Задачи области» — отбор `area:` (`CONCEPT.md`, 4.4) и число задач.
+        Index("ix_tasks_area_id", "area_id"),
         # Версия только растёт и начинается с единицы: ноль означал бы, что счётчик
         # правили руками, и оптимистичная блокировка перестала бы ловить гонку.
         CheckConstraint("version >= 1", name="version_positive"),
@@ -181,12 +181,12 @@ class Task(BaseModel, CreatedByMixin):
         nullable=False,
     )
 
-    # Направление задачи: не больше одного, необязательное (`CONCEPT.md`, 3.3, 3.7).
-    # Без `ondelete`: направления не удаляются. Направление другого проекта в колонку
-    # попасть не должно — это проверяет сценарий (`direction_project_mismatch`), а перенос
+    # Область задачи: не больше одной, необязательная (`CONCEPT.md`, 3.3, 3.7).
+    # Без `ondelete`: области не удаляются. Область другого проекта в колонку
+    # попасть не должно — это проверяет сценарий (`area_project_mismatch`), а перенос
     # задачи колонку обнуляет.
-    direction_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("directions.id"), default=None, nullable=True
+    area_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("areas.id"), default=None, nullable=True
     )
 
     # Момент «не раньше» (решение проекта `TRK#47`): до него вход в `in_progress`
@@ -217,6 +217,6 @@ class Task(BaseModel, CreatedByMixin):
     # Ключ и название проекта входят в каждую карточку задачи, а проект у задачи один,
     # поэтому `joined`: одно соединение вместо второго запроса на каждый ответ.
     project: Mapped[Project] = relationship(lazy="joined")
-    # Адрес направления нужен каждой карточке и строке выдачи, и оно одно: `joined`, как
-    # проект. Внешняя связь — `outer`, потому что направления у задачи может не быть.
-    direction: Mapped[Direction | None] = relationship(lazy="joined", innerjoin=False)
+    # Адрес области нужен каждой карточке и строке выдачи, и она одна: `joined`, как
+    # проект. Внешняя связь — `outer`, потому что области у задачи может не быть.
+    area: Mapped[Area | None] = relationship(lazy="joined", innerjoin=False)

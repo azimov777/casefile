@@ -1,8 +1,8 @@
 """Репозитории проекта: сценарии импортируют их из одного места."""
 
 from app.db.repositories.accounts import AccountRepository
+from app.db.repositories.areas import AreaRepository
 from app.db.repositories.attributes import AttributeRepository
-from app.db.repositories.directions import DirectionRepository
 from app.db.repositories.entries import EntryRepository
 from app.db.repositories.idempotency import IdempotencyRepository
 from app.db.repositories.links import LinkRepository
@@ -15,8 +15,8 @@ from app.db.repositories.tokens import TokenRepository
 
 __all__ = [
     "AccountRepository",
+    "AreaRepository",
     "AttributeRepository",
-    "DirectionRepository",
     "EntryRepository",
     "IdempotencyRepository",
     "LinkRepository",
