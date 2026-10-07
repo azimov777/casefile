@@ -1008,7 +1008,7 @@ var(--ui-mark) }` значило бы получить второе имя од�
 нечего: после UI-43 модулей не осталось, исключать не из чего. Запись оставлена, чтобы
 следующий агент, встретив «единственное названное исключение» в старых делах задач,
 понимал, о чём шла речь и почему вопрос закрыт.
-**Где:** `src/pages/case/ui/case-filters.tsx`, `size-(--ui-mark)`.
+**Где:** `src/entities/entry/ui/case-filters.tsx`, `size-(--ui-mark)`.
 
 ## Чужой вывод оформляют обёртками узлов, а не цепочкой вариантов по потомку
 
@@ -1226,7 +1226,7 @@ var(--ui-mark) }` значило бы получить второе имя од�
 таблицы: снаружи обёртки они удержали бы высоту, поэтому переезжают внутрь
 (`p-0` на `<td>`, `px-3 py-2` на узле внутри).
 **Где:** `src/features/task-filters/ui/task-filters.tsx`,
-`src/pages/case/ui/case-filters.tsx`, `src/pages/tasks/ui/tasks-board.tsx`,
+`src/entities/entry/ui/case-filters.tsx`, `src/pages/tasks/ui/tasks-board.tsx`,
 `src/entities/entry/ui/entry-index.tsx`.
 
 ## Обрезание нужно ровно пока едет место, а в покое оно режет замысел

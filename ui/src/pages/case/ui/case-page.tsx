@@ -4,19 +4,18 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router';
 import {
   ENTRY_PAGE_SIZE,
-  ENTRY_TYPES,
+  CaseFilters,
   EntryCard,
   caseFeedQueryOptions,
   groupSectionEdits,
+  readEntryTypes,
   type Entry,
-  type EntryType,
 } from '@/entities/entry';
 import { TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import { ApiError } from '@/shared/api';
 import { Button, Callout, QueryState } from '@/shared/ui';
 import { readEntryNo } from '@/shared/lib';
-import { CaseFilters } from './case-filters';
 import { SectionEditsGroup } from './section-edits-group';
 
 /**
@@ -57,7 +56,7 @@ export function CasePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation('case');
 
-  const types = useMemo(() => readTypes(searchParams.getAll('type')), [searchParams]);
+  const types = useMemo(() => readEntryTypes(searchParams.getAll('type')), [searchParams]);
 
   /**
    * С какой записи читать дело. `null` — с начала, число — «всё, что после неё».
@@ -384,9 +383,4 @@ function groupReplies(entries: Entry[]): Map<number, Entry[]> {
     byEntry.set(no, [...(byEntry.get(no) ?? []), entry]);
   }
   return byEntry;
-}
-
-/** Типы из адреса: чужое значение отбрасывается, как и в отборе задач. */
-function readTypes(values: string[]): EntryType[] {
-  return values.filter((value): value is EntryType => (ENTRY_TYPES as string[]).includes(value));
 }

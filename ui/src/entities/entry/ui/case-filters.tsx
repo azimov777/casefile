@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ListFilter } from 'lucide-react';
-import { ENTRY_TYPES, type EntryType } from '@/entities/entry';
+import { ENTRY_TYPES, type EntryType } from '../api/entries';
 import {
   Button,
   FilterChip,

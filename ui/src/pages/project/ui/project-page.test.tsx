@@ -229,3 +229,67 @@ describe('экран проекта', () => {
     expect(address.current).toBe('/projects/DEMO');
   });
 });
+
+describe('фильтр по типу в деле проекта (TRK-621)', () => {
+  it('без выбора запрос дела уходит без types, чипов нет', async () => {
+    renderApp('/projects/DEMO');
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 5 }) });
+
+    const caseReads = seen.filter((url) => url.pathname === '/api/v1/projects/DEMO/entries');
+    expect(caseReads.length).toBeGreaterThan(0);
+    for (const url of caseReads) expect(url.searchParams.has('types')).toBe(false);
+    expect(screen.getByText(say.case('filters.allShown'))).toBeInTheDocument();
+  });
+
+  it('?type= из адреса уходит бэкенду параметром types, остальные параметры целы', async () => {
+    renderApp('/projects/DEMO?type=decision&entry=5');
+
+    const index = await screen.findByRole('table', { name: say.ui('index.count', { count: 1 }) });
+    expect(
+      within(index).getByRole('button', { name: /Держим ветку main единственной/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
+    const filtered = seen.filter(
+      (url) => url.pathname === '/api/v1/projects/DEMO/entries' && url.searchParams.has('types'),
+    );
+    expect(filtered.at(-1)?.searchParams.getAll('types')).toEqual(['decision']);
+  });
+
+  it('снятие чипа убирает type из адреса и возвращает все записи; entry остаётся', async () => {
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO?type=decision&entry=5');
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 1 }) });
+
+    await user.click(
+      screen.getByRole('button', { name: say.case('filters.remove', { type: 'decision' }) }),
+    );
+
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 5 }) });
+    expect(address.current).toBe('/projects/DEMO?entry=5');
+  });
+
+  it('пустая выдача по отбору — честное пустое состояние со сбросом', async () => {
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO?type=note');
+
+    expect(await screen.findByText(say.case('emptyByTypes'))).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: say.case('filters.reset') }));
+
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 5 }) });
+    expect(address.current).toBe('/projects/DEMO');
+  });
+
+  it('запись из адреса, спрятанная отбором, названа словами со сбросом', async () => {
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO?type=created&entry=5');
+
+    expect(
+      await screen.findByText(say.case('window.hiddenByType', { reference: 'DEMO#5' }), {
+        exact: false,
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: say.case('window.showAllTypes') }));
+
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 5 }) });
+    expect(address.current).toBe('/projects/DEMO?entry=5');
+  });
+});

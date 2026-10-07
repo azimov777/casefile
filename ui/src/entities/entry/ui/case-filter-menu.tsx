@@ -1,7 +1,8 @@
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Square, SquareCheck } from 'lucide-react';
-import { ENTRY_TYPES, EntryTypeIcon, isServiceEntry, type EntryType } from '@/entities/entry';
+import { ENTRY_TYPES, isServiceEntry, type EntryType } from '../api/entries';
+import { EntryTypeIcon } from './entry-kind';
 import { ToggleGroup, ToggleGroupItem } from '@/shared/ui';
 
 /** Типы записей агента и служебные типы трекера — те же два деления, что были у флажков. */
