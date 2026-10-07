@@ -76,6 +76,7 @@ async function seed(
     headers: auth(),
     data: {
       project: 'DEMO',
+      area: 'DEMO/core',
       title: 'Подопытная задача для замера треугольника группы (UI-162)',
       description: 'Заведена сквозным тестом UI-162.',
       ...sections(0),

@@ -23,11 +23,12 @@ from app.services import case as case_service
 from app.services import links as service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
+from conftest import make_task
 
 
 async def make(session: AsyncSession, actor: Actor, project: Project, title: str) -> Task:
     """Задача в `backlog` с заполненными разделами: готова идти по цепочке статусов."""
-    return await tasks_service.create_task(
+    return await make_task(
         session,
         actor=actor,
         project=project,

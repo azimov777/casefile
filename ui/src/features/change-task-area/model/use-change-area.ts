@@ -5,12 +5,12 @@ type TaskRead = components['schemas']['TaskRead'];
 
 export interface ChangeAreaInput {
   taskKey: string;
-  /** Адрес области `TRK/promotion` или `null` — «без области». */
-  area: string | null;
+  /** Адрес области `TRK/promotion`: снять область нельзя (`area_required`). */
+  area: string;
 }
 
 /**
- * Ставит задаче область или снимает её (TRK-557): `PATCH /api/v1/tasks/{key}` с одним
+ * Ставит задаче область или меняет её (TRK-557, TRK-677: снять нельзя): `PATCH /api/v1/tasks/{key}` с одним
  * полем `area` — единственная правка задачи, которую делает человек (TRK#16, ч. 4;
  * запись `decision` в деле TRK-557).
  *

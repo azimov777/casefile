@@ -89,8 +89,18 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
   });
   const decisionNo = decision.no as number;
 
+  // Область — чтобы «Обзор» и вкладка «Области» замерялись не пустыми, а её
+  // страница — с атрибутом и записью в деле. Идёт первой: задача без области не заводится.
+  await api(
+    request,
+    'post',
+    '/api/v1/projects/TRK/areas',
+    { key: 'screen', title: 'Экран проекта', description: 'Область сквозного теста экрана.' },
+    [201, 409],
+  );
   const task = await api(request, 'post', '/api/v1/tasks', {
     project: 'TRK',
+    area: AREA,
     title: `Задача со ссылкой на дело проекта, прогон ${RUN}`,
     description: 'Заведена сквозным тестом экрана проекта.',
   });
@@ -100,15 +110,6 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
     title: `Ссылка на решение проекта, прогон ${RUN}`,
     body: `Опираюсь на решение TRK#${decisionNo}.`,
   });
-  // Область — чтобы «Обзор» и вкладка «Области» замерялись не пустыми, а её
-  // страница — с атрибутом и записью в деле.
-  await api(
-    request,
-    'post',
-    '/api/v1/projects/TRK/areas',
-    { key: 'screen', title: 'Экран проекта', description: 'Область сквозного теста экрана.' },
-    [201, 409],
-  );
   await api(request, 'put', `/api/v1/projects/${AREA.replace('/', '/areas/')}/attributes/channel`, {
     value: 'reddit',
   });

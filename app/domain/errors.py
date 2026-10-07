@@ -203,6 +203,19 @@ class AreaProjectMismatchError(ValidationError):
     message = "Area belongs to another project than the task"
 
 
+class AreaRequiredError(ValidationError):
+    """У новой задачи области нет, а она обязательна; снять область у задачи нельзя.
+
+    Отказ создания, переноса в другой проект и правки `area: null`. Трекер область не
+    ставит и не подбирает: в `details` — проект и адреса его неархивных областей
+    (`areas`, список может быть пуст), выбор остаётся агенту. Старые задачи без области
+    читаются и правятся по другим полям как раньше.
+    """
+
+    code = "area_required"
+    message = "A task needs an area: name one of the project's areas"
+
+
 class AreaReasonRequiredError(ValidationError):
     """Архивирование и восстановление области требуют непустой причины `reason`."""
 

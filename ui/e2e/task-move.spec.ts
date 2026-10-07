@@ -28,6 +28,12 @@ async function createProject(request: APIRequestContext, mark: string): Promise<
     data: { key, title: `Перенос прогона ${RUN}`, description: 'Заведён сквозным тестом TRK-173.' },
   });
   expect(response.status()).toBe(201);
+  // Область — каждому проекту: без неё задача не заводится и не переносится.
+  const area = await request.post(`/api/v1/projects/${key}/areas`, {
+    headers: auth(),
+    data: { key: 'core', title: 'Основа' },
+  });
+  expect(area.status()).toBe(201);
   return key;
 }
 
@@ -39,7 +45,7 @@ async function createTask(
 ): Promise<string> {
   const response = await request.post('/api/v1/tasks', {
     headers: auth(),
-    data: { project, title, description },
+    data: { project, area: `${project}/core`, title, description },
   });
   expect(response.status()).toBe(201);
   return ((await response.json()) as { data: { key: string } }).data.key;
@@ -70,7 +76,7 @@ async function moveTask(
 ): Promise<string> {
   const response = await request.post(`/api/v1/tasks/${key}/move`, {
     headers: auth(),
-    data: { project, reason },
+    data: { project, area: `${project}/core`, reason },
   });
   expect(response.status()).toBe(200);
   return ((await response.json()) as { data: { key: string } }).data.key;

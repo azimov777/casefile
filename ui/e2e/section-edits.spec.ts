@@ -65,7 +65,7 @@ function seed(request: APIRequestContext): Promise<Seeded> {
         request,
         'post',
         '/api/v1/tasks',
-        { project: 'DEMO', ...sections(0) },
+        { project: 'DEMO', area: 'DEMO/core', ...sections(0) },
         201,
       );
       key = task.key as string;

@@ -5,8 +5,9 @@ import { fontsReady, motionSettled, readE2eToken } from './contour';
 /*
  * Области в интерфейсе (TRK-557, TRK#16, ч. 4): человек заводит область на
  * экране проекта, ставит её задаче в карточке, и отбор `area` в списке задач
- * показывает эту задачу и не показывает задачу без области; «без области» —
- * наоборот. Тем же условием `area` отбирает агент.
+ * показывает эту задачу и не показывает задачу другой области. Задача без области
+ * новой не бывает (`area_required`, TRK-677): область у неё можно сменить, но не снять.
+ * Тем же условием `area` отбирает агент.
  *
  * Сценарий пишущий — заводит проект, задачи и области — и идёт в проекте «запись».
  * Ключ проекта несёт метку прогона: на той же базе повторный прогон заводит свой проект,
@@ -38,7 +39,7 @@ async function api(
 interface Seeded {
   /** Задача, которой человек поставит область. */
   chosen: string;
-  /** Задача без области: отбор по области её не показывает. */
+  /** Задача в области `base`: отбор по другой области её не показывает. */
   other: string;
   /** Задача для замеров доступности: ей область ставится запросом. */
   measured: string;
@@ -46,25 +47,44 @@ interface Seeded {
 
 let ready: Promise<Seeded> | null = null;
 
-/** Проект прогона и три его задачи — один раз на файл. */
-function seed(request: APIRequestContext): Promise<Seeded> {
+let projectReady: Promise<void> | null = null;
+
+/** Проект прогона — один раз на файл. Областей в нём пока нет: первую заводит человек. */
+function seedProject(request: APIRequestContext): Promise<void> {
+  projectReady ??= api(request, 'post', '/api/v1/projects', {
+    key: KEY,
+    title: `Области ${RUN}`,
+  }).then(() => undefined);
+  return projectReady;
+}
+
+/** Три задачи прогона в области `base` — один раз на файл, после проекта. */
+async function seed(request: APIRequestContext): Promise<Seeded> {
   ready ??= seedOnce(request);
   return ready;
 }
 
 async function seedOnce(request: APIRequestContext): Promise<Seeded> {
-  await api(request, 'post', '/api/v1/projects', { key: KEY, title: `Области ${RUN}` });
+  await seedProject(request);
+  await api(
+    request,
+    'post',
+    `/api/v1/projects/${KEY}/areas`,
+    { key: 'base', title: `Основа ${RUN}`, description: 'Область задач сценария.' },
+    [201, 409],
+  );
   const task = async (title: string) =>
     (
       await api(request, 'post', '/api/v1/tasks', {
         project: KEY,
+        area: `${KEY}/base`,
         title,
         description: 'Заведена сквозным тестом областей.',
       })
     ).key as string;
   return {
     chosen: await task(`Задача в области ${RUN}`),
-    other: await task(`Задача без области ${RUN}`),
+    other: await task(`Задача другой области ${RUN}`),
     measured: await task(`Задача для замеров ${RUN}`),
   };
 }
@@ -78,7 +98,7 @@ test('область заводится на экране проекта, ста
   page,
   request,
 }) => {
-  const { chosen, other } = await seed(request);
+  await seedProject(request);
 
   // 1. Завести область на экране проекта, вкладка «Области».
   await page.goto(`/projects/${KEY}?tab=areas`);
@@ -105,11 +125,15 @@ test('область заводится на экране проекта, ста
     `/projects/${KEY}/areas/promo`,
   );
 
-  // 2. Поставить его задаче в карточке — там же, где приоритет.
+  // 2. Сменить область задачи на неё в карточке — там же, где приоритет. Задачи прогона
+  // заводятся только теперь: в проекте без областей задача не заводится.
+  const { chosen, other } = await seed(request);
   await page.goto(`/tasks/${chosen}`);
   await page.getByRole('button', { name: `Изменить область ${chosen}` }).click();
   const change = page.getByRole('dialog', { name: `Область ${chosen}` });
-  await expect(change.getByRole('radio', { name: /Без области/ })).toBeChecked();
+  // Область у задачи есть, и снять её нельзя: пункта «без области» в окне нет.
+  await expect(change.getByRole('radio', { name: new RegExp(`Основа ${RUN}`) })).toBeChecked();
+  await expect(change.getByRole('radio', { name: /Без области/ })).toHaveCount(0);
   await change.getByRole('radio', { name: new RegExp(AREA_TITLE) }).check();
   await change.getByRole('button', { name: 'Сохранить' }).click();
   await expect(change).toBeHidden();
@@ -126,7 +150,7 @@ test('область заводится на экране проекта, ста
   const pkg = (await card.json()) as { data: { task: { area: { address: string } | null } } };
   expect(pkg.data.task.area?.address).toBe(ADDRESS);
 
-  // 3. Отбор в списке задач: по области — эта задача есть, задачи без области нет.
+  // 3. Отбор в списке задач: по области — эта задача есть, задачи другой области нет.
   await page.goto(`/tasks?project=${KEY}`);
   await expect(rowKey(page, chosen)).toBeVisible();
   await expect(rowKey(page, other)).toBeVisible();
@@ -139,9 +163,8 @@ test('область заводится на экране проекта, ста
   await expect(rowKey(page, other)).toHaveCount(0);
   await expect(page.getByText(`область ${ADDRESS}`)).toBeVisible();
 
-  // «Без области» — наоборот: та же выдача условием `area: empty()`.
-  await field.selectOption('empty()');
-  await expect(page).toHaveURL(/[?&]area=empty%28%29(&|$)/);
+  // Другая область — наоборот.
+  await field.selectOption(`${KEY}/base`);
   await expect(rowKey(page, other)).toBeVisible();
   await expect(rowKey(page, chosen)).toHaveCount(0);
 

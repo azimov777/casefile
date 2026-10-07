@@ -56,6 +56,7 @@ from app.services import projects as projects_service
 from app.services import search as search_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
+from conftest import make_task
 
 #: Агент обсуждений: временный, подписанный меткой, — род `agent`, в отличие от владельца.
 AGENT = Actor(author=label_author("discussion_bot"))
@@ -64,8 +65,9 @@ AGENT = Actor(author=label_author("discussion_bot"))
 async def _task(
     session: AsyncSession, actor: Actor, project: Project, title: str, *, to: TaskStatus
 ) -> Task:
-    """Задача проекта в нужном статусе, исполнитель — владелец (`owner`), как у фикстуры."""
-    task = await tasks_service.create_task(
+    """Задача проекта в нужном статусе, исполнитель — владелец (`owner`), как у фикстуры;
+    область — `core` проекта (`make_task`: новой задаче она обязательна, TRK-677)."""
+    task = await make_task(
         session,
         actor=actor,
         project=project,

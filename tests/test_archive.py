@@ -62,10 +62,12 @@ async def populate(client: AsyncClient) -> None:
         "/api/v1/projects", json={"key": "TRK", "title": "Трекер", "description": "Бэкенд"}
     )
     assert project.status_code == 201, project.text
+    core = await client.post("/api/v1/projects/TRK/areas", json={"key": "core", "title": "Основа"})
+    assert core.status_code == 201, core.text
     for title in ("Первая", "Вторая"):
         created = await client.post(
             "/api/v1/tasks",
-            json={"project": "TRK", "title": title, "description": "tab\there"},
+            json={"project": "TRK", "area": "TRK/core", "title": title, "description": "tab\there"},
         )
         assert created.status_code == 201, created.text
     for entry in (
@@ -332,8 +334,12 @@ async def test_a_moved_task_comes_in_with_its_previous_keys(
     await populate(auth_client)
     ops = await auth_client.post("/api/v1/projects", json={"key": "OPS", "title": "Соседний"})
     assert ops.status_code == 201, ops.text
+    core = await auth_client.post(
+        "/api/v1/projects/OPS/areas", json={"key": "core", "title": "Основа"}
+    )
+    assert core.status_code == 201, core.text
     moved = await auth_client.post(
-        "/api/v1/tasks/TRK-1/move", json={"project": "OPS", "reason": "Переезд"}
+        "/api/v1/tasks/TRK-1/move", json={"project": "OPS", "area": "OPS/core", "reason": "Переезд"}
     )
     assert moved.status_code == 200, moved.text
     archive = (await auth_client.get(ARCHIVE)).json()["data"]
@@ -353,7 +359,9 @@ async def test_a_moved_task_comes_in_with_its_previous_keys(
     found = await auth_client.get("/api/v1/tasks", params={"query": "key: TRK-1"}, headers=ui)
     assert [row["key"] for row in found.json()["data"]] == ["OPS-1"]
     back = await auth_client.post(
-        "/api/v1/tasks/TRK-1/move", json={"project": "TRK", "reason": "Назад"}, headers=ui
+        "/api/v1/tasks/TRK-1/move",
+        json={"project": "TRK", "area": "TRK/core", "reason": "Назад"},
+        headers=ui,
     )
     assert back.status_code == 200, back.text
     assert (back.json()["data"]["key"], back.json()["data"]["previous_keys"]) == (
@@ -389,12 +397,23 @@ async def test_a_start_project_travels_like_any_other(
     """
     async with mcp_session(main_secret) as session:
         made = await call(session, "create_project", key="START", title="Свой старт")
+        await call(session, "create_project", key="START/core", title="Основа")
     assert made["key"] == "START"
     work = await auth_client.post("/api/v1/projects", json={"key": "WORK", "title": "Работа"})
     assert work.status_code == 201, work.text
+    core = await auth_client.post(
+        "/api/v1/projects/WORK/areas", json={"key": "core", "title": "Основа"}
+    )
+    assert core.status_code == 201, core.text
     for key in ("START", "WORK"):
         created = await auth_client.post(
-            "/api/v1/tasks", json={"project": key, "title": f"Задача {key}", "description": "d"}
+            "/api/v1/tasks",
+            json={
+                "project": key,
+                "area": f"{key}/core",
+                "title": f"Задача {key}",
+                "description": "d",
+            },
         )
         assert created.status_code == 201, created.text
     archive = (await auth_client.get(ARCHIVE)).json()["data"]

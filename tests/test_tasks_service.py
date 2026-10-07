@@ -27,6 +27,7 @@ from app.services import projects as projects_service
 from app.services import tasks as service
 from app.services.auth import Actor
 from app.services.tasks import TaskChanges
+from conftest import make_task
 
 
 async def entries(session: AsyncSession, task: Task) -> list[Entry]:
@@ -122,13 +123,13 @@ async def test_a_rejected_creation_does_not_burn_a_number(
 ) -> None:
     """Номер выдаётся последним: откат по валидации не оставляет дыры в нумерации."""
     with pytest.raises(TaskFieldsInvalidError) as error:
-        await service.create_task(
+        await make_task(
             db_session, actor=task_actor, project=project, title="  ", description="есть"
         )
     assert [item["field"] for item in error.value.details["fields"]] == ["title"]
     assert project.last_task_number == 0
 
-    created = await service.create_task(
+    created = await make_task(
         db_session, actor=task_actor, project=project, title="Первая", description="есть"
     )
     assert created.key == "TRK-1"
@@ -138,9 +139,7 @@ async def test_the_description_is_required(
     db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     with pytest.raises(TaskFieldsInvalidError):
-        await service.create_task(
-            db_session, actor=task_actor, project=project, title="x", description=" "
-        )
+        await make_task(db_session, actor=task_actor, project=project, title="x", description=" ")
 
 
 # --- Чтение ---------------------------------------------------------------------------
@@ -178,7 +177,7 @@ async def test_opening_requires_filled_sections(
     db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 2: все незаполненные разделы перечислены сразу."""
-    blank = await service.create_task(
+    blank = await make_task(
         db_session, actor=task_actor, project=project, title="Пустая", description="Без разделов"
     )
 
@@ -578,7 +577,7 @@ async def test_seq_grows_across_the_tracker_and_no_inside_each_task(
     other_project = await projects_service.create_project(
         db_session, actor=main_actor, key="OPS", title="Эксплуатация"
     )
-    other = await service.create_task(
+    other = await make_task(
         db_session, actor=task_actor, project=other_project, title="Дежурство", description="Есть"
     )
     await service.update_task(db_session, task, actor=task_actor, changes=TaskChanges(goal="a"))

@@ -56,6 +56,7 @@ test('страницы списка листаются рядом номеров
       headers: { Authorization: `Bearer ${token}` },
       data: {
         project: 'DEMO',
+        area: 'DEMO/core',
         title: `Задача для проверки листания № ${index + 1}`,
         description: 'Заведена сквозным тестом, чтобы список не поместился на страницу.',
       },
@@ -164,6 +165,7 @@ test('запись с последней страницы дела дочиты�
     headers: { Authorization: `Bearer ${token}` },
     data: {
       project: 'DEMO',
+      area: 'DEMO/core',
       title: 'Задача с делом длиннее одной страницы',
       description: 'Заведена сквозным тестом ради проверки ссылки на дальнюю запись.',
     },

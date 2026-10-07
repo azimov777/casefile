@@ -19,14 +19,16 @@ interface ChangeTaskAreaProps {
 
 /**
  * Кнопка «Изменить» у области в полосе свойств карточки и её окно: выбрать
- * область проекта или «без области» (TRK-557, TRK#16, ч. 4: «поле правится там
- * же, где приоритет»).
+ * область проекта (TRK-557, TRK#16, ч. 4: «поле правится там же, где приоритет»).
+ * Область можно сменить, но не снять (TRK-677, `area_required`): пункт «без области»
+ * стоит только у старой задачи, у которой области нет, и вернуться к нему после выбора
+ * нельзя.
  *
  * Выбор — переключатели, а не выпадающий список: областей у проекта единицы, и каждая
  * видна сразу с описанием, — выбирают по смыслу, а не по ключу. Предлагаются только
  * активные: архивная область бэкенд не поставит (`area_archived`). Нынешняя
- * архивная стоит среди вариантов, чтобы окно открывалось на правде, а уйти из неё можно
- * одним выбором «без области» — снять область можно всегда.
+ * архивная стоит среди вариантов, чтобы окно открывалось на правде; уйти из неё можно
+ * в любую активную.
  *
  * Показывать кнопку или нет, решает место вызова: у закрытой задачи и у задачи
  * архивного проекта правки нет вовсе (`task_closed`, `project_archived`).
@@ -84,7 +86,7 @@ function ChangeAreaForm({
       onDone();
       return;
     }
-    change.mutate({ taskKey, area: chosen === NONE ? null : chosen }, { onSuccess: onDone });
+    change.mutate({ taskKey, area: chosen }, { onSuccess: onDone });
   }
 
   return (
@@ -100,14 +102,16 @@ function ChangeAreaForm({
           <span className="text-meta text-muted" id={legendId}>
             {t('task.legend')}
           </span>
-          <Choice
-            name={legendId}
-            value={NONE}
-            chosen={chosen}
-            onChoose={setChosen}
-            title={t('task.none')}
-            hint={t('task.noneHint')}
-          />
+          {current === null ? (
+            <Choice
+              name={legendId}
+              value={NONE}
+              chosen={chosen}
+              onChoose={setChosen}
+              title={t('task.none')}
+              hint={t('task.noneHint')}
+            />
+          ) : null}
           {currentArchived === null ? null : (
             <Choice
               name={legendId}

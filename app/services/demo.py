@@ -51,6 +51,7 @@ from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.projects import normalize_project_key
 from app.domain.tasks import TaskPriority, TaskStatus
+from app.services import areas as areas_service
 from app.services import attributes as attributes_service
 from app.services import case as case_service
 from app.services import discussions as discussions_service
@@ -64,6 +65,12 @@ from app.services.tasks import TaskChanges
 
 #: Ключ демонстрационного проекта. Он же признак «демо уже наполнено».
 DEMO_PROJECT_KEY = "DEMO"
+
+#: Область демо-проекта: все его задачи, кроме одной «старой», заведены с ней (`area_required`).
+DEMO_AREA = "DEMO/core"
+
+#: Область соседнего проекта: задача, переехавшая туда, обязана назвать область целевого проекта.
+_NEIGHBOUR_AREA = "LEGACY/past"
 
 #: Соседний проект демо: в него задача переезжает и возвращается, и он уходит в архив.
 DEMO_NEIGHBOUR_KEY = "LEGACY"
@@ -122,6 +129,14 @@ async def seed_demo(session: AsyncSession) -> DemoData:
         key=DEMO_PROJECT_KEY,
         title="Демонстрация",
         description=_PROJECT_DESCRIPTION,
+    )
+
+    await areas_service.create_area(
+        session,
+        actor=owner,
+        address=DEMO_AREA,
+        title="Ядро",
+        description="Основные механики демо-проекта: все его задачи лежат здесь.",
     )
 
     done = await _done_task(session, project, agent=agent, temporary=temporary, human=human)
@@ -286,6 +301,7 @@ async def _done_task(
         session,
         actor=agent,
         project=project,
+        area=DEMO_AREA,
         title="Ключ задачи сгорает на отклонённом запросе",
         description=(
             "Номер выдаётся счётчиком проекта до валидации тела, поэтому запрос, "
@@ -440,6 +456,7 @@ async def _accepted_warning_task(
         session,
         actor=agent,
         project=project,
+        area=DEMO_AREA,
         title="Подсказка о сгоревшем номере в списке задач",
         description="Продолжение замечания к DEMO-1: дыра в нумерации видна в списке.",
         goal="Человек видит в списке, что номер задачи сгорел, а не потерян",
@@ -510,6 +527,7 @@ async def _deferred_task(session: AsyncSession, project: Project, *, agent: Acto
         session,
         actor=agent,
         project=project,
+        area=DEMO_AREA,
         title="Сверить карточку в каталоге после его еженедельной синхронизации",
         description="Каталог обновляет карточки раз в неделю; новое описание ещё не доехало.",
         goal="Карточка в каталоге показывает новое описание и ссылку на установку",
@@ -519,6 +537,11 @@ async def _deferred_task(session: AsyncSession, project: Project, *, agent: Acto
         checks=["Карточка каталога показывает новое описание и ссылку на установку"],
         assignee=DEMO_AGENT_NAME,
     )
+    # Единственная «старая» задача демо — заведённая до правила `area_required`: новой
+    # без области не бывает, поэтому область снимается напрямую в строке, в обход
+    # сервиса. На ней видно, что задача без области читается и правится как раньше.
+    task.area = None
+    await session.flush()
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
     moment = await TaskRepository(session).clock() + DEMO_DEFERRAL
@@ -614,6 +637,7 @@ async def _in_progress_task(
         session,
         actor=agent,
         project=project,
+        area=DEMO_AREA,
         title="Лента журнала теряет записи при переподключении",
         description=(
             "Клиент, переподключившийся к потоку с `Last-Event-ID`, иногда пропускает "
@@ -668,6 +692,7 @@ async def _candidate_task(session: AsyncSession, project: Project, *, agent: Act
         session,
         actor=agent,
         project=project,
+        area=DEMO_AREA,
         title="Ссылка на запись дела в ленте не открывает запись",
         description="В ленте ссылка `DEMO-1#3` показана текстом, перейти к записи нельзя.",
         goal="Из ленты можно перейти к записи, на которую сослались",
@@ -696,6 +721,7 @@ async def _awaiting_answer_task(
         session,
         actor=agent,
         project=project,
+        area=DEMO_AREA,
         title="Удалять ли записи дела отменённых задач через год",
         description="Дело отменённой задачи занимает место и никем не читается.",
         goal="Решено, что делать с делами отменённых задач",
@@ -750,6 +776,7 @@ async def _child_task(
         session,
         actor=agent,
         project=project,
+        area=DEMO_AREA,
         title="Тест на разрыв потока посреди выдачи",
         description="Отдельная задача: тест требует своего стенда с обрывом соединения.",
         goal="Разрыв потока покрыт тестом",
@@ -777,6 +804,7 @@ async def _checking_task(
         session,
         actor=agent,
         project=project,
+        area=DEMO_AREA,
         title="Ошибки поиска не называют допустимые значения",
         description="Отказ разбора запроса приходит без списка допустимых полей.",
         goal="Отказ поиска чинится с первой попытки, без перебора",
@@ -833,6 +861,7 @@ async def _cancelled_task(session: AsyncSession, project: Project, *, agent: Act
         session,
         actor=agent,
         project=project,
+        area=DEMO_AREA,
         title="Добавить вебхуки на закрытие задачи",
         description="Назначателю нужен push вместо чтения ленты.",
         goal="Назначатель узнаёт о закрытии задачи без опроса",
@@ -941,12 +970,16 @@ async def _moved_there_and_back(
         title="Прежний проект",
         description="Проект, откуда задачи переехали в DEMO.",
     )
+    await areas_service.create_area(
+        session, actor=owner, address=_NEIGHBOUR_AREA, title="Прошлое", description=""
+    )
     await tasks_service.move_task(
         session,
         task,
         actor=owner,
         project=neighbour,
         reason="Вебхуки — тема интеграций, а она ведётся в отдельном проекте",
+        area=_NEIGHBOUR_AREA,
     )
     await tasks_service.move_task(
         session,
@@ -954,6 +987,7 @@ async def _moved_there_and_back(
         actor=owner,
         project=home,
         reason="Интеграции снова ведутся в DEMO: отдельный проект не прижился",
+        area=DEMO_AREA,
     )
     await projects_service.archive_project(
         session, neighbour, actor=owner, reason="Задачи вернулись в DEMO, проект пуст"

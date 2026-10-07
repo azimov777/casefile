@@ -66,7 +66,12 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
     title: `Продвижение ${RUN}`,
   });
 
-  const create = async (title: string, area: string | null) =>
+  // Задача без области новой не бывает: «чужие» задачи лежат в другой области проекта.
+  await api(request, 'post', `/api/v1/projects/${KEY}/areas`, {
+    key: 'rest',
+    title: `Остальное ${RUN}`,
+  });
+  const create = async (title: string, area: string) =>
     (
       await api(
         request,
@@ -82,7 +87,7 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
           output: 'Число в шапке',
           checks: ['Число равно заголовку списка'],
           assignee: 'demo_agent',
-          ...(area === null ? {} : { area }),
+          area,
         },
         agent,
       )
@@ -94,10 +99,10 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
   };
 
   await move(await create('В работе, в области', ADDRESS), ['open', 'in_progress']);
-  await move(await create('В работе, без области', null), ['open', 'in_progress']);
+  await move(await create('В работе, в другой области', `${KEY}/rest`), ['open', 'in_progress']);
   await move(await create('Открыта, в области', ADDRESS), ['open']);
 
-  const waiting = await create('Ждёт ответа, без области', null);
+  const waiting = await create('Ждёт ответа, в другой области', `${KEY}/rest`);
   const asked = await api(
     request,
     'post',

@@ -114,6 +114,7 @@ async function seed(request: APIRequestContext): Promise<void> {
       headers,
       data: {
         project: 'DEMO',
+        area: 'DEMO/core',
         title: `Задача для проверки сдвига при фильтре № ${index}`,
         description: 'Заведена сквозным тестом, чтобы число выдачи было двузначным.',
         priority,

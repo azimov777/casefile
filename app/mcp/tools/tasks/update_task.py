@@ -94,7 +94,10 @@ class TaskChanges(BaseModel):
     )
     priority: TaskPrioritySchema = unset_field(description="Task priority")
     area: str | None = unset_field(
-        description=f"{AREA_RULE}; `null` clears",
+        description=(
+            f"{AREA_RULE}; the area can be changed but not taken off: `null` is refused with "
+            "`area_required`"
+        ),
     )
     not_before: str | None = unset_field(
         description=(

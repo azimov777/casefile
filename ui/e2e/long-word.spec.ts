@@ -34,6 +34,7 @@ async function create(request: APIRequestContext): Promise<string> {
     headers: auth(),
     data: {
       project: 'DEMO',
+      area: 'DEMO/core',
       title: 'Подопытная задача для длинного слова и кода без переноса (UI-150)',
       description: 'Заведена сквозным тестом UI-150: длинное слово и код на 390 px.',
     },

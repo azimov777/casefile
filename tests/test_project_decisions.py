@@ -38,7 +38,7 @@ from app.services import search as search_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.tasks import TaskChanges
-from conftest import Connect, call, refuse
+from conftest import Connect, call, make_task, refuse
 
 # --- Помощники ---------------------------------------------------------------------------
 
@@ -67,7 +67,7 @@ async def _decision(
 async def _task(
     session: AsyncSession, project: Project, actor: Actor, title: str, decisions: list[str]
 ) -> Task:
-    return await tasks_service.create_task(
+    return await make_task(
         session,
         actor=actor,
         project=project,
@@ -418,6 +418,7 @@ async def test_rest_supersedes_reads_statuses_and_cites_decisions(
         "/api/v1/tasks",
         json={
             "project": "TRK",
+            "area": "TRK/core",
             "title": "Задача",
             "description": "d",
             "decisions": [f"TRK#{first_no}"],
@@ -461,6 +462,7 @@ async def test_rest_supersedes_reads_statuses_and_cites_decisions(
         "/api/v1/tasks",
         json={
             "project": "TRK",
+            "area": "TRK/core",
             "title": "Вторая",
             "description": "d",
             "decisions": [f"TRK#{first_no}"],
@@ -482,7 +484,8 @@ async def test_rest_reads_a_decisions_edit_in_the_case(
     )
     ref = f"TRK#{decision.json()['data']['no']}"
     created = await auth_client.post(
-        "/api/v1/tasks", json={"project": "TRK", "title": "Задача", "description": "d"}
+        "/api/v1/tasks",
+        json={"project": "TRK", "area": "TRK/core", "title": "Задача", "description": "d"},
     )
     key = created.json()["data"]["key"]
 
@@ -513,6 +516,7 @@ async def test_mcp_decisions_from_filing_to_history(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Страница цены",
             description="Проверка спроса",
             sections={
@@ -561,6 +565,7 @@ async def test_mcp_decisions_from_filing_to_history(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Слух",
             description="d",
             decisions=[f"{key}#1"],

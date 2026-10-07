@@ -126,6 +126,7 @@
 | `area_description_too_long` | Area description is too long | Описание области длиннее предела (`app/domain/areas.py`); не обрезается. |
 | `area_project_mismatch` | Area belongs to another project than the task | Область другого проекта: задаче подходит область её собственного проекта. |
 | `area_reason_required` | Archiving or restoring an area requires a reason | Архивирование и восстановление области требуют непустой причины `reason`. |
+| `area_required` | A task needs an area: name one of the project's areas | У новой задачи области нет, а она обязательна; снять область у задачи нельзя. |
 | `attribute_reason_required` | Changing or removing an attribute requires a reason | Изменение и снятие атрибута требуют непустой причины `reason`. |
 | `attribute_value_too_long` | Attribute value is too long | Значение атрибута длиннее предела (`app/domain/attributes.py`). |
 | `current_password_mismatch` | Current password does not match | Смена своего пароля прислала неверный прежний пароль. |

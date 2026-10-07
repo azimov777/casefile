@@ -153,11 +153,11 @@ export const area = {
     label: 'Change the area of {{key}}',
     title: 'Area of {{key}}',
     intro:
-      'An area of the task’s own project, or none. The change is filed in the task case; agents see it in the task card.',
+      'An area of the task’s own project. It can be changed but not taken off. The change is filed in the task case; agents see it in the task card.',
     legend: 'Area',
     loading: 'Reading the areas of the project…',
     none: 'No area',
-    noneHint: 'The task belongs to no endless part of the project work.',
+    noneHint: 'The task has no area: it was filed before areas became required.',
     archivedOption: '{{title}} (archived)',
     archivedHint:
       'The current area is archived: the task can stay in it or leave it, but cannot come back once it leaves.',

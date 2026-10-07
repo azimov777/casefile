@@ -25,6 +25,7 @@ from app.services.auth import TRACKER_ACTOR
 
 READY: dict[str, Any] = {
     "project": "TRK",
+    "area": "TRK/core",
     "title": "Починить выдачу ключей задач",
     "description": "Ключ выдаётся до валидации и сгорает на неудачном запросе",
     "goal": "Ключи не сгорают",
@@ -155,6 +156,7 @@ async def test_mcp_refuses_without_an_assignee_and_for_another_one(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Без исполнителя",
             description="Есть",
             sections=SECTIONS,
@@ -191,6 +193,7 @@ async def test_mcp_lets_a_temporary_agent_in_by_its_label(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Под метку",
             description="Есть",
             sections=SECTIONS,

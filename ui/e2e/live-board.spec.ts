@@ -61,6 +61,7 @@ async function fillBacklog(request: APIRequestContext): Promise<string[]> {
       headers: auth(),
       data: {
         project: 'DEMO',
+        area: 'DEMO/core',
         title: `Задача для проверки живой доски № ${index + 1}`,
         description: 'Заведена сквозным тестом, чтобы столбец доски не влез в одну страницу.',
       },
@@ -84,6 +85,7 @@ async function seedMover(request: APIRequestContext): Promise<string> {
     headers: auth(),
     data: {
       project: 'DEMO',
+      area: 'DEMO/core',
       title: 'Задача, которую сквозной тест двигает между столбцами',
       description: 'Заведена сквозным тестом: на ней проверяется, что доска обновляется сама.',
       goal: 'Проверить, что карточка переезжает в свой столбец без нажатия.',

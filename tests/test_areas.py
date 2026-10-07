@@ -48,6 +48,12 @@ AREAS = "/api/v1/projects/{key}/areas"
 AREA = "/api/v1/projects/{key}/areas/{area}"
 
 
+@pytest.fixture
+async def project(bare_project: Project) -> Project:
+    """В этом файле у проекта областей нет, пока тест не заведёт свою: в `TRK` её нет."""
+    return bare_project
+
+
 async def _promotion(session: AsyncSession, actor: Actor, project: Project) -> Area:
     """Область `TRK/x` — на ней проверяется всё, что требует существующей области."""
     del project  # проект `TRK` заводит фикстура; адрес называет его сам

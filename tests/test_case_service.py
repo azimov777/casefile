@@ -35,6 +35,7 @@ from app.services import participants as participants_service
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
+from conftest import make_task
 
 SUMMARY = {
     "done": "Разобрался, где сгорает номер",
@@ -73,7 +74,7 @@ async def ready(
     Сводка и два перехода — не предмет здешних тестов, но без них до `done` не
     добраться: правило сводки проверяется выше своим тестом.
     """
-    task = await tasks_service.create_task(
+    task = await make_task(
         session,
         actor=actor,
         project=project,
@@ -171,7 +172,7 @@ async def test_an_answer_points_at_a_question_of_the_same_task(
     db_session: AsyncSession, task: Task, task_actor: Actor, project: Project
 ) -> None:
     """Обзорная проверка 5: чужая запись и запись не того типа отвергаются одинаково."""
-    other = await tasks_service.create_task(
+    other = await make_task(
         db_session,
         actor=task_actor,
         project=project,
@@ -859,7 +860,7 @@ async def test_the_inbox_is_filtered_by_project(
     other_project = await projects_service.create_project(
         db_session, actor=main_actor, key="OPS", title="Эксплуатация", description=""
     )
-    other = await tasks_service.create_task(
+    other = await make_task(
         db_session,
         actor=task_actor,
         project=other_project,

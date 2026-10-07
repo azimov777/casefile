@@ -49,6 +49,19 @@ ProjectArg = Annotated[
     ),
 ]
 
+MoveAreaArg = Annotated[
+    str | None,
+    Field(
+        description=(
+            "Address `PROJECT/key` of an area of the target project; required: without it "
+            "the move is refused with `area_required` (its `details.areas` lists the "
+            "target project's active areas). Another project's area answers "
+            "`area_project_mismatch`, an unknown one `area_not_found`, an archived one "
+            "`area_archived`. With a list of keys the area is put on every task"
+        ),
+    ),
+]
+
 MoveReasonArg = Annotated[
     str,
     Field(
@@ -159,7 +172,12 @@ def register(tools: Toolset) -> None:
     runtime = tools.runtime
 
     @tools.tool(title="Move task to project", annotations=FILING)
-    async def move_task(key: MoveKeyArg, project: ProjectArg, reason: MoveReasonArg) -> MoveView:
+    async def move_task(
+        key: MoveKeyArg,
+        project: ProjectArg,
+        reason: MoveReasonArg,
+        area: MoveAreaArg = None,
+    ) -> MoveView:
         """Moves a task to another project, recording the move, both keys and the reason
         as a `moved` entry of the task.
 
@@ -167,8 +185,10 @@ def register(tools: Toolset) -> None:
         when it returns to a project it has been in: a task holds at most one key per
         project. The key it leaves goes to `previous_keys` and keeps addressing the task
         in every call that takes a key; no other task ever gets it. Status, sections,
-        links, parent, children and case stay as they are, and a closed task moves too;
-        its area is dropped.
+        links, parent, children and case stay as they are, and a closed task moves too.
+        The old area stays in the old project: the call names an area of the new one in
+        `area`, which replaces it and is filed as `field_changed`; without it the move is
+        refused with `area_required`, the target project's areas in `details.areas`.
         One key moves one task: its children stay in their project.
 
         Moving into or out of a frozen project fails with `project_archived`.
@@ -185,12 +205,12 @@ def register(tools: Toolset) -> None:
         async with runtime.call() as (session, actor):
             if not isinstance(key, str):
                 outcomes = await tasks_service.move_tasks(
-                    session, key, actor=actor, project_key=project, reason=reason
+                    session, key, actor=actor, project_key=project, reason=reason, area=area
                 )
                 return MoveView(results=[move_result(item) for item in outcomes])
             task = await tasks_service.get_task(session, key)
             target = await projects_service.get_project(session, project)
             moved = await tasks_service.move_task(
-                session, task, actor=actor, project=target, reason=reason
+                session, task, actor=actor, project=target, reason=reason, area=area
             )
             return move(moved)

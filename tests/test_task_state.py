@@ -199,6 +199,7 @@ async def test_state_names_blockers_children_and_the_closing_unmeasured(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Часть работы",
             description="Ребёнок",
             parent=key,
@@ -207,6 +208,7 @@ async def test_state_names_blockers_children_and_the_closing_unmeasured(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Блокер",
             description="Not ready",
         )
@@ -275,6 +277,7 @@ async def test_brief_names_the_parent_without_its_goal(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Часть",
             description="Ребёнок",
             parent=open_task.key,

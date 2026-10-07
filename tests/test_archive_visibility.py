@@ -29,10 +29,9 @@ from app.services import journal as journal_service
 from app.services import links as links_service
 from app.services import projects as projects_service
 from app.services import search as search_service
-from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.search import StructuredTerm
-from conftest import Connect, call
+from conftest import Connect, call, make_task
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,10 +48,10 @@ async def world(db_session: AsyncSession, project: Project, task: Task, main_act
     live = await projects_service.create_project(
         db_session, actor=main_actor, key="OPS", title="Живой"
     )
-    outsider = await tasks_service.create_task(
+    outsider = await make_task(
         db_session, actor=main_actor, project=live, title="Программа", description="Родитель"
     )
-    child = await tasks_service.create_task(
+    child = await make_task(
         db_session,
         actor=main_actor,
         project=project,

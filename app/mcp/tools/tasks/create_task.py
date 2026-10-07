@@ -118,6 +118,12 @@ def register(tools: Toolset) -> None:
         fit one pass, or it depends on something that does not exist yet. These signs
         appear on entry into the parent and after each attempt.
 
+        A task needs an area: `area` names an active area of the project, `PROJECT/key`.
+        Without it the call is refused with `area_required`, and `details.areas` lists
+        the project's areas (empty until one is made with `create_project`, address
+        `PROJECT/key`). The tracker never picks one, and a child does not take its
+        parent's.
+
         The response carries the key issued by the tracker. An empty title or
         description is refused with `task_fields_invalid`.
         """

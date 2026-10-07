@@ -1,8 +1,10 @@
 """Поле задачи `area` (TRK-556): заведение и правка, `get_task`, поиск, снятие переносом.
 
 Правила — `CONCEPT.md`, 3.3 («Область задачи»), 3.7, 4.2 и 4.4 (решение владельца
-`TRK#16`, части 3 и 4): адрес области того же проекта или `null`, одна на задачу;
-правка подшивает `field_changed` в дело задачи; наследования нет; перенос снимает поле.
+`TRK#16`, части 3 и 4; обязательность — TRK-677): адрес области того же проекта, одна на
+задачу; правка подшивает `field_changed` в дело задачи; наследования нет; перенос
+ставит область целевого проекта. В этом файле `task` и `_new` без `area` — задачи,
+заведённые до правила: строка с пустой областью, в обход сервиса.
 
 Обзорные проверки задачи: (а) `update_task` ставит область, в деле `field_changed`;
 (б) чужой проект — `area_project_mismatch`, архивная — `area_archived`;
@@ -26,6 +28,7 @@ from app.domain.errors import (
     AreaArchivedError,
     AreaNotFoundError,
     AreaProjectMismatchError,
+    AreaRequiredError,
     ProjectArchivedError,
     SearchValueInvalidError,
     TaskClosedError,
@@ -41,7 +44,7 @@ from app.services import search as search_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.tasks import TaskChanges
-from conftest import Connect, call, refuse
+from conftest import Connect, call, make_task, move_task, refuse
 
 
 async def _area(
@@ -70,12 +73,25 @@ async def _keys(session: AsyncSession, actor: Actor, **kwargs: Any) -> list[str]
     return [found.task.key for found in outcome.page.items]
 
 
+@pytest.fixture
+async def task(db_session: AsyncSession, task: Task) -> Task:
+    """`TRK-1` как заведённая до правила: без области."""
+    task.area = None
+    await db_session.flush()
+    return task
+
+
 async def _new(
     session: AsyncSession, actor: Actor, project: Project, title: str, **kw: Any
 ) -> Task:
-    return await tasks_service.create_task(
+    """Задача с областью, если она названа; без `area` — «старая», без области."""
+    created = await make_task(
         session, actor=actor, project=project, title=title, description="Для проверки", **kw
     )
+    if "area" not in kw:
+        created.area = None
+        await session.flush()
+    return created
 
 
 # --- (а) Постановка и правка ---------------------------------------------------------------
@@ -101,7 +117,7 @@ async def test_update_sets_the_area_and_files_field_changed(
     assert [entry.type for entry in own] == [EntryType.CREATED]
 
 
-async def test_the_area_changes_and_clears_with_a_record_each_time(
+async def test_the_area_changes_with_a_record_each_time_and_cannot_be_cleared(
     db_session: AsyncSession, main_actor: Actor, project: Project, task: Task
 ) -> None:
     await _area(db_session, main_actor, "TRK/x")
@@ -110,17 +126,17 @@ async def test_the_area_changes_and_clears_with_a_record_each_time(
     await _set(db_session, main_actor, task, "TRK/x")
     await _set(db_session, main_actor, task, "TRK/y")
     same = await _set(db_session, main_actor, task, "TRK/y")
-    await _set(db_session, main_actor, task, None)
+    with pytest.raises(AreaRequiredError):
+        await _set(db_session, main_actor, task, None)
 
     assert not same.changed, "то же значение — ни версии, ни записи"
-    assert task.area is None
+    assert task.area is not None and task.area.address == "TRK/y"
     assert [
         (item["before"], item["after"])
         for item in await _field_changes(db_session, main_actor, task)
     ] == [
         (None, "TRK/x"),
         ("TRK/x", "TRK/y"),
-        ("TRK/y", None),
     ]
 
 
@@ -133,7 +149,7 @@ async def test_the_area_is_editable_in_open_and_in_progress_but_not_when_closed(
     await tasks_service.transition_task(
         db_session, task, actor=main_actor, to=TaskStatus.IN_PROGRESS
     )
-    await _set(db_session, main_actor, task, None)
+    await _set(db_session, main_actor, task, "TRK/core")
     cancelled = await _new(db_session, main_actor, project, "Отменённая")
     await tasks_service.transition_task(
         db_session, cancelled, actor=main_actor, to=TaskStatus.CANCELLED, reason="не нужна"
@@ -194,12 +210,12 @@ async def test_an_archived_area_cannot_be_set_but_can_be_left(
         await _set(db_session, main_actor, other, "TRK/x")
     with pytest.raises(AreaArchivedError):
         await _new(db_session, main_actor, project, "Третья", area="TRK/x")
-    # Уже стоящее остаётся, снять можно.
+    # Уже стоящее остаётся, а уйти из него можно в другую область (снять нельзя).
     await tasks_service.update_task(
         db_session, task, actor=main_actor, changes=TaskChanges(priority="high", area="TRK/x")
     )
-    await _set(db_session, main_actor, task, None)
-    assert task.area is None
+    await _set(db_session, main_actor, task, "TRK/core")
+    assert task.area is not None and task.area.address == "TRK/core"
 
 
 async def test_the_area_of_a_task_in_an_archived_project_is_frozen(
@@ -219,8 +235,11 @@ async def test_create_task_takes_the_area(
 ) -> None:
     await _area(db_session, main_actor)
     created = await _new(db_session, main_actor, project, "Внутри области", area="trk/x")
-    plain = await _new(db_session, main_actor, project, "Без области")
-    assert (created.area.address, plain.area) == ("TRK/x", None)
+    assert created.area.address == "TRK/x"
+    with pytest.raises(AreaRequiredError):
+        await tasks_service.create_task(
+            db_session, actor=main_actor, project=project, title="Без области", description="d"
+        )
 
 
 async def test_a_child_does_not_inherit_the_area_of_its_parent(
@@ -228,14 +247,15 @@ async def test_a_child_does_not_inherit_the_area_of_its_parent(
 ) -> None:
     await _area(db_session, main_actor)
     parent = await _new(db_session, main_actor, project, "Программа", area="TRK/x")
-    child = await _new(db_session, main_actor, project, "Часть")
+    child = await _new(db_session, main_actor, project, "Часть", area="TRK/core")
     await links_service.add_link(db_session, child, parent, actor=main_actor, kind=LinkKind.CHILD)
 
     assert parent.area is not None
-    assert child.area is None
+    assert child.area is not None
+    assert child.area.address == "TRK/core"
 
 
-async def test_mcp_creates_a_child_with_a_parent_and_no_area(
+async def test_mcp_creates_a_child_with_its_own_area_not_the_parents(
     mcp_session: Connect,
     task_secret: str,
     project: Project,
@@ -256,6 +276,7 @@ async def test_mcp_creates_a_child_with_a_parent_and_no_area(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Часть",
             description="d",
             parent=parent["key"],
@@ -263,7 +284,7 @@ async def test_mcp_creates_a_child_with_a_parent_and_no_area(
         card = await call(session, "get_task", key=child["key"])
         parent_card = await call(session, "get_task", key=parent["key"])
 
-    assert card["task"]["area"] is None
+    assert card["task"]["area"]["address"] == "TRK/core"
     assert parent_card["task"]["area"] == {
         "address": "TRK/x",
         "title": "Популяризация",
@@ -275,24 +296,25 @@ async def test_mcp_creates_a_child_with_a_parent_and_no_area(
 # --- (г) Перенос ----------------------------------------------------------------------------
 
 
-async def test_move_drops_the_area_and_files_field_changed(
+async def test_move_replaces_the_area_and_files_field_changed(
     db_session: AsyncSession, main_actor: Actor, project: Project, task: Task
 ) -> None:
     ui = await projects_service.create_project(
         db_session, actor=main_actor, key="UI", title="Интерфейс"
     )
+    board = await _area(db_session, main_actor, "UI/board", "Доска")
     await _area(db_session, main_actor)
     await _set(db_session, main_actor, task, "TRK/x")
 
     await tasks_service.move_task(
-        db_session, task, actor=main_actor, project=ui, reason="Интерфейс"
+        db_session, task, actor=main_actor, project=ui, reason="Интерфейс", area="UI/board"
     )
 
-    assert task.area is None
+    assert task.area_id == board.id
     assert (await _field_changes(db_session, main_actor, task))[-1] == {
         "field": "area",
         "before": "TRK/x",
-        "after": None,
+        "after": "UI/board",
     }
     moves = await case_service.list_entries(
         db_session, task, actor=main_actor, types=[EntryType.MOVED]
@@ -300,12 +322,13 @@ async def test_move_drops_the_area_and_files_field_changed(
     assert len(moves.items) == 1
 
 
-async def test_a_closed_task_in_an_archived_area_still_moves_and_drops_it(
+async def test_a_closed_task_in_an_archived_area_still_moves_to_a_live_one(
     db_session: AsyncSession, main_actor: Actor, project: Project, task: Task
 ) -> None:
     ui = await projects_service.create_project(
         db_session, actor=main_actor, key="UI", title="Интерфейс"
     )
+    await _area(db_session, main_actor, "UI/board", "Доска")
     area = await _area(db_session, main_actor)
     await _set(db_session, main_actor, task, "TRK/x")
     await tasks_service.transition_task(
@@ -313,21 +336,23 @@ async def test_a_closed_task_in_an_archived_area_still_moves_and_drops_it(
     )
     await areas_service.archive_area(db_session, area, actor=main_actor, reason="Пауза")
 
-    await tasks_service.move_task(db_session, task, actor=main_actor, project=ui, reason="Перенос")
+    await tasks_service.move_task(
+        db_session, task, actor=main_actor, project=ui, reason="Перенос", area="UI/board"
+    )
 
-    assert task.area is None
+    assert task.area is not None and task.area.address == "UI/board"
 
 
-async def test_a_move_of_a_task_without_an_area_files_no_field_changed(
+async def test_a_move_of_an_old_task_without_an_area_files_the_new_one_as_from_null(
     db_session: AsyncSession, main_actor: Actor, project: Project, task: Task
 ) -> None:
     ui = await projects_service.create_project(
         db_session, actor=main_actor, key="UI", title="Интерфейс"
     )
-    await tasks_service.move_task(
-        db_session, task, actor=main_actor, project=ui, reason="Интерфейс"
-    )
-    assert await _field_changes(db_session, main_actor, task) == []
+    await move_task(db_session, task, actor=main_actor, project=ui, reason="Интерфейс")
+    assert await _field_changes(db_session, main_actor, task) == [
+        {"field": "area", "before": None, "after": "UI/core"}
+    ]
 
 
 # --- (д) Поиск ------------------------------------------------------------------------------
@@ -451,12 +476,12 @@ async def test_mcp_sets_the_area_and_finds_the_task_by_it(
         found = await call(session, "search_tasks", query="area: TRK/x", fields=["key", "area"])
         by_argument = await call(session, "search_tasks", area=["empty()"], fields=["key"])
         refused = await refuse(session, "update_task", key=key, changes={"area": "UI/x"})
-        cleared = await call(session, "update_task", key=key, changes={"area": None})
+        cleared = await refuse(session, "update_task", key=key, changes={"area": None})
         card = await call(session, "get_task", key=key)
 
     assert updated["entries"]
     assert found["items"] == [{"key": key, "area": {"address": "TRK/x", "title": "Популяризация"}}]
     assert [row["key"] for row in by_argument["items"]] == []
     assert "project_not_found" in refused or "area_not_found" in refused
-    assert cleared["entries"]
-    assert card["task"]["area"] is None
+    assert "area_required" in cleared
+    assert card["task"]["area"]["address"] == "TRK/x"

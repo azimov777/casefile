@@ -33,6 +33,7 @@ async function create(request: APIRequestContext): Promise<string> {
     headers: auth(),
     data: {
       project: 'DEMO',
+      area: 'DEMO/core',
       title: 'Подопытная задача для причины перехода со ссылкой (UI-159)',
       description: 'Заведена сквозным тестом UI-159: причина отмены со ссылкой на запись.',
     },

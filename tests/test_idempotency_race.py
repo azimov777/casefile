@@ -40,6 +40,7 @@ from app.domain.idempotency import IDEMPOTENCY_KEY_HEADER
 from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenKind
 from app.main import create_app
+from app.services import areas as areas_service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
 from app.services import tokens as tokens_service
@@ -94,6 +95,9 @@ async def committed_installation(
             key=PROJECT_KEY,
             title="Гонка ключей",
         )
+        await areas_service.create_area(
+            session, actor=TRACKER_ACTOR, address=f"{PROJECT_KEY}/core", title="Основа"
+        )
         await session.commit()
         secret, owner_id = issued.secret, owner.id
 
@@ -119,10 +123,25 @@ async def committed_installation(
                 ),
                 {"key": PROJECT_KEY},
             )
+            # Области проекта и их дело: заведённая область открывает дело записью `created`.
+            await session.execute(
+                text(
+                    "DELETE FROM entries WHERE area_id IN (SELECT id FROM areas WHERE project_id "
+                    "IN (SELECT id FROM projects WHERE key = :key))"
+                ),
+                {"key": PROJECT_KEY},
+            )
             await session.execute(text("ALTER TABLE entries ENABLE TRIGGER entries_immutable"))
             await session.execute(
                 text(
                     "DELETE FROM tasks "
+                    "WHERE project_id IN (SELECT id FROM projects WHERE key = :key)"
+                ),
+                {"key": PROJECT_KEY},
+            )
+            await session.execute(
+                text(
+                    "DELETE FROM areas "
                     "WHERE project_id IN (SELECT id FROM projects WHERE key = :key)"
                 ),
                 {"key": PROJECT_KEY},
@@ -156,6 +175,7 @@ async def test_ten_parallel_repeats_create_one_task(live_client: AsyncClient) ->
     """Обзорная проверка 4: одна задача, десять одинаковых ответов."""
     body = {
         "project": PROJECT_KEY,
+        "area": f"{PROJECT_KEY}/core",
         "title": "Гонка одинаковых ключей",
         "description": "Десять повторов одного вызова",
     }
@@ -195,14 +215,24 @@ async def test_a_failed_call_frees_the_key(live_client: AsyncClient) -> None:
     key = "race-key-after-failure"
     rejected = await live_client.post(
         "/api/v1/tasks",
-        json={"project": PROJECT_KEY, "title": "", "description": "Пустое название"},
+        json={
+            "project": PROJECT_KEY,
+            "area": f"{PROJECT_KEY}/core",
+            "title": "",
+            "description": "Пустое название",
+        },
         headers={IDEMPOTENCY_KEY_HEADER: key},
     )
     assert rejected.status_code == 422, rejected.text
 
     accepted = await live_client.post(
         "/api/v1/tasks",
-        json={"project": PROJECT_KEY, "title": "Теперь название есть", "description": "Есть"},
+        json={
+            "project": PROJECT_KEY,
+            "area": f"{PROJECT_KEY}/core",
+            "title": "Теперь название есть",
+            "description": "Есть",
+        },
         headers={IDEMPOTENCY_KEY_HEADER: key},
     )
 
@@ -218,7 +248,12 @@ async def test_an_uncommitted_key_is_invisible_to_another_connection(
     del committed_installation
     await live_client.post(
         "/api/v1/tasks",
-        json={"project": PROJECT_KEY, "title": "Ключ вместе ответом", "description": "Есть"},
+        json={
+            "project": PROJECT_KEY,
+            "area": f"{PROJECT_KEY}/core",
+            "title": "Ключ вместе ответом",
+            "description": "Есть",
+        },
         headers={IDEMPOTENCY_KEY_HEADER: "visible-key"},
     )
 
