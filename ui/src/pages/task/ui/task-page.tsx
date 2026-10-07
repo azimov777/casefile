@@ -398,40 +398,11 @@ export function TaskPage() {
 
   /*
    * Обсуждения задачи (TRK-672, `TRK#51`, п. 8): адрес, название и чей ход. Вопросы
-   * человеку живут там, а не в деле задачи, поэтому блок стоит рядом с блоком вопросов:
-   * сюда человек приходит с вопросом «чего ждёт эта задача».
+   * человеку живут там, а не в деле задачи, поэтому блок есть на карточке; стоит он в
+   * правой колонке над заданием, а не в левой рядом с вопросами: ещё один пустой ряд в
+   * левой колонке вытолкнул бы начало описи за первый экран (`e2e/layout.spec.ts`).
    */
   const taskDiscussions = discussions.data?.pages.flatMap((page) => page.items) ?? [];
-  if (taskDiscussions.length === 0) {
-    cardBlocks.push({
-      empty: true,
-      key: 'discussions',
-      id: 'discussions',
-      title: tDiscussions('taskBlock.title'),
-      text: discussions.isPending
-        ? tDiscussions('taskBlock.loading')
-        : tDiscussions('taskBlock.none'),
-    });
-  } else {
-    cardBlocks.push({
-      empty: false,
-      key: 'discussions',
-      node: (
-        <section key="discussions" className={block()} aria-labelledby="discussions">
-          <h2 className={blockTitle()} id="discussions">
-            {tDiscussions('taskBlock.title')}
-          </h2>
-          <ul className={NOTICE_LIST}>
-            {taskDiscussions.map((discussion) => (
-              <li key={discussion.address}>
-                <DiscussionRow discussion={discussion} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ),
-    });
-  }
 
   // Последняя запись всего дела: опись приходит пакетом задачи целиком, поэтому это
   // именно последняя, а не последняя из подгруженных (`docs/FRONTEND.md`).
@@ -581,6 +552,34 @@ export function TaskPage() {
         </div>
 
         <div className="flex flex-col gap-4 min-w-0 card:col-start-2 card:row-start-2">
+          {taskDiscussions.length === 0 ? (
+            <div className={block({ kind: 'empty' })}>
+              <div className={EMPTY_ROW}>
+                <h2 className={blockTitle({ kind: 'empty' })} id="discussions">
+                  {tDiscussions('taskBlock.title')}
+                </h2>
+                <p className={EMPTY}>
+                  {discussions.isPending
+                    ? tDiscussions('taskBlock.loading')
+                    : tDiscussions('taskBlock.none')}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <section className={block()} aria-labelledby="discussions">
+              <h2 className={blockTitle()} id="discussions">
+                {tDiscussions('taskBlock.title')}
+              </h2>
+              <ul className={NOTICE_LIST}>
+                {taskDiscussions.map((discussion) => (
+                  <li key={discussion.address}>
+                    <DiscussionRow discussion={discussion} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <section className={block()} aria-labelledby="sections">
             <h2 className={blockTitle()} id="sections">
               {t('assignment')}
