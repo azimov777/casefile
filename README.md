@@ -201,7 +201,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 **Tasks**
 - `get_task` — returns everything about one task in a single call: card, parent and children, links, computed features, latest summary, open questions, unresolved remarks, case index and transition targets
 - `search_tasks` — searches tasks by a query-language string, by separate conditions, or by both
-- `create_task` — creates a task in `backlog`, optionally as a child of a parent task
+- `create_task` — creates a task in `backlog` in an area of its project (`area_required` without one), optionally as a child of a parent task
 - `update_task` — changes the given fields of a task; fields left out stay as they are
 - `transition` — moves a task to another status along the fixed transition table
 - `close_task` — closes a task: files entries, verdicts and the final summary and moves it to `done`, in one transaction

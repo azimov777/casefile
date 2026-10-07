@@ -23,7 +23,7 @@ harness may show them with a prefix.
 - The casefile tools are in your tool list. If they are not, see the last section.
 - You know the task key. If the person gave you a topic instead, find it:
   `search_tasks(query="project: TRK and status: open and blocked: false and open_blocking_questions: 0 and deferred: false")`. If nothing
-  matches the work, file it with `create_task` first (step 4 shows the form): work with a
+  matches the work, file it with `create_task` first (step 4 shows the form; a task needs an `area` of its project): work with a
   result or a decision belongs in a task even when one session holds it all.
 
 ## 1. Enter the task
@@ -179,11 +179,19 @@ pass, or part of the work depends on something that does not exist yet. Each chi
 its own case:
 
 ```
-create_task(project="TRK", parent="TRK-42", title="Importer reads the new format",
+create_task(project="TRK", area="TRK/importer", parent="TRK-42",
+            title="Importer reads the new format",
             description="Split from TRK-42: the importer is a separate result.",
             sections={"goal": "…", "context": "…", "constraints": "…", "output": "…",
                       "checks": ["pytest tests/test_importer.py passes"]})
 ```
+
+A task is filed with an area, `PROJECT/key`: without `area` the call is refused with
+`area_required`, and `details.areas` lists the project's active areas. Pick the one the work
+belongs to; the tracker never picks it, and a child does not take its parent's. A project
+without areas needs one first: `create_project` with the address `PROJECT/key`. `move_task`
+names an area of the target project in `area` for the same reason, and `update_task` can
+change the area but not take it off.
 
 Write a task for the agent who will do it without your context: one step per action, the
 environment named exactly in `context` (repository, branch, how to run it), each check

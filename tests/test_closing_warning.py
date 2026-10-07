@@ -32,7 +32,7 @@ from app.services import participants as participants_service
 from app.services import tasks as tasks_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, Actor
-from conftest import Connect, call, refuse
+from conftest import Connect, call, make_task, refuse
 
 CHECKS = [
     "Зелёный прогон тестов",
@@ -88,7 +88,7 @@ def agent_actor(agent: Participant) -> Actor:
 
 async def working(session: AsyncSession, actor: Actor, project: Project, title: str) -> Task:
     """Задача агента в `in_progress` с тремя проверками и сводкой этого захода."""
-    task = await tasks_service.create_task(
+    task = await make_task(
         session,
         actor=actor,
         project=project,

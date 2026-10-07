@@ -248,6 +248,7 @@ async def move_tasks(
         actor=actor,
         project_key=payload.project,
         reason=payload.reason,
+        area=payload.area,
     )
     return DataResponse[TaskMoveBatchRead](
         data=TaskMoveBatchRead(results=[_move_outcome_read(item) for item in outcomes])
@@ -489,9 +490,12 @@ async def move_task(
     этот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на
     задачу везде, где принимается ключ. Статус не важен: закрытая задача переносится
     тоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими
-    проектами, обоими ключами и причиной. Область снимается тем же действием: она
-    принадлежит проекту, а в новом такой нет; если она стояла, в дело ложится
-    `field_changed` (`field: area`, «стало» — `null`).
+    проектами, обоими ключами и причиной. Область обязательна: она принадлежит
+    проекту, и прежняя остаётся в старом, поэтому в `area` приходит адрес области
+    целевого проекта. Она ставится тем же действием, в дело ложится `field_changed`
+    (`field: area`, «было» — прежняя область или `null`). Без неё — `422 area_required`
+    с областями целевого проекта в `details.areas`; чужая область — `422
+    area_project_mismatch`, архивная — `409 area_archived`.
 
     Отказы: набор `task` — `403 permission_denied`; пустая причина — `422
     task_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий
@@ -507,6 +511,7 @@ async def move_task(
         actor=actor,
         project=project,
         reason=payload.reason,
+        area=payload.area,
         expected_version=payload.version,
     )
     return DataResponse[TaskRead](data=TaskRead.model_validate(moved.task))

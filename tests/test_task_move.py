@@ -36,7 +36,7 @@ from app.services import links as links_service
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
-from conftest import Connect, call, refuse
+from conftest import Connect, call, make_area, make_task, move_task, refuse
 
 MOVE = "/api/v1/tasks/{key}/move"
 
@@ -46,7 +46,7 @@ async def _ui(session: AsyncSession, actor: Actor) -> Project:
 
 
 async def _new_task(session: AsyncSession, actor: Actor, project: Project, title: str) -> Task:
-    return await tasks_service.create_task(
+    return await make_task(
         session, actor=actor, project=project, title=title, description="Для переноса"
     )
 
@@ -62,7 +62,7 @@ async def test_a_move_gives_the_next_number_and_keeps_the_left_key(
     await _new_task(db_session, main_actor, ui, "Уже в UI")
     version = task.version
 
-    moved = await tasks_service.move_task(
+    moved = await move_task(
         db_session, task, actor=main_actor, project=ui, reason="  Задача интерфейса  "
     )
 
@@ -86,7 +86,7 @@ async def test_the_previous_key_reads_the_task_and_is_never_handed_out_again(
     db_session: AsyncSession, main_actor: Actor, project: Project, task: Task
 ) -> None:
     ui = await _ui(db_session, main_actor)
-    await tasks_service.move_task(db_session, task, actor=main_actor, project=ui, reason="r")
+    await move_task(db_session, task, actor=main_actor, project=ui, reason="r")
 
     assert await tasks_service.get_task(db_session, "trk-1") is task
     assert await tasks_service.get_task(db_session, "UI-1") is task
@@ -101,18 +101,16 @@ async def test_returning_to_a_project_gives_back_the_key_it_had_there(
     ui = await _ui(db_session, main_actor)
     ops = await projects_service.create_project(db_session, actor=main_actor, key="OPS", title="O")
 
-    await tasks_service.move_task(db_session, task, actor=main_actor, project=ui, reason="1")
-    await tasks_service.move_task(db_session, task, actor=main_actor, project=ops, reason="2")
-    back = await tasks_service.move_task(
-        db_session, task, actor=main_actor, project=project, reason="3"
-    )
+    await move_task(db_session, task, actor=main_actor, project=ui, reason="1")
+    await move_task(db_session, task, actor=main_actor, project=ops, reason="2")
+    back = await move_task(db_session, task, actor=main_actor, project=project, reason="3")
 
     assert task.key == "TRK-1"
     assert task.previous_keys == ["UI-1", "OPS-1"]
     assert project.last_task_number == 1
     assert back.entry.payload["to_key"] == "TRK-1"
     # И обратно в UI — снова UI-1, а TRK-1 встаёт в конец прежних.
-    await tasks_service.move_task(db_session, task, actor=main_actor, project=ui, reason="4")
+    await move_task(db_session, task, actor=main_actor, project=ui, reason="4")
     assert (task.key, task.previous_keys) == ("UI-1", ["OPS-1", "TRK-1"])
     assert ui.last_task_number == 1
 
@@ -122,7 +120,7 @@ async def test_a_closed_task_moves_and_keeps_its_status_links_and_case(
 ) -> None:
     """Статус не важен (`TRK-171#9`, п. 9); родство держится не на ключах (п. 3)."""
     ui = await _ui(db_session, main_actor)
-    child = await tasks_service.create_task(
+    child = await make_task(
         db_session, actor=task_actor, project=project, title="Ребёнок", description="Остаётся"
     )
     await links_service.add_link(db_session, task, child, actor=task_actor, kind=LinkKind.PARENT)
@@ -134,7 +132,7 @@ async def test_a_closed_task_moves_and_keeps_its_status_links_and_case(
     )
     entries_before = await case_service.case_index(db_session, task, actor=main_actor)
 
-    await tasks_service.move_task(db_session, task, actor=main_actor, project=ui, reason="r")
+    await move_task(db_session, task, actor=main_actor, project=ui, reason="r")
 
     assert task.status is TaskStatus.CANCELLED
     assert (child.key, child.project_id) == ("TRK-2", project.id)
@@ -142,7 +140,8 @@ async def test_a_closed_task_moves_and_keeps_its_status_links_and_case(
     assert [item.other.key for item in package.children] == ["TRK-2"]
     assert [item.no for item in package.index] == [
         *(item.no for item in entries_before),
-        len(entries_before) + 1,
+        len(entries_before) + 1,  # `moved`
+        len(entries_before) + 2,  # `field_changed` области, поставленной тем же переносом
     ]
     parent = (await tasks_service.read_task_package(db_session, "TRK-2", actor=main_actor)).parent
     assert parent is not None and parent.other.key == "UI-1"
@@ -157,7 +156,7 @@ async def test_a_move_without_a_reason_is_refused(
 ) -> None:
     ui = await _ui(db_session, main_actor)
     with pytest.raises(TaskMoveReasonRequiredError) as error:
-        await tasks_service.move_task(db_session, task, actor=main_actor, project=ui, reason=reason)
+        await move_task(db_session, task, actor=main_actor, project=ui, reason=reason)
     assert error.value.details == {"key": "TRK-1"}
     assert (task.key, task.previous_keys) == ("TRK-1", [])
 
@@ -166,9 +165,7 @@ async def test_a_move_into_its_own_project_is_refused(
     db_session: AsyncSession, main_actor: Actor, project: Project, task: Task
 ) -> None:
     with pytest.raises(TaskAlreadyInProjectError) as error:
-        await tasks_service.move_task(
-            db_session, task, actor=main_actor, project=project, reason="r"
-        )
+        await move_task(db_session, task, actor=main_actor, project=project, reason="r")
     assert error.value.details == {"key": "TRK-1", "project": "TRK"}
     assert project.last_task_number == 1
 
@@ -183,7 +180,7 @@ async def test_a_move_into_or_out_of_an_archived_project_is_refused(
     await projects_service.archive_project(db_session, frozen, actor=main_actor, reason="Архив")
 
     with pytest.raises(ProjectArchivedError) as error:
-        await tasks_service.move_task(db_session, task, actor=main_actor, project=ui, reason="r")
+        await move_task(db_session, task, actor=main_actor, project=ui, reason="r")
 
     assert error.value.details["key"] == frozen.key
     assert (task.key, ui.last_task_number) == ("TRK-1", 0)
@@ -194,7 +191,7 @@ async def test_a_stale_version_is_refused(
 ) -> None:
     ui = await _ui(db_session, main_actor)
     with pytest.raises(TaskVersionConflictError):
-        await tasks_service.move_task(
+        await move_task(
             db_session,
             task,
             actor=main_actor,
@@ -216,9 +213,19 @@ async def _moved_ui_task(client: AsyncClient) -> dict[str, Any]:
     for key, title in (("TRK", "Бэкенд"), ("UI", "Интерфейс")):
         created = await client.post("/api/v1/projects", json={"key": key, "title": title})
         assert created.status_code == 201, created.text
+        area = await client.post(
+            f"/api/v1/projects/{key}/areas", json={"key": "core", "title": "Основа"}
+        )
+        assert area.status_code == 201, area.text
     for project, title in (("UI", "Экран"), ("TRK", "Ребёнок из TRK")):
         created = await client.post(
-            "/api/v1/tasks", json={"project": project, "title": title, "description": "d"}
+            "/api/v1/tasks",
+            json={
+                "project": project,
+                "area": f"{project}/core",
+                "title": title,
+                "description": "d",
+            },
         )
         assert created.status_code == 201, created.text
     note = await client.post(
@@ -241,7 +248,8 @@ async def _moved_ui_task(client: AsyncClient) -> dict[str, Any]:
         )
         assert closed.status_code == 200, closed.text
     response = await client.post(
-        MOVE.format(key="ui-1"), json={"project": "trk", "reason": "UI переезжает в TRK"}
+        MOVE.format(key="ui-1"),
+        json={"project": "trk", "area": "TRK/core", "reason": "UI переезжает в TRK"},
     )
     assert response.status_code == 200, response.text
     data: dict[str, Any] = response.json()["data"]
@@ -265,7 +273,7 @@ async def test_rest_reads_writes_links_and_refs_by_the_previous_key(
     assert package["task"]["key"] == "TRK-2"
     assert package["task"]["previous_keys"] == ["UI-1"]
     assert [item["key"] for item in package["children"]] == ["TRK-1"]
-    moved = package["index"][-1]
+    moved = package["index"][-2]  # за `moved` идёт `field_changed` области
     assert moved["type"] == "moved"
     assert moved["facts"] == {"type": "moved", "from_key": "UI-1", "to_key": "TRK-2"}
 
@@ -299,7 +307,8 @@ async def test_rest_reads_writes_links_and_refs_by_the_previous_key(
     assert missing.json()["error"]["details"]["fields"][0]["reason"] == "unknown_entry"
 
     other = await auth_client.post(
-        "/api/v1/tasks", json={"project": "TRK", "title": "Соседка", "description": "d"}
+        "/api/v1/tasks",
+        json={"project": "TRK", "area": "TRK/core", "title": "Соседка", "description": "d"},
     )
     other_key = other.json()["data"]["key"]
     linked = await auth_client.post(
@@ -334,13 +343,16 @@ async def test_a_new_task_in_the_old_project_does_not_get_the_moved_key(
 ) -> None:
     await _moved_ui_task(auth_client)
     created = await auth_client.post(
-        "/api/v1/tasks", json={"project": "UI", "title": "Новая", "description": "d"}
+        "/api/v1/tasks",
+        json={"project": "UI", "area": "UI/core", "title": "Новая", "description": "d"},
     )
     assert created.json()["data"]["key"] == "UI-2"
     # UI-1 по-прежнему ведёт на перенесённую задачу, а не на новую.
     assert (await auth_client.get("/api/v1/tasks/UI-1")).json()["data"]["task"]["key"] == "TRK-2"
     # Обратный перенос возвращает задаче её ключ UI-1, а не UI-3.
-    back = await auth_client.post(MOVE.format(key="TRK-2"), json={"project": "UI", "reason": "r"})
+    back = await auth_client.post(
+        MOVE.format(key="TRK-2"), json={"project": "UI", "area": "UI/core", "reason": "r"}
+    )
     assert back.status_code == 200, back.text
     assert (back.json()["data"]["key"], back.json()["data"]["previous_keys"]) == (
         "UI-1",
@@ -354,7 +366,8 @@ async def test_a_continuation_named_by_a_previous_key_stays_in_work(
     """`remarks_in_work` соединяет резолюцию с продолжением и по прежнему ключу."""
     await _moved_ui_task(auth_client)
     await auth_client.post(
-        "/api/v1/tasks", json={"project": "UI", "title": "Продолжение", "description": "d"}
+        "/api/v1/tasks",
+        json={"project": "UI", "area": "UI/core", "title": "Продолжение", "description": "d"},
     )
     remark = await auth_client.post(
         "/api/v1/tasks/TRK-1/entries", json={"type": "remark", "title": "Вышло не то"}
@@ -368,7 +381,9 @@ async def test_a_continuation_named_by_a_previous_key_stays_in_work(
         },
     )
     assert resolved.status_code == 201, resolved.text
-    moved = await auth_client.post(MOVE.format(key="UI-2"), json={"project": "TRK", "reason": "r"})
+    moved = await auth_client.post(
+        MOVE.format(key="UI-2"), json={"project": "TRK", "area": "TRK/core", "reason": "r"}
+    )
     assert moved.json()["data"]["key"] == "TRK-3"
 
     found = await auth_client.get("/api/v1/tasks", params={"query": "remarks_in_work: 1"})
@@ -380,15 +395,19 @@ async def test_rest_move_refusals(
 ) -> None:
     await _moved_ui_task(auth_client)
 
-    same = await auth_client.post(MOVE.format(key="UI-1"), json={"project": "TRK", "reason": "r"})
-    blank = await auth_client.post(MOVE.format(key="UI-1"), json={"project": "UI", "reason": " "})
+    same = await auth_client.post(
+        MOVE.format(key="UI-1"), json={"project": "TRK", "area": "TRK/core", "reason": "r"}
+    )
+    blank = await auth_client.post(
+        MOVE.format(key="UI-1"), json={"project": "UI", "area": "UI/core", "reason": " "}
+    )
     unknown = await auth_client.post(
         MOVE.format(key="UI-1"), json={"project": "NOPE", "reason": "r"}
     )
     archived = await auth_client.post("/api/v1/projects/UI/archive", json={"reason": "Пуст"})
     assert archived.status_code == 200, archived.text
     into_archive = await auth_client.post(
-        MOVE.format(key="UI-1"), json={"project": "UI", "reason": "r"}
+        MOVE.format(key="UI-1"), json={"project": "UI", "area": "UI/core", "reason": "r"}
     )
     # Прежний ключ архивного проекта ведёт на задачу и из архива (`TRK-171#9`, п. 11).
     read = await auth_client.get("/api/v1/tasks/UI-1")
@@ -412,9 +431,16 @@ async def test_mcp_moves_and_answers_by_the_previous_key(
 ) -> None:
     async with mcp_session(task_secret) as session:
         await call(session, "create_project", key="UI", title="Интерфейс")
-        no_reason = await refuse(session, "move_task", key="TRK-1", project="UI", reason=" ")
-        same = await refuse(session, "move_task", key="TRK-1", project="TRK", reason="r")
-        moved = await call(session, "move_task", key="trk-1", project="ui", reason="Интерфейс")
+        await call(session, "create_project", key="UI/core", title="Основа")
+        no_reason = await refuse(
+            session, "move_task", key="TRK-1", project="UI", area="UI/core", reason=" "
+        )
+        same = await refuse(
+            session, "move_task", key="TRK-1", project="TRK", area="TRK/core", reason="r"
+        )
+        moved = await call(
+            session, "move_task", key="trk-1", project="ui", area="UI/core", reason="Интерфейс"
+        )
         card = await call(session, "get_task", key="TRK-1")
         filed = await call(session, "add_entry", key="TRK-1", type="note", title="По старому")
         referred = await call(
@@ -422,19 +448,21 @@ async def test_mcp_moves_and_answers_by_the_previous_key(
         )
         found = await call(session, "search_tasks", key=["TRK-1"], fields=["previous_keys"])
         entries = await call(session, "read_entries", key="TRK-1", types=["moved"])
-        back = await call(session, "move_task", key="UI-1", project="TRK", reason="Вернулась")
+        back = await call(
+            session, "move_task", key="UI-1", project="TRK", area="TRK/core", reason="Вернулась"
+        )
 
     assert "task_move_reason_required" in no_reason
     assert "task_already_in_project" in same
     assert moved == {"key": "UI-1", "previous_keys": ["TRK-1"], "version": 2, "no": 2}
     assert card["task"]["key"] == "UI-1" and card["task"]["previous_keys"] == ["TRK-1"]
-    assert card["index"][-1]["facts"] == {"type": "moved", "from_key": "TRK-1", "to_key": "UI-1"}
+    assert card["index"][-2]["facts"] == {"type": "moved", "from_key": "TRK-1", "to_key": "UI-1"}
     assert filed["task_key"] == "UI-1"
     assert referred["task_key"] == "UI-1"
     assert found["items"] == [{"key": "UI-1", "previous_keys": ["TRK-1"]}]
     [entry] = entries["items"]
     assert entry["payload"]["reason"] == "Интерфейс"
-    assert back == {"key": "TRK-1", "previous_keys": ["UI-1"], "version": 3, "no": 5}
+    assert back == {"key": "TRK-1", "previous_keys": ["UI-1"], "version": 3, "no": 6}
 
 
 # --- Одновременные переносы -----------------------------------------------------------------
@@ -460,6 +488,8 @@ async def racing(
             await projects_service.create_project(session, actor=MOVER, key=key, title=key)
             for key in keys.values()
         ]
+        for key in keys.values():
+            await make_area(session, MOVER, key)
         created = await _new_task(session, MOVER, projects[0], "Гонка переносов")
         await session.commit()
         ids = {"task": created.id, "projects": [item.id for item in projects]}
@@ -472,8 +502,19 @@ async def racing(
                 text("DELETE FROM entries WHERE task_id = :task OR project_id = ANY(:projects)"),
                 ids,
             )
+            await session.execute(
+                text(
+                    "DELETE FROM entries WHERE area_id IN "
+                    "(SELECT id FROM areas WHERE project_id = ANY(:projects))"
+                ),
+                {"projects": ids["projects"]},
+            )
             await session.execute(text("ALTER TABLE entries ENABLE TRIGGER entries_immutable"))
             await session.execute(text("DELETE FROM tasks WHERE id = :task"), {"task": ids["task"]})
+            await session.execute(
+                text("DELETE FROM areas WHERE project_id = ANY(:projects)"),
+                {"projects": ids["projects"]},
+            )
             await session.execute(
                 text("DELETE FROM projects WHERE id = ANY(:projects)"),
                 {"projects": ids["projects"]},
@@ -489,7 +530,7 @@ async def _move_in_own_session(
         try:
             task = await tasks_service.get_task(session, key)
             project = await projects_service.get_project(session, target)
-            moved = await tasks_service.move_task(
+            moved = await move_task(
                 session, task, actor=MOVER, project=project, reason=f"Перенос: {target}"
             )
             await session.commit()
@@ -520,7 +561,8 @@ async def test_simultaneous_moves_go_one_by_one(
         ).all()
     assert task.key in outcomes
     assert task.previous_keys[0] == first and len(task.previous_keys) == 2
-    assert sorted(entry.no for entry in moved) == [2, 3]
+    # Между двумя `moved` стоит `field_changed` области первого переноса.
+    assert sorted(entry.no for entry in moved) == [2, 4]
 
 
 async def test_simultaneous_moves_into_one_project_let_one_through(

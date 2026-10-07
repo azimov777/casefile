@@ -42,6 +42,7 @@ async function create(
     headers: auth(),
     data: {
       project: 'DEMO',
+      area: 'DEMO/core',
       title,
       description: 'Заведена сквозным тестом UI-151: ключ и ссылка на запись на 390 px.',
     },

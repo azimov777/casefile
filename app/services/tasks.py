@@ -60,6 +60,7 @@ from app.domain import state as state_domain
 from app.domain.case import EntryHeading, is_blocking_question
 from app.domain.errors import (
     AreaProjectMismatchError,
+    AreaRequiredError,
     TaskAlreadyInProjectError,
     TaskChecksFrozenError,
     TaskClosedError,
@@ -440,8 +441,8 @@ async def create_task(
     # Область ищется и проверяется до номера, как решения: отказ не сжигает ключ.
     # Области родителя ребёнок не берёт: у `create_task` её не берут ни из чего,
     # кроме этого аргумента (`CONCEPT.md`, 3.3).
-    resolved_area = await _resolve_area(
-        session, project=project, address=stored.pop(TaskField.AREA), current=None
+    resolved_area = await _resolve_required_area(
+        session, project=project, address=stored.pop(TaskField.AREA), actor=actor
     )
     # Решения проекта — проверка с базой, но тоже до номера: отказ не сжигает ключ.
     await decisions_service.check_cited(session, before=(), after=stored[TaskField.DECISIONS])
@@ -656,6 +657,7 @@ async def move_task(
     actor: Actor,
     project: Project,
     reason: str | None,
+    area: str | None = None,
     expected_version: int | None = None,
 ) -> TaskMove:
     """Переносит задачу в другой проект: новый ключ, прежний — в `previous_keys`, запись `moved`.
@@ -670,6 +672,10 @@ async def move_task(
     следующий номер счётчика. Номер берётся **последним**, после всех проверок: как у
     создания задачи, откат уносит выданный номер навсегда (`docs/notes/db.md`).
 
+    Область целевого проекта обязательна (`area_required`): прежняя остаётся в старом
+    проекте, и без новой перенос рождал бы в проекте задачу без области в обход правила.
+    Область ищется и проверяется до номера, как и всё, что может отказать.
+
     Одновременные переносы одной задачи идут по одному: очередь изменений занимается
     первым шагом, и под ней задача перечитывается (`lock_unfrozen`). Второй перенос
     видит задачу уже на новом месте — и в тот же проект отвечает
@@ -681,6 +687,11 @@ async def move_task(
     if task.project_id == project.id:
         raise TaskAlreadyInProjectError(details={"key": task.key, "project": project.key})
 
+    normalized_area = normalize_fields({TaskField.AREA: area})[TaskField.AREA]
+    new_area = await _resolve_required_area(
+        session, project=project, address=normalized_area, actor=actor
+    )
+
     from_key = task.key
     from_project = task.project.key
     to_key = returning_key(task.previous_keys, to_project=project.key)
@@ -691,10 +702,10 @@ async def move_task(
     task.previous_keys = moved_previous_keys(from_key, task.previous_keys, to_key=to_key)
     task.key = to_key
     task.project = project
-    # Область принадлежит проекту, а в новом такой нет: перенос снимает её тем же
-    # действием (`CONCEPT.md`, 3.3). Архив области переносу не мешает.
+    # Область принадлежит проекту: прежняя снимается, область целевого проекта ставится
+    # тем же действием (`CONCEPT.md`, 3.3). Архив прежней области переносу не мешает.
     dropped_area = None if task.area is None else task.area.address
-    task.area = None
+    task.area = new_area
     await _flush_checking_version(session, task, expected_version)
     entry = await case_service.record_moved(
         session,
@@ -706,15 +717,14 @@ async def move_task(
         to_key=to_key,
         reason=checked,
     )
-    if dropped_area is not None:
-        await case_service.record_field_changed(
-            session,
-            task,
-            actor=actor,
-            field=TaskField.AREA,
-            before=dropped_area,
-            after=None,
-        )
+    await case_service.record_field_changed(
+        session,
+        task,
+        actor=actor,
+        field=TaskField.AREA,
+        before=dropped_area,
+        after=new_area.address,
+    )
     return TaskMove(task=task, entry=entry)
 
 
@@ -759,6 +769,7 @@ async def move_tasks(
     actor: Actor,
     project_key: str,
     reason: str | None,
+    area: str | None = None,
 ) -> tuple[TaskMoveOutcome, ...]:
     """Переносит задачи списка в один проект по одной, в порядке списка; итог — по каждой.
 
@@ -789,7 +800,9 @@ async def move_tasks(
         try:
             async with session.begin_nested():
                 task = await get_task(session, key)
-                moved = await move_task(session, task, actor=actor, project=project, reason=checked)
+                moved = await move_task(
+                    session, task, actor=actor, project=project, reason=checked, area=area
+                )
         except TaskAlreadyInProjectError as refusal:
             outcomes.append(TaskAlreadyThere(key=key, to_key=refusal.details["key"]))
         except AppError as refusal:
@@ -884,6 +897,10 @@ async def apply_task_changes(
         )
     new_area: Area | None = None
     if TaskField.AREA in normalized:
+        if normalized[TaskField.AREA] is None:
+            # Область можно сменить, но не снять: иначе обязательность обходилась бы
+            # сразу после создания.
+            raise await _area_required(session, project=task.project, actor=actor, key=task.key)
         # Под очередью: существование, проект и архив области читаются в том же
         # моменте, что и фиксация. Уже стоящая область не проверяется заново — снять
         # её и оставить можно и в архиве.
@@ -1124,6 +1141,31 @@ async def _resolve_area(
             }
         )
     await freeze.ensure_unfrozen(session, areas=(area,))
+    return area
+
+
+async def _area_required(
+    session: AsyncSession, *, project: Project, actor: Actor, key: str | None = None
+) -> AreaRequiredError:
+    """Отказ `area_required`: проект и адреса его неархивных областей — выбор за агентом."""
+    listed = await areas_service.list_areas(session, project, actor=actor)
+    details: dict[str, object] = {
+        "project": project.key,
+        "areas": [item.address for item in listed],
+    }
+    if key is not None:
+        details["key"] = key
+    return AreaRequiredError(details=details)
+
+
+async def _resolve_required_area(
+    session: AsyncSession, *, project: Project, address: str | None, actor: Actor
+) -> Area:
+    """Область новой задачи (создание, перенос): без адреса — `area_required`."""
+    if address is None:
+        raise await _area_required(session, project=project, actor=actor)
+    area = await _resolve_area(session, project=project, address=address, current=None)
+    assert area is not None
     return area
 
 

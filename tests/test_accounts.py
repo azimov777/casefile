@@ -195,7 +195,12 @@ async def test_the_flag_gives_no_rights_on_tasks_and_its_absence_takes_none(
     """Все вошедшие видят всё: человек без флага заводит задачу и читает чужие."""
     created = await auth_client.post(
         "/api/v1/tasks",
-        json={"project": project.key, "title": "Задача Боба", "description": "Боб завёл сам"},
+        json={
+            "project": project.key,
+            "area": "TRK/core",
+            "title": "Задача Боба",
+            "description": "Боб завёл сам",
+        },
         headers=bearer(bob_token),
     )
     listed = await auth_client.get("/api/v1/tasks", headers=bearer(bob_token))
@@ -539,7 +544,12 @@ async def test_two_people_see_the_same_tasks_and_sign_their_own_entries(
 
     created = await auth_client.post(
         "/api/v1/tasks",
-        json={"project": project.key, "title": "Общая задача", "description": "Видна всем"},
+        json={
+            "project": project.key,
+            "area": "TRK/core",
+            "title": "Общая задача",
+            "description": "Видна всем",
+        },
         headers=bearer(bob_token),
     )
     key = created.json()["data"]["key"]

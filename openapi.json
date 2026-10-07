@@ -7400,7 +7400,7 @@
           "tasks"
         ],
         "summary": "Move a task to another project",
-        "description": "Переносит задачу в другой проект (`CONCEPT.md`, 3.3).\n\nЗадача получает следующий номер целевого проекта, а если ключ в нём у неё уже был —\nэтот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на\nзадачу везде, где принимается ключ. Статус не важен: закрытая задача переносится\nтоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими\nпроектами, обоими ключами и причиной. Область снимается тем же действием: она\nпринадлежит проекту, а в новом такой нет; если она стояла, в дело ложится\n`field_changed` (`field: area`, «стало» — `null`).\n\nОтказы: набор `task` — `403 permission_denied`; пустая причина — `422\ntask_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий\nили целевой проект в архиве — `409 project_archived`; целевой проект тот же, где\nзадача лежит, — `409 task_already_in_project`; устаревшая `version` — `409\nversion_conflict`.",
+        "description": "Переносит задачу в другой проект (`CONCEPT.md`, 3.3).\n\nЗадача получает следующий номер целевого проекта, а если ключ в нём у неё уже был —\nэтот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на\nзадачу везде, где принимается ключ. Статус не важен: закрытая задача переносится\nтоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими\nпроектами, обоими ключами и причиной. Область обязательна: она принадлежит\nпроекту, и прежняя остаётся в старом, поэтому в `area` приходит адрес области\nцелевого проекта. Она ставится тем же действием, в дело ложится `field_changed`\n(`field: area`, «было» — прежняя область или `null`). Без неё — `422 area_required`\nс областями целевого проекта в `details.areas`; чужая область — `422\narea_project_mismatch`, архивная — `409 area_archived`.\n\nОтказы: набор `task` — `403 permission_denied`; пустая причина — `422\ntask_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий\nили целевой проект в архиве — `409 project_archived`; целевой проект тот же, где\nзадача лежит, — `409 task_already_in_project`; устаревшая `version` — `409\nversion_conflict`.",
         "operationId": "move_task",
         "security": [
           {
@@ -18100,7 +18100,7 @@
               }
             ],
             "title": "Area",
-            "description": "Address `PROJECT/key` of an area of the task's own project, or null for none. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`",
+            "description": "Address `PROJECT/key` of an area of the task's own project. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (a task in an archived area can move to another one). Not inherited from the parent; set in any status but `done` and `cancelled`. Required: without it `422 area_required`, with the project's areas in `details.areas`",
             "examples": [
               "TRK/promotion"
             ]
@@ -18306,6 +18306,21 @@
               "Репозиторий один, задачи интерфейса ведутся в TRK"
             ]
           },
+          "area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area",
+            "description": "Address `PROJECT/key` of an area of the target project; required: without it `422 area_required`, with the target project's areas in `details.areas`. Replaces the old area, which stays in the old project",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
           "version": {
             "anyOf": [
               {
@@ -18364,6 +18379,21 @@
             "description": "Why the tasks move, one for the whole list; a blank one answers `422 task_move_reason_required`. Filed in the `moved` entry of each moved task",
             "examples": [
               "Репозиторий один, задачи интерфейса ведутся в TRK"
+            ]
+          },
+          "area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area",
+            "description": "Address `PROJECT/key` of an area of the target project, put on every task of the list; required: without it each task is refused with `area_required`",
+            "examples": [
+              "TRK/promotion"
             ]
           }
         },
@@ -19428,7 +19458,7 @@
               }
             ],
             "title": "Area",
-            "description": "Address `PROJECT/key` of an area of the task's own project, or null for none. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`. Pass null to take the task out of its area",
+            "description": "Address `PROJECT/key` of an area of the task's own project. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (a task in an archived area can move to another one). Not inherited from the parent; set in any status but `done` and `cancelled`. Null is refused with `422 area_required`: an area can be changed, not taken off",
             "examples": [
               "TRK/promotion"
             ]

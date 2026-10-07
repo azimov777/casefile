@@ -38,6 +38,7 @@ async function create(request: APIRequestContext, title: string): Promise<string
     headers: auth(),
     data: {
       project: 'DEMO',
+      area: 'DEMO/core',
       title,
       description: 'Заведена сквозным тестом UI-119: подпись родителя на карточке и в строке.',
       assignee: PROBE,

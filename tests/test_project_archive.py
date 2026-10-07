@@ -36,14 +36,14 @@ from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.freeze import UNFROZEN_ENTRY_TYPES
 from app.services.tasks import TaskChanges
-from conftest import Connect, call, refuse
+from conftest import Connect, call, make_task, refuse
 
 ARCHIVE = "/api/v1/projects/{key}/archive"
 RESTORE = "/api/v1/projects/{key}/restore"
 
 
 async def _second_task(session: AsyncSession, actor: Actor, project: Project) -> Task:
-    return await tasks_service.create_task(
+    return await make_task(
         session,
         actor=actor,
         project=project,
@@ -169,9 +169,7 @@ type Change = Callable[[AsyncSession, Scene, Actor], Awaitable[Any]]
 
 
 async def _create_task(s: AsyncSession, x: Scene, a: Actor) -> Any:
-    return await tasks_service.create_task(
-        s, actor=a, project=x.project, title="Новая", description="x"
-    )
+    return await make_task(s, actor=a, project=x.project, title="Новая", description="x")
 
 
 async def _add_entry(s: AsyncSession, x: Scene, a: Actor) -> Any:
@@ -389,7 +387,8 @@ async def test_rest_archives_freezes_and_restores(
 
     refusals = [
         await auth_client.post(
-            "/api/v1/tasks", json={"project": "TRK", "title": "t", "description": "d"}
+            "/api/v1/tasks",
+            json={"project": "TRK", "area": "TRK/core", "title": "t", "description": "d"},
         ),
         await auth_client.post(
             "/api/v1/tasks/TRK-1/entries", json={"type": "note", "title": "Заметка"}
@@ -451,7 +450,15 @@ async def test_mcp_archives_freezes_unlinks_and_restores(
 ) -> None:
     async with mcp_session(main_secret) as session:
         await call(session, "create_project", key="OPS", title="Живой")
-        await call(session, "create_task", project="OPS", title="Снаружи", description="Ждёт TRK-1")
+        await call(session, "create_project", key="OPS/core", title="Основа")
+        await call(
+            session,
+            "create_task",
+            project="OPS",
+            area="OPS/core",
+            title="Снаружи",
+            description="Ждёт TRK-1",
+        )
         await call(session, "link", key="OPS-1", kind="blocked_by", other="TRK-1")
 
         no_reason = await refuse(session, "archive_project", key="TRK", reason=" ")
@@ -459,7 +466,7 @@ async def test_mcp_archives_freezes_unlinks_and_restores(
         twice = await refuse(session, "archive_project", key="TRK", reason="Ещё")
         entry = await refuse(session, "add_entry", key="TRK-1", type="note", title="Заметка")
         created = await refuse(
-            session, "create_task", project="TRK", title="Новая", description="x"
+            session, "create_task", project="TRK", area="TRK/core", title="Новая", description="x"
         )
         card = await call(session, "get_task", key="TRK-1")
         project_card = await call(session, "get_project", key="TRK")

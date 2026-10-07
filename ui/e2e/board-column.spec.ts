@@ -47,6 +47,7 @@ async function fillColumn(request: APIRequestContext): Promise<number> {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         project: 'DEMO',
+        area: 'DEMO/core',
         title: `Задача для проверки дочитывания столбца № ${index + 1}`,
         description: 'Заведена сквозным тестом, чтобы столбец доски не влез в одну страницу.',
       },
@@ -207,6 +208,7 @@ test('длинное непереносимое слово в названии �
     headers: { Authorization: `Bearer ${token}` },
     data: {
       project: 'DEMO',
+      area: 'DEMO/core',
       title: `Подпись рамки таблицы живёт в ${UNBREAKABLE}`,
       description: 'Заведена сквозным тестом: в названии путь, который нигде не переносится.',
       assignee: PROBE,
@@ -316,6 +318,7 @@ test('открытый вопрос blocking переносит задачу в 
     headers,
     data: {
       project: 'DEMO',
+      area: 'DEMO/core',
       title: 'Подопытная задача: ожидание по вопросу blocking (TRK-571)',
       description: 'Заведена сквозным тестом TRK-571 и снимается им же.',
     },

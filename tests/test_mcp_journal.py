@@ -46,10 +46,9 @@ from app.mcp.runtime import Runtime
 from app.mcp.server import create_server
 from app.services import case as case_service
 from app.services import participants as participants_service
-from app.services import tasks as tasks_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, Actor
-from conftest import MCP_BASE_URL, Connect, call, connect_mcp, refuse
+from conftest import MCP_BASE_URL, Connect, call, connect_mcp, make_task, refuse
 from mcp import Client
 
 #: Сколько ждёт тест, которому ждать нечего. Меньше контрольного опроса — иначе он
@@ -119,14 +118,14 @@ async def test_the_wait_takes_several_task_keys_at_once(
     project: Project,
 ) -> None:
     """Сессия, ведущая несколько дел, называет их списком и ждёт по всем разом."""
-    second = await tasks_service.create_task(
+    second = await make_task(
         db_session,
         actor=task_actor,
         project=project,
         title="Второе дело сессии",
         description="Нужно, чтобы список ключей было чем провалить",
     )
-    third = await tasks_service.create_task(
+    third = await make_task(
         db_session,
         actor=task_actor,
         project=project,

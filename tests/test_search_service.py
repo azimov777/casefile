@@ -33,6 +33,7 @@ from app.services import search as service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.search import StructuredTerm
+from conftest import make_task
 
 
 async def make(
@@ -46,7 +47,7 @@ async def make(
     priority: TaskPriority = TaskPriority.NORMAL,
 ) -> Task:
     """Задача в `backlog` с заполненными разделами: готова идти по цепочке статусов."""
-    return await tasks_service.create_task(
+    return await make_task(
         session,
         actor=actor,
         project=project,

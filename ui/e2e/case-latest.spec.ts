@@ -60,6 +60,7 @@ function seed(request: APIRequestContext): Promise<string> {
 
     const task = await api(request, '/api/v1/tasks', {
       project: 'DEMO',
+      area: 'DEMO/core',
       title: 'Дело длиннее четырёх страниц',
       description: `Заведена сквозным тестом ${MARKER}.`,
       goal: 'цель',

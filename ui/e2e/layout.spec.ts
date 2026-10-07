@@ -15,6 +15,7 @@ async function makeTask(
     headers: { Authorization: `Bearer ${token}` },
     data: {
       project: 'DEMO',
+      area: 'DEMO/core',
       title,
       description: 'Заведена сквозным тестом ради проверки раскладки карточки.',
       ...sections,

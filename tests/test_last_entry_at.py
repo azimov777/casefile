@@ -25,10 +25,11 @@ from app.services import links as links_service
 from app.services import search as service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
+from conftest import make_task
 
 
 async def make(session: AsyncSession, actor: Actor, project: Project, title: str) -> Task:
-    return await tasks_service.create_task(
+    return await make_task(
         session,
         actor=actor,
         project=project,

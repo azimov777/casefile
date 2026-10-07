@@ -89,8 +89,12 @@ async def test_the_inbox_is_filtered_by_addressee_and_project(
         "/api/v1/projects", json={"key": "OPS", "title": "Эксплуатация", "description": ""}
     )
     assert created.status_code == 201, created.text
+    core = await auth_client.post(
+        "/api/v1/projects/OPS/areas", json={"key": "core", "title": "Основа"}
+    )
+    assert core.status_code == 201, core.text
     await create(auth_client)
-    await create(auth_client, project="OPS")
+    await create(auth_client, project="OPS", area="OPS/core")
     await ask(auth_client, "TRK-1", "Вопрос в TRK", to="reviewer", blocking=False)
     await ask(auth_client, "OPS-1", "Вопрос в OPS", to="reviewer", blocking=False)
 

@@ -37,6 +37,7 @@ from app.services import links as links_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.tasks import TaskChanges
+from conftest import make_task
 
 #: Сколько байт на строку описи считается дешёвым. Проверяется не ради красоты числа:
 #: опись входит в каждый пакет задачи, и строка, выросшая в разы, означает, что в неё
@@ -49,7 +50,7 @@ MAX_FACTS_BYTES = 100
 
 
 async def make(session: AsyncSession, actor: Actor, project: Project, title: str) -> Task:
-    return await tasks_service.create_task(
+    return await make_task(
         session,
         actor=actor,
         project=project,
@@ -397,6 +398,7 @@ async def _case_with_every_entry_type(
         "/api/v1/tasks",
         json={
             "project": project.key,
+            "area": "TRK/core",
             "title": "every entry type",
             "description": "description",
             "goal": "goal",
@@ -411,7 +413,12 @@ async def _case_with_every_entry_type(
 
     other = await client.post(
         "/api/v1/tasks",
-        json={"project": project.key, "title": "the other side", "description": "description"},
+        json={
+            "project": project.key,
+            "area": "TRK/core",
+            "title": "the other side",
+            "description": "description",
+        },
     )
     assert other.status_code == 201, other.text
     other_key = other.json()["data"]["key"]
@@ -493,7 +500,11 @@ async def _case_with_every_entry_type(
     # она читается по новому.
     neighbour = await client.post("/api/v1/projects", json={"key": "OPS", "title": "Соседний"})
     assert neighbour.status_code == 201, neighbour.text
-    moved = await client.post(f"/api/v1/tasks/{key}/move", json={"project": "OPS", "reason": "r"})
+    core = await client.post("/api/v1/projects/OPS/areas", json={"key": "core", "title": "Основа"})
+    assert core.status_code == 201, core.text
+    moved = await client.post(
+        f"/api/v1/tasks/{key}/move", json={"project": "OPS", "area": "OPS/core", "reason": "r"}
+    )
     assert moved.status_code == 200, moved.text
     return str(moved.json()["data"]["key"])
 
@@ -533,6 +544,7 @@ async def test_the_rest_answer_carries_the_facts(
         "/api/v1/tasks",
         json={
             "project": project.key,
+            "area": "TRK/core",
             "title": "facts in the answer",
             "description": "description",
             # Разделы заполнены: без них переход в `open` отвечает

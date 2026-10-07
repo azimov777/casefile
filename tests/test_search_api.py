@@ -22,6 +22,7 @@ from app.services import case as case_service
 from app.services import links as links_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
+from conftest import make_task
 
 CANDIDATES = "project: TRK and status: open and blocked: false and open_blocking_questions: 0"
 
@@ -29,7 +30,7 @@ CANDIDATES = "project: TRK and status: open and blocked: false and open_blocking
 async def make(
     session: AsyncSession, actor: Actor, project: Project, title: str, **rest: Any
 ) -> Task:
-    return await tasks_service.create_task(
+    return await make_task(
         session,
         actor=actor,
         project=project,
@@ -656,7 +657,7 @@ async def test_the_card_of_a_child_carries_the_goal_of_its_direct_parent_only(
     Задача без родителя по-прежнему отдаёт `parent: null`. Короткая цель приходит целиком
     и без пометки, а у пустой цели родителя поле стоит, но пустое.
     """
-    root = await tasks_service.create_task(
+    root = await make_task(
         db_session,
         actor=task_actor,
         project=project,
@@ -664,7 +665,7 @@ async def test_the_card_of_a_child_carries_the_goal_of_its_direct_parent_only(
         description="описание",
         goal="Цель корня: видеть программу целиком",
     )
-    middle = await tasks_service.create_task(
+    middle = await make_task(
         db_session,
         actor=task_actor,
         project=project,
@@ -672,7 +673,7 @@ async def test_the_card_of_a_child_carries_the_goal_of_its_direct_parent_only(
         description="описание",
         goal="Цель середины",
     )
-    leaf = await tasks_service.create_task(
+    leaf = await make_task(
         db_session, actor=task_actor, project=project, title="лист", description="описание"
     )
     for parent, child in ((root, middle), (middle, leaf)):
@@ -708,7 +709,7 @@ async def test_a_long_parent_goal_is_cut_at_the_limit_and_says_so(
     long_goal = "ц" * PARENT_GOAL_LIMIT + "хвост"
     exact_goal = "ш" * PARENT_GOAL_LIMIT
     parents = [
-        await tasks_service.create_task(
+        await make_task(
             db_session,
             actor=task_actor,
             project=project,
@@ -720,7 +721,7 @@ async def test_a_long_parent_goal_is_cut_at_the_limit_and_says_so(
     ]
     children = []
     for parent in parents:
-        child = await tasks_service.create_task(
+        child = await make_task(
             db_session, actor=task_actor, project=project, title="ребёнок", description="описание"
         )
         await links_service.add_link(

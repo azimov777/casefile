@@ -34,7 +34,7 @@ from app.services import search as search_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.tasks import TaskChanges
-from conftest import Connect, call, refuse
+from conftest import Connect, call, make_task, refuse
 
 #: Пояс постановщика: момент приходит со смещением его устройства, а не в UTC.
 BERLIN_SUMMER = timezone(timedelta(hours=2))
@@ -83,7 +83,7 @@ async def _open(session: AsyncSession, actor: Actor, task: Task) -> None:
 async def _new(
     session: AsyncSession, actor: Actor, project: Project, title: str, **kw: Any
 ) -> Task:
-    return await tasks_service.create_task(
+    return await make_task(
         session,
         actor=actor,
         project=project,
@@ -483,7 +483,13 @@ async def test_rest_refuses_a_moment_without_a_time_or_an_offset(
     patched = await auth_client.patch(f"/api/v1/tasks/{task.key}", json={"not_before": value})
     created = await auth_client.post(
         "/api/v1/tasks",
-        json={"project": "TRK", "title": "Новая", "description": "d", "not_before": value},
+        json={
+            "project": "TRK",
+            "area": "TRK/core",
+            "title": "Новая",
+            "description": "d",
+            "not_before": value,
+        },
     )
 
     for response in (patched, created):
@@ -500,7 +506,13 @@ async def test_rest_creates_and_finds_deferred_tasks(
 
     created = await auth_client.post(
         "/api/v1/tasks",
-        json={"project": "TRK", "title": "Новая", "description": "d", "not_before": _iso(moment)},
+        json={
+            "project": "TRK",
+            "area": "TRK/core",
+            "title": "Новая",
+            "description": "d",
+            "not_before": _iso(moment),
+        },
     )
     by_query = await auth_client.get(
         "/api/v1/tasks", params={"query": "deferred: true", "fields": "key,not_before,features"}
@@ -530,6 +542,7 @@ async def test_mcp_defers_refuses_clears_and_enters(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Отложенная",
             description="Ждёт момента",
             sections={

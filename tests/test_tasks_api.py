@@ -11,6 +11,7 @@ from app.db.models.task import Task
 
 READY = {
     "project": "trk",
+    "area": "TRK/core",
     "title": "Починить выдачу ключей",
     "description": "Ключ сгорает на неудачном запросе",
     "goal": "Ключи не сгорают",
@@ -414,8 +415,12 @@ async def test_seq_is_monotonic_across_projects_and_no_restarts_per_task(
         "/api/v1/projects", json={"key": "OPS", "title": "Эксплуатация"}
     )
     assert created.status_code == 201, created.text
+    core = await auth_client.post(
+        "/api/v1/projects/OPS/areas", json={"key": "core", "title": "Основа"}
+    )
+    assert core.status_code == 201, core.text
     await create(auth_client)
-    await create(auth_client, project="ops", title="Дежурство")
+    await create(auth_client, project="ops", area="OPS/core", title="Дежурство")
     await auth_client.patch("/api/v1/tasks/TRK-1", json={"goal": "a"})
     await auth_client.patch("/api/v1/tasks/OPS-1", json={"goal": "b"})
     await auth_client.patch("/api/v1/tasks/TRK-1", json={"goal": "c"})

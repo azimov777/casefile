@@ -79,6 +79,7 @@ function seed(request: APIRequestContext): Promise<string> {
       '/api/v1/tasks',
       {
         project: 'DEMO',
+        area: 'DEMO/core',
         title: 'Дело со служебными записями всех родов',
         description: `Заведена сквозным тестом ${MARKER}.`,
         goal: LONG_GOAL,
@@ -103,6 +104,7 @@ function seed(request: APIRequestContext): Promise<string> {
       '/api/v1/tasks',
       {
         project: 'DEMO',
+        area: 'DEMO/core',
         title: 'Вторая сторона связи для дела',
         description: 'Заведена сквозным тестом.',
       },
