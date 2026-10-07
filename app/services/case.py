@@ -50,13 +50,13 @@
 `attribute_removed`) — `app/services/attributes.py`, записи архива (`archived`, `restored`)
 — тоже `app/services/projects.py`.
 
-## Дело направления
+## Дело области
 
 Механика дела проекта целиком (`CONCEPT.md`, 3.7): те же типы, те же служебные записи,
-номер внутри направления под блокировкой его строки. Поэтому функции дела проекта
-принимают владельцем и направление (`CaseOwner`), а не дублируются: различаются только
-заголовки служебных записей («Direction archived») и решения — механики `supersedes` у
-дела направления нет. Служебные записи направления ставит `app/services/directions.py`.
+номер внутри области под блокировкой её строки. Поэтому функции дела проекта
+принимают владельцем и область (`CaseOwner`), а не дублируются: различаются только
+заголовки служебных записей («Area archived») и решения — механики `supersedes` у
+дела области нет. Служебные записи области ставит `app/services/areas.py`.
 """
 
 import uuid
@@ -68,15 +68,15 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.locks import lock_changes
+from app.db.models.area import Area
 from app.db.models.author import created_by_columns
-from app.db.models.direction import Direction
 from app.db.models.entry import Entry
 from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.pagination import Page
 from app.db.repositories import (
-    DirectionRepository,
+    AreaRepository,
     EntryRepository,
     ParticipantRepository,
     ProjectRepository,
@@ -89,7 +89,7 @@ from app.domain.case import (
     CLOSING_WITHOUT_ANSWER,
     INCOMPLETE_OUTCOMES,
     REPLACEABLE_ENTRY_TYPES,
-    DirectionEntryRef,
+    AreaEntryRef,
     EntryContext,
     EntryDraft,
     EntryHeading,
@@ -135,19 +135,19 @@ from app.services import freeze
 from app.services import participants as participants_service
 from app.services.auth import Actor
 
-#: Владелец дела без хода работы: проект или направление (`CONCEPT.md`, 3.4 и 3.7). У обоих
+#: Владелец дела без хода работы: проект или область (`CONCEPT.md`, 3.4 и 3.7). У обоих
 #: одни типы записей, атрибуты и архив, и одни функции дела ниже.
-type CaseOwner = Project | Direction
+type CaseOwner = Project | Area
 
 
 def owner_name(owner: CaseOwner) -> str:
-    """Ключ проекта или адрес направления: им владелец назван в ссылках и отказах."""
-    return owner.address if isinstance(owner, Direction) else owner.key
+    """Ключ проекта или адрес области: им владелец назван в ссылках и отказах."""
+    return owner.address if isinstance(owner, Area) else owner.key
 
 
 def _owner_word(owner: CaseOwner) -> str:
-    """Слово владельца в заголовках служебных записей: «Project created», «Direction created»."""
-    return "Direction" if isinstance(owner, Direction) else "Project"
+    """Слово владельца в заголовках служебных записей: «Project created», «Area created»."""
+    return "Area" if isinstance(owner, Area) else "Project"
 
 
 # --- Чтение ---------------------------------------------------------------------------
@@ -168,10 +168,10 @@ class TaskEntry:
 
 @dataclass(frozen=True, slots=True)
 class CasePage(Page[Entry]):
-    """Страница дела проекта или направления и статусы её записей, посчитанные при чтении.
+    """Страница дела проекта или области и статусы её записей, посчитанные при чтении.
 
     `standings` — по номеру записи, только у решений и заметок дела проекта (решение
-    TRK#48, раздел 2): у остальных типов и у всех записей дела направления (`CONCEPT.md`,
+    TRK#48, раздел 2): у остальных типов и у всех записей дела области (`CONCEPT.md`,
     3.7) статуса нет, и номера в словаре нет.
     """
 
@@ -776,7 +776,7 @@ async def append_project_entry(
     бы одну и ту же, и у неё оказалось бы два преемника. Заморозка архива — тем же первым
     шагом, чтобы архив назвал отказ раньше правил замены.
 
-    Владелец — проект или направление (`CONCEPT.md`, 3.7): в деле направления те же типы,
+    Владелец — проект или область (`CONCEPT.md`, 3.7): в деле области те же типы,
     но механики замены нет, и `supersedes` отвергает домен.
     """
     draft = build_project_entry(
@@ -786,10 +786,10 @@ async def append_project_entry(
         body=body,
         refs=refs,
         supersedes=supersedes,
-        replaceable=not isinstance(project, Direction),
+        replaceable=not isinstance(project, Area),
     )
-    if isinstance(project, Direction):
-        await freeze.lock_unfrozen(session, direction=project)
+    if isinstance(project, Area):
+        await freeze.lock_unfrozen(session, area=project)
     else:
         await freeze.lock_unfrozen(session, project=project)
     problems = FieldProblems()
@@ -825,7 +825,7 @@ async def list_project_entries(
     limit: int | None = None,
     cursor: str | None = None,
 ) -> CasePage:
-    """Записи дела проекта или направления страницами в порядке `no` — те же фильтры, что
+    """Записи дела проекта или области страницами в порядке `no` — те же фильтры, что
     у задачи, и `attribute`: история одного атрибута по имени, без учёта регистра
     (`CONCEPT.md`, 3.2). `text` — подстрока заголовка или тела без учёта регистра (TRK#48,
     раздел 3): поиск знания по делу, опись которого записей знания не несёт.
@@ -833,15 +833,15 @@ async def list_project_entries(
     У решения и заметки дела проекта — статус и прямой преемник (TRK#48, раздел 2).
     `in_force` отбирает по статусу: `True` — действующие решения и заметки, `False` —
     заменённые, `None` — без условия; складывается с остальными фильтрами по «и». Записи
-    без статуса — другие типы и всё дело направления — не попадают ни под `True`, ни под
+    без статуса — другие типы и всё дело области — не попадают ни под `True`, ни под
     `False`. Статусы считаются одним запросом на дело и только тогда, когда они нужны:
     для отбора или для решения и заметки на странице.
     """
     repository = EntryRepository(session)
-    if isinstance(project, Direction):
+    if isinstance(project, Area):
         if in_force is not None:
             return CasePage(items=[], next_cursor=None)
-        page = await repository.list_direction_page(
+        page = await repository.list_area_page(
             project.id,
             nos=nos,
             types=types,
@@ -891,12 +891,12 @@ async def list_project_entries(
 async def read_project_entry(
     session: AsyncSession, project: CaseOwner, no: int, *, actor: Actor
 ) -> Entry:
-    """Одна запись дела проекта или направления по номеру — адрес из ссылки `TRK#7` или
+    """Одна запись дела проекта или области по номеру — адрес из ссылки `TRK#7` или
     `TRK/promotion#3`. Статус решения или заметки проекта — `decisions.standing_of`."""
     repository = EntryRepository(session)
     entry = (
-        await repository.get_by_direction_no(project.id, no)
-        if isinstance(project, Direction)
+        await repository.get_by_area_no(project.id, no)
+        if isinstance(project, Area)
         else await repository.get_by_project_no(project.id, no)
     )
     if entry is None:
@@ -907,23 +907,23 @@ async def read_project_entry(
 async def project_case_index(
     session: AsyncSession, project: CaseOwner, *, actor: Actor
 ) -> list[EntryHeading]:
-    """Опись дела проекта или направления: заголовки без тел. Вердиктов в этих делах нет,
+    """Опись дела проекта или области: заголовки без тел. Вердиктов в этих делах нет,
     и помечать устаревшие незачем — опись отдаётся как есть.
 
     У проекта в описи нет решений и заметок: чтение проекта несёт действующие отдельными
     списками и число всех по типам (`decisions.case_knowledge`, решение TRK#48, раздел 3).
-    У направления статуса и замены нет (`CONCEPT.md`, 3.7), списков тоже, и его опись
+    У области статуса и замены нет (`CONCEPT.md`, 3.7), списков тоже, и её опись
     несёт все записи дела."""
     repository = EntryRepository(session)
-    if isinstance(project, Direction):
-        return await repository.direction_headings(project.id)
+    if isinstance(project, Area):
+        return await repository.area_headings(project.id)
     return await repository.project_headings(project.id)
 
 
 async def record_project_created(
     session: AsyncSession, project: CaseOwner, *, actor: Actor
 ) -> Entry:
-    """Первая страница дела нового проекта или направления. Нагрузки нет — карточка и есть
+    """Первая страница дела нового проекта или области. Нагрузки нет — карточка и есть
     содержание.
 
     Проектам, заведённым до появления дела, эта запись задним числом не подшивается:
@@ -948,7 +948,7 @@ async def record_project_field_changed(
     after: str,
     action_id: uuid.UUID | None = None,
 ) -> Entry:
-    """Правка карточки проекта или направления: название или описание, «было / стало»
+    """Правка карточки проекта или области: название или описание, «было / стало»
     целиком.
 
     Тот же тип и та же нагрузка, что у правки обвязки задачи (`CONCEPT.md`, 3.4):
@@ -1032,7 +1032,7 @@ async def record_attribute_removed(
 async def record_archived(
     session: AsyncSession, project: CaseOwner, *, actor: Actor, reason: str
 ) -> Entry:
-    """Проект или направление архивированы: причина — в записи `archived` их дела
+    """Проект или область архивированы: причина — в записи `archived` их дела
     (`CONCEPT.md`, 3.2 и 3.7)."""
     return await _append(
         session,
@@ -1047,7 +1047,7 @@ async def record_archived(
 async def record_restored(
     session: AsyncSession, project: CaseOwner, *, actor: Actor, reason: str
 ) -> Entry:
-    """Проект или направление восстановлены из архива: причина — в записи `restored`."""
+    """Проект или область восстановлены из архива: причина — в записи `restored`."""
     return await _append(
         session,
         project,
@@ -1156,7 +1156,7 @@ async def record_field_changed(
 ) -> Entry:
     """Правка обвязки задачи: то, что меняется в любом незакрытом статусе.
 
-    Сегодня это `priority`, `direction`, `not_before` и `decisions`; у `not_before` «было» и
+    Сегодня это `priority`, `area`, `not_before` и `decisions`; у `not_before` «было» и
     «стало» — моменты строкой в UTC, у `decisions` — списки ссылок
     (`CONCEPT.md`, 3.4). Отдельно от `section_changed` не ради симметрии:
     тот про задание — договор с агентом, неизменяемый от `open` и дальше, — а это
@@ -1426,7 +1426,7 @@ async def _check_continuation(
 
 async def _check_refs(
     session: AsyncSession,
-    owner: Task | Project | Direction,
+    owner: Task | Project | Area,
     draft: EntryDraft,
     problems: FieldProblems,
 ) -> None:
@@ -1435,18 +1435,16 @@ async def _check_refs(
     Задачи собираются в один запрос, записи — по одному запросу на задачу: ссылок в
     записи единицы, и разбор их по задачам дешевле, чем `IN` по парам. Записи проекта
     (`TRK#7`) — так же, по запросу на проект; неизвестный проект — `unknown_project`.
-    Записи направления (`TRK/promotion#3`) — по запросу на направление; неизвестный проект
-    — `unknown_project`, неизвестное направление — `unknown_direction`. Владелец
-    подшиваемой записи — задача, проект или направление — не влияет ни на что: ссылки из
+    Записи области (`TRK/promotion#3`) — по запросу на область; неизвестный проект
+    — `unknown_project`, неизвестная область — `unknown_area`. Владелец
+    подшиваемой записи — задача, проект или область — не влияет ни на что: ссылки из
     любого дела в любое проверяются одинаково.
     """
     task_refs = [
-        ref
-        for ref in draft.tracker_refs
-        if not isinstance(ref, ProjectEntryRef | DirectionEntryRef)
+        ref for ref in draft.tracker_refs if not isinstance(ref, ProjectEntryRef | AreaEntryRef)
     ]
     project_refs = [ref for ref in draft.tracker_refs if isinstance(ref, ProjectEntryRef)]
-    direction_refs = [ref for ref in draft.tracker_refs if isinstance(ref, DirectionEntryRef)]
+    area_refs = [ref for ref in draft.tracker_refs if isinstance(ref, AreaEntryRef)]
     entries = EntryRepository(session)
 
     if task_refs:
@@ -1486,33 +1484,33 @@ async def _check_refs(
                     "refs", "unknown_entry", ref=_ref_text(ProjectEntryRef(key=key, no=no))
                 )
 
-    if direction_refs:
-        direction_wanted: dict[tuple[str, str], set[int]] = {}
-        for ref in direction_refs:
-            direction_wanted.setdefault((ref.project_key, ref.direction_key), set()).add(ref.no)
-        directions = DirectionRepository(session)
+    if area_refs:
+        area_wanted: dict[tuple[str, str], set[int]] = {}
+        for ref in area_refs:
+            area_wanted.setdefault((ref.project_key, ref.area_key), set()).add(ref.no)
+        areas = AreaRepository(session)
         known_projects = ProjectRepository(session)
-        for (project_key, direction_key), nos in direction_wanted.items():
+        for (project_key, area_key), nos in area_wanted.items():
             refs_of = [
-                DirectionEntryRef(project_key=project_key, direction_key=direction_key, no=no)
+                AreaEntryRef(project_key=project_key, area_key=area_key, no=no)
                 for no in sorted(nos)
             ]
-            direction = (
+            area = (
                 owner
-                if isinstance(owner, Direction)
-                and (owner.project.key, owner.key) == (project_key, direction_key)
-                else await directions.get_by_address(project_key, direction_key)
+                if isinstance(owner, Area)
+                and (owner.project.key, owner.key) == (project_key, area_key)
+                else await areas.get_by_address(project_key, area_key)
             )
-            if direction is None:
+            if area is None:
                 reason = (
                     "unknown_project"
                     if await known_projects.get_by_key(project_key) is None
-                    else "unknown_direction"
+                    else "unknown_area"
                 )
                 for ref in refs_of:
                     problems.add("refs", reason, ref=_ref_text(ref))
                 continue
-            existing = await entries.existing_direction_nos(direction.id, sorted(nos))
+            existing = await entries.existing_area_nos(area.id, sorted(nos))
             for ref in refs_of:
                 if ref.no not in existing:
                     problems.add("refs", "unknown_entry", ref=_ref_text(ref))
@@ -1520,14 +1518,14 @@ async def _check_refs(
 
 def _ref_text(ref: TrackerRef) -> str:
     """Ссылка в каноническом виде — та же строка, что уедет в `refs` записи."""
-    if isinstance(ref, EntryRef | ProjectEntryRef | DirectionEntryRef):
+    if isinstance(ref, EntryRef | ProjectEntryRef | AreaEntryRef):
         return format_entry_ref(ref.key, ref.no)
     return ref.key
 
 
 async def _append(
     session: AsyncSession,
-    owner: Task | Project | Direction,
+    owner: Task | Project | Area,
     *,
     actor: Actor,
     type: EntryType,
@@ -1539,7 +1537,7 @@ async def _append(
 ) -> Entry:
     """Подшивает запись: номер в деле выдаётся под блокировкой строки владельца.
 
-    Владелец — задача, проект или направление (`CONCEPT.md`, 3.4 и 3.7): одна точка
+    Владелец — задача, проект или область (`CONCEPT.md`, 3.4 и 3.7): одна точка
     подшивки на все дела, иначе у дела проекта была бы своя очередь, своё оповещение и свой
     порядок `seq`.
 
@@ -1578,14 +1576,14 @@ async def _append(
             session,
             tasks=(owner,) if isinstance(owner, Task) else (),
             projects=(owner,) if isinstance(owner, Project) else (),
-            directions=(owner,) if isinstance(owner, Direction) else (),
+            areas=(owner,) if isinstance(owner, Area) else (),
         )
     if isinstance(owner, Task):
         no = await repository.allocate_no(owner.id)
         ownership = {"task_id": owner.id}
-    elif isinstance(owner, Direction):
-        no = await repository.allocate_direction_no(owner.id)
-        ownership = {"direction_id": owner.id}
+    elif isinstance(owner, Area):
+        no = await repository.allocate_area_no(owner.id)
+        ownership = {"area_id": owner.id}
     else:
         no = await repository.allocate_project_no(owner.id)
         ownership = {"project_id": owner.id}

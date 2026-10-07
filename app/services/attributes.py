@@ -1,7 +1,7 @@
-"""Сценарии по атрибутам проекта и направления: задать значение, снять, прочитать.
+"""Сценарии по атрибутам проекта и области: задать значение, снять, прочитать.
 
-Атрибут — справочный факт проекта или направления (`CONCEPT.md`, 3.2 и 3.7). Нынешнее
-значение лежит строкой `project_attributes` или `direction_attributes`, история —
+Атрибут — справочный факт проекта или области (`CONCEPT.md`, 3.2 и 3.7). Нынешнее
+значение лежит строкой `project_attributes` или `area_attributes`, история —
 служебными записями дела владельца, подшитыми в той же транзакции: `attribute_created`,
 `attribute_changed`, `attribute_removed`. Механика у обоих владельцев одна, и сценарии
 одни: владелец — `CaseOwner` из `app/services/case.py`.
@@ -24,8 +24,8 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.area import Area
 from app.db.models.attribute import Attribute
-from app.db.models.direction import Direction
 from app.db.models.entry import Entry
 from app.db.repositories import AttributeRepository
 from app.domain.attributes import (
@@ -57,15 +57,15 @@ class AttributeSet:
 async def list_attributes(
     session: AsyncSession, project: CaseOwner, *, actor: Actor
 ) -> list[Attribute]:
-    """Нынешние значения всех атрибутов проекта или направления, по имени без учёта
+    """Нынешние значения всех атрибутов проекта или области, по имени без учёта
     регистра."""
     return await AttributeRepository(session).list_for(project)
 
 
 async def _lock_unfrozen(session: AsyncSession, owner: CaseOwner) -> None:
     """Первый шаг сценария атрибута: очередь изменений и заморозка владельца."""
-    if isinstance(owner, Direction):
-        await freeze.lock_unfrozen(session, direction=owner)
+    if isinstance(owner, Area):
+        await freeze.lock_unfrozen(session, area=owner)
     else:
         await freeze.lock_unfrozen(session, project=owner)
 

@@ -42,11 +42,11 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
-from app.db.models.direction import Direction
+from app.db.models.area import Area
 from app.db.models.task import Task
 from app.db.pagination import Page
 from app.db.repositories.search import TaskSearchRepository
-from app.domain.directions import DIRECTION_ADDRESS_SHAPE, is_direction_address
+from app.domain.areas import AREA_ADDRESS_SHAPE, is_area_address
 from app.domain.errors import (
     SearchFieldUnknownError,
     SearchOperatorNotSupportedError,
@@ -55,8 +55,8 @@ from app.domain.errors import (
 from app.domain.fields import FieldProblem
 from app.domain.query_language import parse_query, parse_sort_terms, parse_structured_value
 from app.domain.search import (
+    AREA_FIELD,
     DEFAULT_SORT_KEY,
-    DIRECTION_FIELD,
     MANDATORY_FIELD,
     MAX_CONDITIONS,
     MAX_GROUP_DEPTH,
@@ -99,8 +99,8 @@ from app.domain.tasks import (
     TaskStatus,
     normalize_decision_ref,
 )
+from app.services import areas as areas_service
 from app.services import decisions as decisions_service
-from app.services import directions as directions_service
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
@@ -122,14 +122,14 @@ class StructuredTerm:
 
 
 @dataclass(frozen=True, slots=True)
-class AskedDirection:
-    """Направление строки выдачи, которое просили в `fields`: `value` — оно само или `None`.
+class AskedArea:
+    """Область строки выдачи, которую просили в `fields`: `value` — она сама или `None`.
 
-    Обёртка по той же причине, что `AskedParent`: «не просили» и «направления нет» не
+    Обёртка по той же причине, что `AskedParent`: «не просили» и «области нет» не
     сливаются в одно `None` (`CONCEPT.md`, 4.4).
     """
 
-    value: Direction | None
+    value: Area | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,10 +154,10 @@ class FoundTask:
     task: Task
     features: TaskFeatures | None = None
     parent: AskedParent | None = None
-    #: Направление строки: `None` — «не просили», `AskedDirection(None)` — «у задачи
-    #: направления нет». Читается из самой задачи: направление грузится с ней одним
+    #: Область строки: `None` — «не просили», `AskedArea(None)` — «у задачи
+    #: области нет». Читается из самой задачи: область грузится с ней одним
     #: запросом, как проект.
-    direction: AskedDirection | None = None
+    area: AskedArea | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,9 +224,9 @@ async def search_tasks(
                     task=task,
                     features=features,
                     parent=parent,
-                    direction=(
-                        AskedDirection(task.direction)
-                        if field_requested(DIRECTION_FIELD, resolved.fields)
+                    area=(
+                        AskedArea(task.area)
+                        if field_requested(AREA_FIELD, resolved.fields)
                         else None
                     ),
                 )
@@ -471,8 +471,8 @@ async def _resolve_value(
             return await _task_id(session, condition, value)
         case SearchValueKind.DECISION_REF:
             return await _decision_ref(session, condition, value)
-        case SearchValueKind.DIRECTION_ADDRESS:
-            return await _direction_id(session, condition, value)
+        case SearchValueKind.AREA_ADDRESS:
+            return await _area_id(session, condition, value)
         case SearchValueKind.STATUS:
             return _enum_value(condition, value, TaskStatus)
         case SearchValueKind.PRIORITY:
@@ -518,29 +518,29 @@ async def _task_id(session: AsyncSession, condition: Condition, value: SearchVal
     return task.id
 
 
-async def _direction_id(session: AsyncSession, condition: Condition, value: SearchValue) -> Any:
-    """Направление по адресу `ПРОЕКТ/ключ`. Ненайденное — неверное значение, а не пустая выдача.
+async def _area_id(session: AsyncSession, condition: Condition, value: SearchValue) -> Any:
+    """Область по адресу `ПРОЕКТ/ключ`. Ненайденное — неверное значение, а не пустая выдача.
 
-    По тому же доводу, что у родителя: на вопрос «что в этом направлении» пустая выдача
+    По тому же доводу, что у родителя: на вопрос «что в этой области» пустая выдача
     читается как «ничего», и опечатку в адресе приняли бы за ответ. Адрес без косой черты
-    — не адрес направления, и причина называет форму.
+    — не адрес области, и причина называет форму.
     """
     address = _text(condition, value)
-    if not is_direction_address(address):
+    if not is_area_address(address):
         raise SearchValueInvalidError(
             details={
                 "field": condition.name,
                 "position": value.position,
                 "value": address,
                 "reason": "not_an_address",
-                "expected": DIRECTION_ADDRESS_SHAPE,
+                "expected": AREA_ADDRESS_SHAPE,
             },
         )
     try:
-        direction = await directions_service.get_direction(session, address)
+        area = await areas_service.get_area(session, address)
     except AppError as exc:
         raise _value_rejected(condition, value, exc, address) from exc
-    return direction.id
+    return area.id
 
 
 async def _decision_ref(session: AsyncSession, condition: Condition, value: SearchValue) -> str:
