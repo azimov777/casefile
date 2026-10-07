@@ -2324,14 +2324,18 @@ def test_a_failed_snapshot_stops_the_installer_before_up(tmp_path: Path) -> None
 def test_a_database_volume_without_a_db_container_gets_the_db_up_and_a_snapshot(
     tmp_path: Path,
 ) -> None:
-    """После `down` без `-v`: том есть, контейнера нет, head другой — `up db`, снимок, потом `up`."""
+    """После `down` без `-v`: том есть, контейнера нет, head другой.
+
+    Порядок: `up db`, снимок, потом `up`.
+    """
     done, calls = _install(tmp_path, **_snapshot_scene(db="", volume="casefile_pgdata\n"))
 
     assert done.returncode == 0, done.stderr
     up_db = calls.index("compose up -d --wait db")
     assert up_db < _snapshot_index(calls)
     store = next(c for c in calls if "--entrypoint sh updater" in c)
-    assert _snapshot_index(calls) < calls.index(store) < calls.index("compose up -d --remove-orphans")
+    up_all = calls.index("compose up -d --remove-orphans")
+    assert _snapshot_index(calls) < calls.index(store) < up_all
     assert "rev1 -> rev2" in done.stdout
 
 
