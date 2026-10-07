@@ -38,8 +38,13 @@ beforeEach(() => {
  * (TRK-159) принадлежат только делу проекта, и в ленте задачи их не бывает.
  */
 const PROJECT_ONLY_TYPES: EntryType[] = ['archived', 'restored'];
+/** Итог и закрытие бывают только в деле обсуждения (TRK-669), в деле задачи — нет. */
+const DISCUSSION_ONLY_TYPES: EntryType[] = ['conclusion', 'closed'];
 const TASK_CASE_TYPES = ENTRY_TYPES.filter(
-  (type) => !type.startsWith('attribute_') && !PROJECT_ONLY_TYPES.includes(type),
+  (type) =>
+    !type.startsWith('attribute_') &&
+    !PROJECT_ONLY_TYPES.includes(type) &&
+    !DISCUSSION_ONLY_TYPES.includes(type),
 );
 
 function wholeCase(): Entry[] {

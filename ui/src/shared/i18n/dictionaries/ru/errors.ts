@@ -46,6 +46,11 @@ export const errors = {
   database_unavailable: 'База данных недоступна.',
   decision_not_in_force:
     'Это решение проекта уже заменено другим: сошлитесь на то, что его заменило.',
+  discussion_closed: 'Обсуждение закрыто: в нём больше ничего не меняется.',
+  discussion_has_open_questions: 'В обсуждении остался вопрос без ответа.',
+  discussion_not_found: 'Обсуждения с таким номером в этом проекте нет.',
+  discussion_task_exists: 'Эта задача уже привязана к обсуждению.',
+  discussion_task_not_found: 'Эта задача к обсуждению не привязана.',
   entry_fields_invalid: 'Запись не прошла проверку.',
   entry_not_found: 'Записи с таким номером в этой задаче нет.',
   finding_not_in_force: 'Эта заметка проекта уже заменена другой: заменяйте ту, что её заменила.',
@@ -60,6 +65,7 @@ export const errors = {
   invalid_area_key: 'Ключ области — только строчная латиница, цифры и дефис внутри.',
   invalid_attribute_name: 'Имя атрибута — только латиница, цифры, «_» и «-».',
   invalid_cursor: 'Курсор страницы не разбирается.',
+  invalid_discussion_address: 'Адрес обсуждения не разбирается как «КЛЮЧ~НОМЕР».',
   invalid_email: 'Это не похоже на адрес почты.',
   invalid_idempotency_key: 'Ключ повтора пуст или слишком длинный.',
   invalid_journal_cursor: 'Позиция в ленте журнала не разбирается.',
@@ -107,6 +113,7 @@ export const errors = {
   task_fields_invalid: 'Поля задачи не прошли проверку.',
   task_has_open_blocking_questions:
     'У задачи есть блокирующий вопрос без ответа: в работу она пойдёт, когда на него ответят.',
+  task_has_open_discussions: 'Задача зависит от обсуждения, которое ещё не закрыто.',
   task_has_parent: 'У задачи уже есть родитель: второго не бывает, родитель у задачи один.',
   task_has_unclosed_children: 'У задачи есть незакрытые дети.',
   task_move_batch_size_invalid: 'Список задач для переноса пуст или слишком длинный.',

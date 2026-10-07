@@ -191,12 +191,31 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
       );
 
     // Смена исполнителя и связь целиком умещаются в заголовке: имена участников,
-    // вид связи и ключ задачи — всё это он и называет. Тела у них не бывает.
+    // вид связи и ключ задачи — всё это он и называет. Тела у них не бывает. Так же у
+    // привязки задачи к обсуждению и закрытия обсуждения (TRK-669): обе стороны привязки
+    // и номер итога — в заголовке и фактах.
     case 'assignee_changed':
     case 'link_added':
     case 'link_removed':
     case 'created':
+    case 'attached':
+    case 'detached':
+    case 'closed':
       return null;
+
+    /*
+     * Итог обсуждения (TRK-669): три части надстрочными подписями, как у сводки, — что
+     * решено, что заменено, что открыто. Экран обсуждения ставит итог сверху (TRK-672),
+     * здесь — тот же итог строкой его дела.
+     */
+    case 'conclusion':
+      return (
+        <dl className="grid gap-3">
+          <Part title={t('entry.conclusion.decided')} value={entry.payload.decided} />
+          <Part title={t('entry.conclusion.superseded')} value={entry.payload.superseded} />
+          <Part title={t('entry.conclusion.open')} value={entry.payload.open} />
+        </dl>
+      );
 
     /*
      * Разбор замечания. Исход и адрес работы называет заголовок; в теле — объяснение,

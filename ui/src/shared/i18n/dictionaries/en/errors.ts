@@ -47,6 +47,11 @@ export const errors = {
   database_unavailable: 'The database is unavailable.',
   decision_not_in_force:
     'This project decision has been superseded: refer to the one that replaced it.',
+  discussion_closed: 'The discussion is closed: nothing in it changes any more.',
+  discussion_has_open_questions: 'The discussion still has a question with no answer.',
+  discussion_not_found: 'There is no discussion with that number in this project.',
+  discussion_task_exists: 'This task is already attached to the discussion.',
+  discussion_task_not_found: 'This task is not attached to the discussion.',
   entry_fields_invalid: 'The entry did not pass validation.',
   entry_not_found: 'This task has no entry with that number.',
   finding_not_in_force:
@@ -63,6 +68,7 @@ export const errors = {
     'The area key may contain only lower-case Latin letters, digits and inner hyphens.',
   invalid_attribute_name: 'The attribute name may contain only Latin letters, digits, “_” and “-”.',
   invalid_cursor: 'The page cursor cannot be parsed.',
+  invalid_discussion_address: 'The discussion address does not read as “KEY~NUMBER”.',
   invalid_email: 'This does not look like an email address.',
   invalid_idempotency_key: 'The idempotency key is empty or too long.',
   invalid_journal_cursor: 'The position in the journal feed cannot be parsed.',
@@ -110,6 +116,7 @@ export const errors = {
   task_fields_invalid: 'The task fields did not pass validation.',
   task_has_open_blocking_questions:
     'The task has an unanswered blocking question: it goes into work once the question is answered.',
+  task_has_open_discussions: 'The task depends on a discussion that is not closed yet.',
   task_has_parent: 'The task already has a parent: a task has only one.',
   task_has_unclosed_children: 'The task has children that are not closed.',
   task_move_batch_size_invalid: 'The list of tasks to move is empty or too long.',
