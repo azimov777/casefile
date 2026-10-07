@@ -106,6 +106,7 @@ export const errors = {
   project_not_archived: 'The project is not archived.',
   project_not_found: 'There is no project with that key.',
   project_reason_required: 'Archiving or restoring a project requires a reason.',
+  question_not_a_task_entry: 'Questions are asked in discussions, not in a task’s case.',
   search_field_unknown: 'There is no such field to filter by.',
   search_operator_not_supported: 'This operator does not apply to this field.',
   search_value_invalid: 'The value of the filter condition is not allowed.',

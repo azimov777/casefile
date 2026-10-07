@@ -103,6 +103,7 @@ export const errors = {
   project_not_archived: 'Проект не в архиве.',
   project_not_found: 'Проекта с таким ключом нет.',
   project_reason_required: 'Архивирование и восстановление проекта требуют причины.',
+  question_not_a_task_entry: 'Вопросы задают в обсуждениях, а не в деле задачи.',
   search_field_unknown: 'Такого поля отбора нет.',
   search_operator_not_supported: 'Оператор к этому полю неприменим.',
   search_value_invalid: 'Значение условия отбора недопустимо.',
