@@ -215,7 +215,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 - `answer` — answers a question of the same task, or closes one still unanswered as `withdrawn` or `replaced` by a later question, with a reason; an answered question cannot be withdrawn
 - `resolve` — resolves a remark on a task: its outcome and where the work went
 - `add_verdict` — files the outcome of one review check
-- `read_project_entries` — returns entry bodies of one project's case, with payload, in number order
+- `read_project_entries` — returns entry bodies of one project's case, with payload, in number order; filters by number, type, status and a substring of the title or body
 - `add_project_entry` — files a decision, finding, artifact or note in a project's case
 
 **Links**
@@ -223,7 +223,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 - `unlink` — removes a link and files `link_removed` in both cases
 
 **Projects & participants**
-- `get_project` — returns one project by its key: key, title, description, current attribute values and the index of its case
+- `get_project` — returns one project by its key: key, title, description, current attribute values, the decisions and findings in force and the index of the rest of its case
 - `list_projects` — lists the installation's projects: key, title and archive time; archived ones only when asked
 - `list_participants` — lists the participant registry: the possible addressees of a question
 - `create_project` — creates a project
@@ -244,7 +244,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 |---|---|
 | Update right now | run the install line again |
 | Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env`, then `docker compose up -d --no-deps updater` in `~/casefile` |
-| Stay on one release | `CASEFILE_VERSION=0.12.0` in `~/casefile/.env` |
+| Stay on one release | `CASEFILE_VERSION=0.13.0` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
 | Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |
