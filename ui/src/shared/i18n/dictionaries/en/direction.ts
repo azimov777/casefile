@@ -165,4 +165,16 @@ export const direction = {
     submit: 'Save',
     pending: 'Saving…',
   },
+
+  /** The «⋯» menu in the direction page header (TRK-618). */
+  menu: {
+    label: 'Actions with direction {{address}}',
+  },
+
+  /** Direction page tabs (TRK-618): without a parameter the Case tab opens. */
+  tabs: {
+    label: 'Direction sections',
+    attributes: 'Attributes',
+    case: 'Case',
+  },
 } as const;

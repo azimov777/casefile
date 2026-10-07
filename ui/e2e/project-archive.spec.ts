@@ -67,6 +67,18 @@ async function caseText(request: APIRequestContext, key: string): Promise<string
   return JSON.stringify(await response.json());
 }
 
+/** Кнопка меню «⋯» в шапке экрана проекта: «Изменить», «В архив», «Восстановить» — за ней. */
+function menu(page: Page, key: string) {
+  return page.getByRole('button', { name: `Действия с проектом ${key}` });
+}
+
+/** Вкладка экрана проекта по началу подписи. */
+function tab(page: Page, label: string) {
+  return page
+    .getByRole('navigation', { name: 'Разделы проекта' })
+    .getByRole('link', { name: new RegExp(`^${label}`) });
+}
+
 /** Строка проекта в панели: ссылка на его задачи, имя начинается с ключа. */
 function projectRow(page: Page, key: string) {
   return side(page).getByRole('link', { name: new RegExp(`^${key}`) });
@@ -86,7 +98,12 @@ test('архив с причиной убирает проект из панел
   await page.goto(`/projects/${key}`);
   await expect(projectRow(page, key)).toBeVisible();
 
+  // Без открытого меню в шапке нет ни «Изменить», ни «В архив»: они — за «⋯».
+  await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'В архив', exact: true })).toHaveCount(0);
+
   // Без причины — ни запроса, ни архива: упрёк под полем.
+  await menu(page, key).click();
   await page.getByRole('button', { name: 'В архив', exact: true }).click();
   const dialog = page.getByRole('alertdialog', { name: `Отправить ${key} в архив?` });
   await dialog.getByRole('button', { name: 'Отправить в архив' }).click();
@@ -101,14 +118,25 @@ test('архив с причиной убирает проект из панел
   // телом запроса в браузере.
   expect(await caseText(page.request, key)).toContain('Работа переехала в другой проект');
 
-  // Экран остаётся и говорит, что проект в архиве; правки на нём нет, а фокус — на той
-  // же кнопке, ставшей «Восстановить».
+  // Экран остаётся и говорит, что проект в архиве; фокус — на «⋯», кнопке, которая
+  // пережила архив. В меню теперь одно «Восстановить», правки на экране нет.
   await expect(page.getByText('Проект в архиве с', { exact: false })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Добавить атрибут' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Написать заметку' })).toHaveCount(0);
+  await expect(menu(page, key)).toBeFocused();
+  await menu(page, key).click();
   const restore = page.getByRole('button', { name: 'Восстановить', exact: true });
-  await expect(restore).toBeFocused();
+  await expect(restore).toBeVisible();
+  await expect(page.locator('[data-action]')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'В архив', exact: true })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(restore).toBeHidden();
+  await expect(menu(page, key)).toBeFocused();
+  await tab(page, 'Атрибуты').click();
+  await expect(page.getByRole('region', { name: 'Атрибуты' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Добавить атрибут' })).toHaveCount(0);
+  await tab(page, 'Дело').click();
+  await expect(page.getByRole('region', { name: 'Дело проекта' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Написать заметку' })).toHaveCount(0);
 
   // Из панели проект ушёл: его скрыл бэкенд.
   await expect(projectRow(page, key)).toHaveCount(0);
@@ -132,6 +160,7 @@ test('архив с причиной убирает проект из панел
   // Восстановление — тоже только с причиной.
   await toggle.uncheck();
   await expect(projectRow(page, key)).toHaveCount(0);
+  await menu(page, key).click();
   await restore.click();
   const back = page.getByRole('dialog', { name: `Восстановить ${key}` });
   await back.getByRole('button', { name: 'Восстановить проект' }).click();
@@ -150,8 +179,10 @@ test('архив с причиной убирает проект из панел
   await expect(projectRow(page, key)).toBeVisible();
   await expect(projectRow(page, key)).not.toContainText('в архиве');
   await expect(page.getByText('Проект в архиве с', { exact: false })).toHaveCount(0);
+  await expect(menu(page, key)).toBeFocused();
+  await menu(page, key).click();
   await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'В архив', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'В архив', exact: true })).toBeVisible();
 });
 
 test('на задаче архивного проекта нет ни ответа, ни замечания; на задаче активного — есть', async ({
@@ -205,7 +236,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(page.getByRole('heading', { level: 1 })).toContainText(key);
       await fontsReady(page);
 
-      // Окно архива: `axe`, затем `Esc` возвращает фокус на кнопку.
+      // Окно архива из меню «⋯»: `axe`, затем `Esc` возвращает фокус на «⋯».
+      await menu(page, key).click();
       await page.getByRole('button', { name: 'В архив', exact: true }).click();
       const dialog = page.getByRole('alertdialog', { name: `Отправить ${key} в архив?` });
       await expect(dialog).toBeVisible();
@@ -215,7 +247,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       expect(report.violations, 'В архив').toEqual([]);
       await page.keyboard.press('Escape');
       await expect(dialog).toBeHidden();
-      await expect(page.getByRole('button', { name: 'В архив', exact: true })).toBeFocused();
+      await expect(menu(page, key)).toBeFocused();
 
       // Архивный проект: плашка и окно восстановления.
       await archive(page.request, key);
@@ -223,6 +255,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(page.getByText('Проект в архиве с', { exact: false })).toBeVisible();
       report = await new AxeBuilder({ page }).analyze();
       expect(report.violations, 'экран архивного проекта').toEqual([]);
+      await menu(page, key).click();
       await page.getByRole('button', { name: 'Восстановить', exact: true }).click();
       const back = page.getByRole('dialog', { name: `Восстановить ${key}` });
       await expect(back).toBeVisible();

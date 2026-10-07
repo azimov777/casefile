@@ -1,3 +1,4 @@
+export { ActionMenu, type ActionMenuItem } from './action-menu';
 export { Badge, type BadgeTone } from './badge';
 export { Button } from './button';
 export { type ControlSize } from './control-size';

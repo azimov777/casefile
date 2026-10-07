@@ -1,6 +1,6 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { cn } from '../lib';
 
 /*
@@ -37,6 +37,7 @@ export function Dialog({
   closeLabel,
   alert = false,
   trigger,
+  returnFocus,
   children,
 }: {
   open: boolean;
@@ -65,6 +66,12 @@ export function Dialog({
    * передают.
    */
   trigger?: ReactNode;
+  /**
+   * Куда вернуть фокус после закрытия, когда кнопки-`trigger` нет: окно открыл пункт
+   * меню, а меню закрылось раньше окна (меню «⋯» экрана проекта, TRK-618). Без этого
+   * Radix вернул бы фокус пункту, которого уже нет, — то есть `body`.
+   */
+  returnFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }) {
   return (
@@ -80,6 +87,14 @@ export function Dialog({
           {...(alert ? ALERT_ROLE : {})}
           onPointerDownOutside={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}
+          onCloseAutoFocus={
+            returnFocus === undefined
+              ? undefined
+              : (event) => {
+                  event.preventDefault();
+                  returnFocus.current?.focus();
+                }
+          }
           className={cn(
             'fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
             'flex max-h-(--ui-dialog-height) w-(--ui-dialog-max) flex-col gap-3',

@@ -1,12 +1,13 @@
 import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { API, bootstrap, collection, data, entryOfType, failure } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import { setToken, type components } from '@/shared/api';
+import type { ProjectDecision } from '@/entities/project';
 
 type Entry = components['schemas']['EntryRead'];
 type ProjectDetail = components['schemas']['ProjectDetailRead'];
@@ -56,6 +57,34 @@ const CASE: Entry[] = [
   }),
 ];
 
+/** Полоса вкладок экрана проекта: ориентир `nav` с именем из словаря. */
+function tabStrip() {
+  return screen.getByRole('navigation', { name: say.project('tabs.label') });
+}
+
+/** Ссылка вкладки на полосе: подпись и число, если оно у вкладки есть. */
+function tabLink(name: string, count?: number) {
+  return within(tabStrip()).getByRole('link', {
+    name: count === undefined ? name : `${name} ${count}`,
+  });
+}
+
+/** Действующее решение проекта DEMO в чтении проекта. */
+function decision(no: number, overrides: Partial<ProjectDecision> = {}): ProjectDecision {
+  return {
+    no,
+    ref: `DEMO#${no}`,
+    title: `Решение ${no}`,
+    author: { kind: 'agent', signature: 'demo_agent' },
+    created_at: '2026-09-01T10:00:00Z',
+    status: 'in_force',
+    supersedes: [],
+    superseded_by: null,
+    tasks: 0,
+    ...overrides,
+  };
+}
+
 /** Адреса запросов прогона: по ним видно, чем читалась история и тело. */
 let seen: URL[] = [];
 
@@ -95,7 +124,7 @@ beforeEach(() => {
 });
 
 describe('экран проекта', () => {
-  it('показывает ключ, название, описание, атрибуты и опись дела', async () => {
+  it('шапка — ключ, название, описание; вкладки с числами из карточки, открыт «Обзор»', async () => {
     renderApp('/projects/DEMO');
 
     const title = await screen.findByRole('heading', { level: 1 });
@@ -103,6 +132,41 @@ describe('экран проекта', () => {
     expect(title).toHaveTextContent('Демонстрация');
     expect(screen.getByText('app/')).toBeInTheDocument();
 
+    // Числа — из карточки: действующих решений нет, атрибутов два, направлений нет;
+    // у «Дела» числа нет вовсе. Открыт «Обзор», остальные вкладки — ссылки на `?tab=`.
+    expect(tabLink(say.project('tabs.overview'))).toHaveAttribute('aria-current', 'true');
+    expect(tabLink(say.project('tabs.decisions'), 0)).toHaveAttribute(
+      'href',
+      '/projects/DEMO?tab=decisions',
+    );
+    expect(tabLink(say.project('tabs.attributes'), 2)).toHaveAttribute(
+      'href',
+      '/projects/DEMO?tab=attributes',
+    );
+    expect(tabLink(say.project('tabs.directions'), 0)).toHaveAttribute(
+      'href',
+      '/projects/DEMO?tab=directions',
+    );
+    expect(tabLink(say.project('tabs.case'))).toHaveAttribute('href', '/projects/DEMO?tab=case');
+    expect(tabLink(say.project('tabs.case'))).not.toHaveAttribute('aria-current');
+
+    // На «Обзоре» разделов вкладок нет: атрибуты и опись — по нажатию на вкладку.
+    expect(screen.queryByRole('region', { name: say.project('attributes') })).toBeNull();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(
+      await screen.findByRole('region', { name: say.project('overview.case') }),
+    ).toBeInTheDocument();
+  });
+
+  it('вкладка «Атрибуты» показывает атрибуты, «Дело» — опись дела', async () => {
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO');
+
+    await user.click(
+      await screen.findByRole('link', { name: `${say.project('tabs.attributes')} 2` }),
+    );
+    expect(address.current).toBe('/projects/DEMO?tab=attributes');
+    expect(tabLink(say.project('tabs.attributes'), 2)).toHaveAttribute('aria-current', 'true');
     const attributes = screen.getByRole('region', { name: say.project('attributes') });
     expect(within(attributes).getByRole('button', { name: 'repo' })).toHaveAttribute(
       'aria-expanded',
@@ -110,6 +174,9 @@ describe('экран проекта', () => {
     );
     expect(within(attributes).getByText('github.com/demo')).toBeInTheDocument();
 
+    await user.click(tabLink(say.project('tabs.case')));
+    expect(address.current).toBe('/projects/DEMO?tab=case');
+    expect(screen.queryByRole('region', { name: say.project('attributes') })).toBeNull();
     const index = await screen.findByRole('table', { name: say.ui('index.count', { count: 5 }) });
     expect(
       within(index).getByRole('button', { name: /Держим ветку main единственной/ }),
@@ -118,7 +185,7 @@ describe('экран проекта', () => {
 
   it('клик по записи описи читает её тело адресом записи проекта и пишет номер в адрес', async () => {
     const user = userEvent.setup();
-    renderApp('/projects/DEMO');
+    renderApp('/projects/DEMO?tab=case');
 
     await user.click(await screen.findByRole('button', { name: /Держим ветку main единственной/ }));
 
@@ -129,12 +196,25 @@ describe('экран проекта', () => {
       expect(link).toHaveAttribute('href', '/tasks/DEMO-2');
     }
     expect(seen.some((url) => url.pathname === '/api/v1/projects/DEMO/entries/5')).toBe(true);
-    expect(address.current).toBe('/projects/DEMO?entry=5');
+    expect(address.current).toBe('/projects/DEMO?tab=case&entry=5');
+  });
+
+  it('свёрнутая запись, пришедшая ссылкой `?entry=N`, оставляет «Дело» открытым', async () => {
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO?entry=5');
+
+    const row = await screen.findByRole('button', { name: /Держим ветку main единственной/ });
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    await user.click(row);
+
+    expect(address.current).toBe('/projects/DEMO?tab=case');
+    expect(tabLink(say.project('tabs.case'))).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('table')).toBeInTheDocument();
   });
 
   it('клик по атрибуту показывает его историю: только его записи, было, стало и причина', async () => {
     const user = userEvent.setup();
-    renderApp('/projects/DEMO');
+    renderApp('/projects/DEMO?tab=attributes');
 
     await user.click(await screen.findByRole('button', { name: 'repo' }));
 
@@ -151,30 +231,35 @@ describe('экран проекта', () => {
     const historyCall = seen.find((url) => url.searchParams.has('attribute'));
     expect(historyCall?.searchParams.get('attribute')).toBe('repo');
     expect(historyCall?.searchParams.has('types')).toBe(false);
-    expect(address.current).toBe('/projects/DEMO?attribute=repo');
+    expect(address.current).toBe('/projects/DEMO?tab=attributes&attribute=repo');
 
-    // Второй клик сворачивает историю и убирает имя из адреса.
+    // Второй клик сворачивает историю и убирает имя из адреса; вкладка остаётся.
     await user.click(screen.getByRole('button', { name: 'repo' }));
     expect(
       screen.queryByRole('region', { name: say.project('history', { name: 'repo' }) }),
     ).not.toBeInTheDocument();
-    expect(address.current).toBe('/projects/DEMO');
+    expect(address.current).toBe('/projects/DEMO?tab=attributes');
   });
 
   it('адрес восстанавливает то же состояние после перезагрузки; проект помечен в панели', async () => {
-    renderApp('/projects/DEMO?attribute=repo&entry=5');
+    const { unmount } = renderApp('/projects/DEMO?attribute=repo');
 
-    // История атрибута из адреса открыта…
+    // Атрибут из адреса без `tab` открывает «Атрибуты» с открытой историей…
     expect(
       await screen.findByRole('region', { name: say.project('history', { name: 'repo' }) }),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'repo' })).toHaveAttribute('aria-expanded', 'true');
-    // …и запись из адреса раскрыта с телом.
+    expect(tabLink(say.project('tabs.attributes'), 2)).toHaveAttribute('aria-current', 'true');
+    unmount();
+
+    renderApp('/projects/DEMO?entry=5');
+    // …а запись из адреса — «Дело» с раскрытой записью и её телом.
     expect(await screen.findByText(/Так решили в/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Держим ветку main единственной/ })).toHaveAttribute(
       'aria-expanded',
       'true',
     );
+    expect(tabLink(say.project('tabs.case'))).toHaveAttribute('aria-current', 'true');
 
     // Место — проект DEMO: строка проекта и знак его экрана помечены `aria-current`.
     const sections = screen.getByRole('navigation', { name: say.ui('app.sections') });
@@ -189,16 +274,26 @@ describe('экран проекта', () => {
     expect(about).toHaveAttribute('aria-current', 'page');
   });
 
+  it('неизвестный `tab` открывает «Обзор», а не пустой экран', async () => {
+    renderApp('/projects/DEMO?tab=history');
+
+    expect(
+      await screen.findByRole('region', { name: say.project('overview.case') }),
+    ).toBeInTheDocument();
+    expect(tabLink(say.project('tabs.overview'))).toHaveAttribute('aria-current', 'true');
+  });
+
   it('без описания и атрибутов говорит об этом словами', async () => {
     server.use(
       http.get(`${API}/api/v1/projects/DEMO`, () =>
         data(projectDetail({ description: '', attributes: [] })),
       ),
     );
-    renderApp('/projects/DEMO');
+    renderApp('/projects/DEMO?tab=attributes');
 
     expect(await screen.findByText(say.project('noDescription'))).toBeInTheDocument();
     expect(screen.getByText(say.project('noAttributes'))).toBeInTheDocument();
+    expect(tabLink(say.project('tabs.attributes'), 0)).toHaveAttribute('aria-current', 'true');
   });
 
   it('несуществующий проект — словами по коду, а не пустым экраном', async () => {
@@ -227,5 +322,142 @@ describe('экран проекта', () => {
     );
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Демонстрация');
     expect(address.current).toBe('/projects/DEMO');
+  });
+});
+
+describe('вкладка «Обзор»', () => {
+  it('направления списком: название ссылкой на страницу направления и адрес', async () => {
+    server.use(
+      http.get(`${API}/api/v1/projects/DEMO`, () =>
+        data(
+          projectDetail({
+            directions: [
+              { address: 'DEMO/promotion', title: 'Популяризация' },
+              { address: 'DEMO/sales', title: 'Продажи' },
+            ],
+          }),
+        ),
+      ),
+    );
+    renderApp('/projects/DEMO', { language: 'ru' });
+
+    const block = await screen.findByRole('region', { name: say.project('overview.directions') });
+    const rows = within(block).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    expect(
+      within(rows[0] as HTMLElement).getByRole('link', { name: /Популяризация/ }),
+    ).toHaveAttribute('href', '/projects/DEMO/directions/promotion');
+    expect(rows[0]).toHaveTextContent('DEMO/promotion');
+    expect(tabLink(say.project('tabs.directions'), 2)).toBeInTheDocument();
+  });
+
+  it('три последних действующих решения по номеру, сверху новое; «Все N решений» — на вкладку', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(`${API}/api/v1/projects/DEMO`, () =>
+        data(
+          projectDetail({
+            decisions: [
+              decision(2, { title: 'Первое' }),
+              decision(3, { title: 'Заменённое', status: 'superseded', superseded_by: 9 }),
+              decision(5, { title: 'Второе' }),
+              decision(7, { title: 'Третье' }),
+              decision(9, { title: 'Четвёртое', supersedes: [3] }),
+            ],
+          }),
+        ),
+      ),
+    );
+    renderApp('/projects/DEMO', { language: 'ru' });
+
+    const block = await screen.findByRole('region', { name: say.project('overview.decisions') });
+    const rows = within(block).getAllByRole('listitem');
+    expect(rows.map((row) => row.getAttribute('data-overview-decision'))).toEqual([
+      'DEMO#9',
+      'DEMO#7',
+      'DEMO#5',
+    ]);
+    expect(rows[0]).toHaveTextContent('Четвёртое');
+    // Ключ решения ведёт в «Дело» с раскрытой записью — тем же адресом, что `TRK#9`.
+    expect(within(rows[0] as HTMLElement).getByRole('link', { name: 'DEMO#9' })).toHaveAttribute(
+      'href',
+      '/projects/DEMO?entry=9',
+    );
+    // Число — действующих: заменённое не в счёт ни здесь, ни на вкладке.
+    expect(tabLink(say.project('tabs.decisions'), 4)).toBeInTheDocument();
+
+    await user.click(
+      within(block).getByRole('link', { name: say.project('overview.allDecisions', { count: 4 }) }),
+    );
+    expect(address.current).toBe('/projects/DEMO?tab=decisions');
+    expect(
+      await screen.findByRole('region', { name: say.project('decisions.title') }),
+    ).toBeInTheDocument();
+  });
+
+  it('пять последних записей дела, сверху новое; нажатие открывает «Дело» с раскрытой записью', async () => {
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO', { language: 'ru' });
+
+    const block = await screen.findByRole('region', { name: say.project('overview.case') });
+    await waitFor(() => expect(within(block).getAllByRole('listitem')).toHaveLength(5));
+    const rows = within(block).getAllByRole('listitem');
+    expect(rows.map((row) => row.getAttribute('data-overview-entry'))).toEqual([
+      '5',
+      '4',
+      '3',
+      '2',
+      '1',
+    ]);
+    expect(
+      within(block).getByRole('link', { name: say.project('overview.allCase') }),
+    ).toHaveAttribute('href', '/projects/DEMO?tab=case');
+
+    await user.click(within(block).getByRole('link', { name: /Держим ветку main единственной/ }));
+    expect(address.current).toBe('/projects/DEMO?entry=5');
+    expect(tabLink(say.project('tabs.case'))).toHaveAttribute('aria-current', 'true');
+    expect(await screen.findByText(/Так решили в/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Держим ветку main единственной/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+  });
+
+  it('из длинного дела берутся последние записи, а не последние из первой страницы', async () => {
+    const first = Array.from({ length: 4 }, (_, index) =>
+      projectEntry(index + 1, 'note', { title: `Ранняя ${index + 1}` }),
+    );
+    const second = Array.from({ length: 6 }, (_, index) =>
+      projectEntry(index + 5, 'note', { title: `Поздняя ${index + 5}` }),
+    );
+    server.use(
+      http.get(`${API}/api/v1/projects/DEMO/entries`, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor');
+        return cursor === 'page-2'
+          ? collection(second)
+          : collection(first, { has_more: true, next_cursor: 'page-2' });
+      }),
+    );
+    renderApp('/projects/DEMO', { language: 'ru' });
+
+    const block = await screen.findByRole('region', { name: say.project('overview.case') });
+    await waitFor(() =>
+      expect(
+        within(block)
+          .getAllByRole('listitem')
+          .map((row) => row.getAttribute('data-overview-entry')),
+      ).toEqual(['10', '9', '8', '7', '6']),
+    );
+  });
+
+  it('пустые состояния сказаны словами', async () => {
+    server.use(http.get(`${API}/api/v1/projects/DEMO/entries`, () => collection([])));
+    renderApp('/projects/DEMO', { language: 'ru' });
+
+    expect(await screen.findByText(say.project('overview.directionsNone'))).toBeInTheDocument();
+    expect(screen.getByText(say.project('decisions.none'))).toBeInTheDocument();
+    expect(await screen.findByText(say.project('overview.caseNone'))).toBeInTheDocument();
+    // Ссылок «Все решения» и «Всё дело» у пустого нет: вести некуда.
+    expect(screen.queryByRole('link', { name: say.project('overview.allCase') })).toBeNull();
   });
 });

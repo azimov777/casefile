@@ -24,9 +24,9 @@
 ## Папки
 
 - `api/` — запросы проекта и направления: создание, правка, атрибут, снятие атрибута, запись в дело, архив и восстановление
-- `model/` — права сеанса, мутации с перечитыванием, ключ черновика записи
-- `ui/` — окна проекта и направления (создание, правка, архив), окна атрибутов, поля описания и причины, форма записи, разделы атрибутов и дела
+- `model/` — права сеанса, мутации с перечитыванием, ключ черновика записи, вкладка экрана из адреса, пункты меню «⋯»
+- `ui/` — каркас экрана проекта и страницы направления (шапка, вкладки), меню «⋯», окна проекта и направления (создание, правка, архив), окна атрибутов, поля описания и причины, форма записи, разделы атрибутов и дела
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `CreateProject`, `EditProject`, `ProjectArchiving`, `CreateDirection`, `EditDirection`, `DirectionArchiving`, `AttributesSection`, `CaseSection`, `useProjectRights`, тип `Holder`
+- `index.ts` — публичный интерфейс среза: `CreateProject`, `CreateDirection`, `EditDirection`, `DirectionArchiving`, `AttributesSection`, `CaseSection`, каркас экрана `HolderScreen` (`HOLDER_SCREEN`, тип `HolderTabLink`), меню `ProjectMenu` и `DirectionMenu`, `useHolderAddress`, `useProjectRights`, типы `Holder`, `HolderKind`, `HolderTab`

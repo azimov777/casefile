@@ -52,6 +52,19 @@ function signedIn() {
   );
 }
 
+/** Кнопка меню «⋯» в шапке экрана проекта: действия с проектом стоят за ней (TRK-618). */
+function menuButton(key = 'DEMO') {
+  return screen.findByRole('button', { name: say.project('menu.label', { key }) });
+}
+
+/** Вкладка экрана проекта по подписи (и числу, если оно у неё есть). */
+function tab(name: string) {
+  return within(screen.getByRole('navigation', { name: say.project('tabs.label') })).getByRole(
+    'link',
+    { name: new RegExp(`^${name}`) },
+  );
+}
+
 async function remember(request: Request): Promise<void> {
   writes.push({
     method: request.method,
@@ -97,9 +110,10 @@ beforeEach(() => {
 });
 
 describe('видимость действий: запись открыта всем, наборов токена нет', () => {
-  it('у вошедшего есть и атрибуты с заметками, и правка карточки, и «Новый проект» в панели', async () => {
+  it('у вошедшего есть и атрибуты с заметками, и правка карточки в меню, и «Новый проект» в панели', async () => {
     signedIn();
-    renderApp('/projects/DEMO', { language: 'ru' });
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO?tab=attributes', { language: 'ru' });
 
     const attributes = await screen.findByRole('region', { name: say.project('attributes') });
     expect(
@@ -115,15 +129,50 @@ describe('видимость действий: запись открыта вс�
         name: say.project('attribute.removeLabel', { name: 'repo' }),
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: say.project('note.open') })).toBeInTheDocument();
 
+    await user.click(tab(say.project('tabs.case')));
     expect(
-      await screen.findByRole('button', { name: say.project('edit.open') }),
+      await screen.findByRole('button', { name: say.project('note.open') }),
     ).toBeInTheDocument();
+
+    // Правка карточки и архив — за «⋯»: пункты меню и их окна проверяет
+    // `features/manage-project/ui/holder-menu.test.tsx`, путь через меню — сквозной.
+    expect(await menuButton()).toHaveAttribute('aria-expanded', 'false');
     const side = screen.getByRole('complementary', { name: say.ui('app.trackerSections') });
     expect(
       within(side).getByRole('button', { name: say.project('create.open') }),
     ).toBeInTheDocument();
+  });
+
+  it('без открытого меню в шапке нет «Изменить» и «В архив»: одна кнопка «⋯»', async () => {
+    signedIn();
+    const { unmount } = renderApp('/projects/DEMO', { language: 'ru' });
+
+    // Шапка читается без кнопок правки: они — за «⋯», и меню закрыто.
+    const menu = await menuButton();
+    expect(menu).toHaveAttribute('aria-expanded', 'false');
+    const header = screen.getByRole('heading', { level: 1 }).closest('header') as HTMLElement;
+    expect(within(header).getAllByRole('button')).toEqual([menu]);
+    expect(screen.queryByRole('button', { name: say.project('edit.open') })).toBeNull();
+    expect(screen.queryByRole('button', { name: say.project('archive.open') })).toBeNull();
+    expect(screen.queryByRole('button', { name: say.project('restore.open') })).toBeNull();
+    unmount();
+
+    // У архивного — то же: «Восстановить» тоже за «⋯» (что в меню у архивного только оно,
+    // стережёт `holder-menu.test.tsx`, `projectMenuActions`).
+    server.use(
+      http.get(`${API}/api/v1/projects/DEMO`, () =>
+        data(projectDetail({ archived_at: '2026-09-20T10:00:00Z' })),
+      ),
+    );
+    renderApp('/projects/DEMO', { language: 'ru' });
+    const archivedMenu = await menuButton();
+    expect(await screen.findByText(/Проект в архиве с/)).toBeInTheDocument();
+    const archivedHeader = screen
+      .getByRole('heading', { level: 1 })
+      .closest('header') as HTMLElement;
+    expect(within(archivedHeader).getAllByRole('button')).toEqual([archivedMenu]);
+    expect(screen.queryByRole('button', { name: say.project('restore.open') })).toBeNull();
   });
 });
 
@@ -252,46 +301,11 @@ describe('создание проекта', () => {
   });
 });
 
-describe('правка карточки', () => {
-  it('уходит название и описание; отказ по длине читается словами', async () => {
-    signedIn();
-    server.use(
-      http.patch(`${API}/api/v1/projects/DEMO`, async ({ request }) => {
-        await remember(request);
-        return failure('project_description_too_long', 422, 'Project description is too long');
-      }),
-    );
-    const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
-
-    await user.click(await screen.findByRole('button', { name: say.project('edit.open') }));
-    const dialog = await screen.findByRole('dialog', {
-      name: say.project('edit.title', { key: 'DEMO' }),
-    });
-    const title = within(dialog).getByLabelText(say.project('edit.titleLabel'));
-    expect(title).toHaveValue('Демонстрация');
-    await user.clear(title);
-    await user.type(title, 'Демо');
-    await user.click(within(dialog).getByRole('button', { name: say.project('edit.submit') }));
-
-    expect(
-      await within(dialog).findByText(say.errors('project_description_too_long')),
-    ).toBeInTheDocument();
-    expect(writes).toEqual([
-      {
-        method: 'PATCH',
-        path: '/api/v1/projects/DEMO',
-        body: { title: 'Демо', description: 'Учебный проект.' },
-      },
-    ]);
-  });
-});
-
 describe('атрибуты', () => {
   it('заведение уходит без причины', async () => {
     signedIn();
     const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=attributes', { language: 'ru' });
 
     await user.click(await screen.findByRole('button', { name: say.project('attribute.add') }));
     const dialog = await screen.findByRole('dialog', { name: say.project('attribute.addTitle') });
@@ -311,7 +325,7 @@ describe('атрибуты', () => {
   it('изменение без причины не отправляется, с причиной — уходит вместе с ней', async () => {
     signedIn();
     const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=attributes', { language: 'ru' });
 
     await user.click(
       await screen.findByRole('button', {
@@ -364,7 +378,7 @@ describe('атрибуты', () => {
 
     for (const language of ['ru', 'en'] as const) {
       const user = userEvent.setup();
-      const { unmount } = renderApp('/projects/DEMO', { language });
+      const { unmount } = renderApp('/projects/DEMO?tab=attributes', { language });
       await user.click(await screen.findByRole('button', { name: say.project('attribute.add') }));
       const dialog = await screen.findByRole('dialog', {
         name: say.project('attribute.addTitle'),
@@ -384,7 +398,7 @@ describe('атрибуты', () => {
   it('снятие — окно-вопрос с обязательной причиной', async () => {
     signedIn();
     const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=attributes', { language: 'ru' });
 
     await user.click(
       await screen.findByRole('button', {
@@ -423,7 +437,7 @@ describe('заметка в дело проекта', () => {
   it('уходит записью `note` с заголовком из первой строки и подтверждается ссылкой `DEMO#N`', async () => {
     signedIn();
     const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=case', { language: 'ru' });
 
     await user.click(await screen.findByRole('button', { name: say.project('note.open') }));
     const form = screen.getByRole('form', { name: say.project('note.formLabel', { key: 'DEMO' }) });
@@ -455,7 +469,7 @@ describe('заметка в дело проекта', () => {
   it('пустую форму отмена сворачивает и возвращает фокус на кнопку', async () => {
     signedIn();
     const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=case', { language: 'ru' });
 
     await user.click(await screen.findByRole('button', { name: say.project('note.open') }));
     await user.click(screen.getByRole('button', { name: say.ui('composer.cancel') }));
@@ -474,127 +488,27 @@ describe('архив и восстановление (UI-176)', () => {
     );
   }
 
-  function archiving() {
-    server.use(
-      http.post(`${API}/api/v1/projects/DEMO/archive`, async ({ request }) => {
-        await remember(request);
-        return data(projectDetail({ archived_at: ARCHIVED_AT }));
-      }),
-      http.post(`${API}/api/v1/projects/DEMO/restore`, async ({ request }) => {
-        await remember(request);
-        return data(projectDetail());
-      }),
-    );
-  }
-
-  it('у активного проекта есть «В архив», у архивного — «Восстановить», а не «В архив»', async () => {
-    signedIn();
-    archiving();
-    const { unmount } = renderApp('/projects/DEMO', { language: 'ru' });
-    expect(
-      await screen.findByRole('button', { name: say.project('archive.open') }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: say.project('restore.open') })).toBeNull();
-    unmount();
-
-    archived();
-    renderApp('/projects/DEMO', { language: 'ru' });
-    expect(
-      await screen.findByRole('button', { name: say.project('restore.open') }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: say.project('archive.open') })).toBeNull();
-  });
-
-  it('архив без причины не отправляется и говорит почему; с причиной уходит `reason`', async () => {
-    signedIn();
-    archiving();
-    const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
-
-    await user.click(await screen.findByRole('button', { name: say.project('archive.open') }));
-    const dialog = await screen.findByRole('alertdialog', {
-      name: say.project('archive.title', { key: 'DEMO' }),
-    });
-    const submit = within(dialog).getByRole('button', { name: say.project('archive.submit') });
-
-    // Одни пробелы — та же пустота, что и ничего.
-    const reason = within(dialog).getByLabelText(say.project('archive.reasonLabel'));
-    await user.type(reason, '   ');
-    await user.click(submit);
-    expect(within(dialog).getByRole('alert')).toHaveTextContent(say.project('archive.reasonEmpty'));
-    expect(reason).toHaveAttribute('aria-invalid', 'true');
-    expect(writes).toEqual([]);
-
-    await user.type(reason, 'Работа переехала в CORE');
-    await user.click(submit);
-    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-    expect(writes).toEqual([
-      {
-        method: 'POST',
-        path: '/api/v1/projects/DEMO/archive',
-        body: { reason: 'Работа переехала в CORE' },
-      },
-    ]);
-  });
-
-  it('архивный проект только читается: правки нет, «Восстановить» с причиной уходит на `/restore`', async () => {
+  it('архивный проект только читается: правки атрибутов и заметки нет, плашка и «⋯» на месте', async () => {
     signedIn();
     archived();
-    archiving();
     const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=attributes', { language: 'ru' });
 
-    const restore = await screen.findByRole('button', { name: say.project('restore.open') });
-    expect(screen.queryByRole('button', { name: say.project('archive.open') })).toBeNull();
-    expect(screen.queryByRole('button', { name: say.project('edit.open') })).toBeNull();
+    // Атрибуты читаются, как и прежде, но без правки.
+    expect(await screen.findByRole('button', { name: 'repo' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: say.project('attribute.add') })).toBeNull();
     expect(
       screen.queryByRole('button', {
         name: say.project('attribute.changeLabel', { name: 'repo' }),
       }),
     ).toBeNull();
+    expect(screen.getByText(/Проект в архиве с/)).toBeInTheDocument();
+    // «Восстановить» — за «⋯», как и правка у активного.
+    expect(await menuButton()).toBeInTheDocument();
+
+    // Дело — без заметки.
+    await user.click(tab(say.project('tabs.case')));
+    expect(await screen.findByRole('region', { name: say.project('case') })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: say.project('note.open') })).toBeNull();
-    // Атрибуты при этом читаются, как и прежде.
-    expect(screen.getByRole('button', { name: 'repo' })).toBeInTheDocument();
-
-    await user.click(restore);
-    // Восстановление ничего не замораживает — обычное окно, а не `alertdialog`.
-    const dialog = await screen.findByRole('dialog', {
-      name: say.project('restore.title', { key: 'DEMO' }),
-    });
-    await user.click(within(dialog).getByRole('button', { name: say.project('restore.submit') }));
-    expect(within(dialog).getByRole('alert')).toHaveTextContent(say.project('restore.reasonEmpty'));
-    expect(writes).toEqual([]);
-
-    await user.type(
-      within(dialog).getByLabelText(say.project('restore.reasonLabel')),
-      'Вернулись к работе',
-    );
-    await user.click(within(dialog).getByRole('button', { name: say.project('restore.submit') }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(writes).toEqual([
-      {
-        method: 'POST',
-        path: '/api/v1/projects/DEMO/restore',
-        body: { reason: 'Вернулись к работе' },
-      },
-    ]);
-  });
-
-  it('отказ бэкенда читается словами словаря, окно остаётся открытым', async () => {
-    signedIn();
-    server.use(
-      http.post(`${API}/api/v1/projects/DEMO/archive`, () =>
-        failure('project_archived', 409, 'Project is archived'),
-      ),
-    );
-    const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'en' });
-
-    await user.click(await screen.findByRole('button', { name: say.project('archive.open') }));
-    const dialog = await screen.findByRole('alertdialog');
-    await user.type(within(dialog).getByLabelText(say.project('archive.reasonLabel')), 'Done');
-    await user.click(within(dialog).getByRole('button', { name: say.project('archive.submit') }));
-    expect(await within(dialog).findByText(say.errors('project_archived'))).toBeInTheDocument();
   });
 });

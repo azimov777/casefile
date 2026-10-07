@@ -78,7 +78,7 @@ function section() {
 
 describe('раздел «Направления» экрана проекта', () => {
   it('показывает активные направления: название ссылкой на страницу, адрес, описание, задачи', async () => {
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=directions', { language: 'ru' });
 
     const region = await section();
     const row = (await within(region).findByText('DEMO/promotion')).closest('li');
@@ -103,7 +103,7 @@ describe('раздел «Направления» экрана проекта', 
 
   it('флажок «Показать архивные» просит их у бэкенда и метит словом', async () => {
     const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=directions', { language: 'ru' });
 
     const region = await section();
     await within(region).findByText('DEMO/promotion');
@@ -129,7 +129,7 @@ describe('раздел «Направления» экрана проекта', 
 
   it('пустой проект — сказано словами', async () => {
     server.use(http.get(`${API}/api/v1/projects/DEMO/directions`, () => collection([])));
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=directions', { language: 'ru' });
 
     const region = await section();
     expect(await within(region).findByText(say.direction('section.none'))).toBeInTheDocument();
@@ -137,7 +137,7 @@ describe('раздел «Направления» экрана проекта', 
 
   it('новое направление уходит ключом, названием и описанием и открывается своей страницей', async () => {
     const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=directions', { language: 'ru' });
 
     const region = await section();
     await user.click(
@@ -167,7 +167,7 @@ describe('раздел «Направления» экрана проекта', 
       ),
     );
     const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=directions', { language: 'ru' });
 
     const region = await section();
     await user.click(
@@ -186,7 +186,7 @@ describe('раздел «Направления» экрана проекта', 
 
   it('архив направления из строки — только с причиной', async () => {
     const user = userEvent.setup();
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=directions', { language: 'ru' });
 
     const region = await section();
     await user.click(
@@ -217,7 +217,7 @@ describe('раздел «Направления» экрана проекта', 
         data(projectDetail('DEMO', { archived_at: '2026-10-01T10:00:00Z' })),
       ),
     );
-    renderApp('/projects/DEMO', { language: 'ru' });
+    renderApp('/projects/DEMO?tab=directions', { language: 'ru' });
 
     const region = await section();
     await within(region).findByText('DEMO/promotion');

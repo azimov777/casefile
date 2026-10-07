@@ -88,9 +88,10 @@ test('проект заводится из панели и открываетс�
 test('атрибут ставится без причины, меняется и снимается только с причиной', async ({ page }) => {
   await ensureProject(page);
   const writes = projectWrites(page);
-  await page.goto(`/projects/${KEY}`);
+  await page.goto(`/projects/${KEY}?tab=attributes`);
   const attributes = page.getByRole('region', { name: 'Атрибуты' });
   const name = `repo-${RUN.toLowerCase()}`;
+  const sections = page.getByRole('navigation', { name: 'Разделы проекта' });
 
   // Заведение — без поля причины.
   await attributes.getByRole('button', { name: 'Добавить атрибут' }).click();
@@ -135,10 +136,13 @@ test('атрибут ставится без причины, меняется и
   await expect(changed.locator('[data-side="was"]')).toContainText('github.com/old/casefile');
   await expect(changed.locator('[data-side="now"]')).toContainText('github.com/azimov777/casefile');
   await expect(changed).toContainText(`Переезд в организацию ${RUN}`);
+  // Та же правка — в деле проекта, на вкладке «Дело».
+  await sections.getByRole('link', { name: 'Дело' }).click();
   const index = page.getByRole('region', { name: 'Дело проекта' }).getByRole('table');
   await expect(index.getByRole('row').filter({ hasText: 'attribute_changed' })).toHaveCount(1);
 
   // Снятие — окно-вопрос, без причины не уходит.
+  await sections.getByRole('link', { name: /^Атрибуты/ }).click();
   await attributes.getByRole('button', { name: `Снять атрибут ${name}` }).click();
   const remove = page.getByRole('alertdialog', { name: `Снять атрибут ${name}?` });
   const beforeRemove = writes.length;
@@ -149,6 +153,7 @@ test('атрибут ставится без причины, меняется и
   await remove.getByRole('button', { name: 'Снять атрибут' }).click();
   await expect(remove).toBeHidden();
   await expect(row).toHaveCount(0);
+  await sections.getByRole('link', { name: 'Дело' }).click();
   await expect(index.getByRole('row').filter({ hasText: 'attribute_removed' })).toHaveCount(1);
 });
 
@@ -156,7 +161,7 @@ test('заметка из формы встаёт в дело проекта с 
   await ensureProject(page);
   const me = await signature(page);
   const title = `Релизы по пятницам, прогон ${RUN}`;
-  await page.goto(`/projects/${KEY}`);
+  await page.goto(`/projects/${KEY}?tab=case`);
 
   const caseBlock = page.getByRole('region', { name: 'Дело проекта' });
   const open = caseBlock.getByRole('button', { name: 'Написать заметку' });
@@ -199,7 +204,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       });
       await page.emulateMedia({ colorScheme });
       await page.setViewportSize(viewport);
-      await page.goto(`/projects/${KEY}`);
+      await page.goto(`/projects/${KEY}?tab=attributes`);
       await expect(page.getByRole('heading', { level: 1 })).toContainText(TITLE);
       await fontsReady(page);
 
@@ -210,7 +215,12 @@ for (const colorScheme of ['light', 'dark'] as const) {
         role: 'dialog' | 'alertdialog';
       }[] = [
         {
-          open: () => page.getByRole('button', { name: 'Изменить', exact: true }).click(),
+          // «Изменить» — пункт меню «⋯» шапки: меню закрывается выбором пункта, а после
+          // окна фокус возвращается на «⋯».
+          open: async () => {
+            await page.getByRole('button', { name: `Действия с проектом ${KEY}` }).click();
+            await page.getByRole('button', { name: 'Изменить', exact: true }).click();
+          },
           name: `Проект ${KEY}`,
           role: 'dialog',
         },

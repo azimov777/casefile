@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
+import { Link, type To } from 'react-router';
 import { AuthorName } from '@/entities/entry';
 import { DecisionStatusMark, decisionTasksQuery, type ProjectDecision } from '@/entities/project';
 import { tasksHref } from '@/features/task-filters';
@@ -23,11 +23,11 @@ interface ProjectDecisionsProps {
   /** Все решения проекта по номеру, со статусом от бэкенда (`ProjectDetailRead.decisions`). */
   decisions: ProjectDecision[];
   /**
-   * Адрес этого же экрана с раскрытой записью решения в деле ниже (`?entry=N`), с прочим
-   * состоянием адреса как было. Тело решения читается там, а не здесь: дело проекта —
-   * единственное место, где его показывают.
+   * Адрес этого же экрана с раскрытой записью решения на вкладке «Дело» (`?entry=N`).
+   * Тело решения читается там, а не здесь: дело проекта — единственное место, где его
+   * показывают.
    */
-  entryHref: (no: number) => string;
+  entryHref: (no: number) => To;
 }
 
 /**
@@ -135,7 +135,7 @@ function DecisionRow({
   decision: ProjectDecision;
   /** Решение, заменившее это; `null` у действующего. */
   successor: ProjectDecision | null;
-  entryHref: (no: number) => string;
+  entryHref: (no: number) => To;
 }) {
   const { t } = useTranslation('project');
   const superseded = decision.status !== 'in_force';

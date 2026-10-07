@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { Archive, ArchiveRestore, Pencil, Plus } from 'lucide-react';
@@ -209,6 +209,16 @@ interface EditableDirection {
   description: string;
 }
 
+/** Как окно направления открывается: своей кнопкой или пунктом меню «⋯» страницы. */
+interface DialogPlace {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Своя кнопка окна (строка направления в разделе проекта): фокус вернётся на неё. */
+  trigger?: ReactNode;
+  /** Кнопка «⋯», когда окно открыл пункт меню (`DirectionMenu`, TRK-618). */
+  returnFocus?: RefObject<HTMLElement | null>;
+}
+
 /**
  * Кнопка «Изменить» у направления и её окно: название и описание. Ключа в окне нет: он
  * вшит в адрес, на который ссылаются задачи и записи. Имя кнопки называет адрес: в
@@ -219,20 +229,41 @@ export function EditDirection({ direction }: { direction: EditableDirection }) {
   const { t } = useTranslation('direction');
 
   return (
-    <Dialog
+    <EditDirectionDialog
+      direction={direction}
       open={open}
       onOpenChange={setOpen}
-      title={t('edit.title', { address: direction.address })}
-      description={t('edit.intro')}
-      closeLabel={t('close')}
       trigger={
         <Button tone="quiet" size="sm" aria-label={t('edit.label', { address: direction.address })}>
           <Pencil className="size-(--ui-mark)" aria-hidden="true" />
           {t('edit.open')}
         </Button>
       }
+    />
+  );
+}
+
+/** Окно правки направления — то же у кнопки строки и у пункта меню страницы направления. */
+export function EditDirectionDialog({
+  direction,
+  open,
+  onOpenChange,
+  trigger,
+  returnFocus,
+}: DialogPlace & { direction: EditableDirection }) {
+  const { t } = useTranslation('direction');
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('edit.title', { address: direction.address })}
+      description={t('edit.intro')}
+      closeLabel={t('close')}
+      trigger={trigger}
+      returnFocus={returnFocus}
     >
-      <EditDirectionForm direction={direction} onDone={() => setOpen(false)} />
+      <EditDirectionForm direction={direction} onDone={() => onOpenChange(false)} />
     </Dialog>
   );
 }
@@ -315,9 +346,9 @@ type Move = 'archive' | 'restore';
 
 /**
  * «В архив» у активного направления и «Восстановить» у архивного — одна кнопка, чья
- * подпись следует за `archived_at`, по той же причине, что у проекта (`ProjectArchiving`):
- * фокус после закрытия окна возвращается на неё же. Архив спрашивает ролью
- * `alertdialog`: он замораживает карточку, атрибуты и дело направления.
+ * подпись следует за `archived_at`: фокус после закрытия окна возвращается на неё же.
+ * Архив спрашивает ролью `alertdialog`: он замораживает карточку, атрибуты и дело
+ * направления.
  */
 export function DirectionArchiving({ address, archived }: { address: string; archived: boolean }) {
   const move: Move = archived ? 'restore' : 'archive';
@@ -326,21 +357,45 @@ export function DirectionArchiving({ address, archived }: { address: string; arc
   const Icon = move === 'archive' ? Archive : ArchiveRestore;
 
   return (
-    <Dialog
-      alert={move === 'archive'}
+    <DirectionArchivingDialog
+      address={address}
+      archived={archived}
       open={open}
       onOpenChange={setOpen}
-      title={t(`${move}.title`, { address })}
-      description={t(`${move}.intro`)}
-      closeLabel={t('close')}
       trigger={
         <Button tone="quiet" size="sm" aria-label={t(`${move}.label`, { address })}>
           <Icon className="size-(--ui-mark)" aria-hidden="true" />
           {t(`${move}.open`)}
         </Button>
       }
+    />
+  );
+}
+
+/** Окно архива или восстановления направления — у кнопки строки и у пункта меню страницы. */
+export function DirectionArchivingDialog({
+  address,
+  archived,
+  open,
+  onOpenChange,
+  trigger,
+  returnFocus,
+}: DialogPlace & { address: string; archived: boolean }) {
+  const move: Move = archived ? 'restore' : 'archive';
+  const { t } = useTranslation('direction');
+
+  return (
+    <Dialog
+      alert={move === 'archive'}
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t(`${move}.title`, { address })}
+      description={t(`${move}.intro`)}
+      closeLabel={t('close')}
+      trigger={trigger}
+      returnFocus={returnFocus}
     >
-      <DirectionArchivingForm address={address} move={move} onDone={() => setOpen(false)} />
+      <DirectionArchivingForm address={address} move={move} onDone={() => onOpenChange(false)} />
     </Dialog>
   );
 }

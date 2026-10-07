@@ -164,4 +164,31 @@ export const project = {
     submit: 'Restore the project',
     pending: 'Restoring…',
   },
+
+  /** The «⋯» menu in the project screen header (TRK-618): Edit, Archive, Restore. */
+  menu: {
+    label: 'Actions with project {{key}}',
+  },
+
+  /** Project screen tabs (TRK-618, decision TRK#46): `?tab=`, Overview has no parameter. */
+  tabs: {
+    label: 'Project sections',
+    overview: 'Overview',
+    decisions: 'Decisions',
+    attributes: 'Attributes',
+    directions: 'Directions',
+    case: 'Case',
+  },
+
+  /** The Overview tab (TRK-618): directions, latest decisions and latest in the case. */
+  overview: {
+    directions: 'Directions',
+    directionsNone: 'No directions.',
+    decisions: 'Latest decisions',
+    allDecisions_one: 'All {{count, number}} decision',
+    allDecisions_other: 'All {{count, number}} decisions',
+    case: 'Latest in the case',
+    caseNone: 'The case is empty.',
+    allCase: 'The whole case',
+  },
 } as const;

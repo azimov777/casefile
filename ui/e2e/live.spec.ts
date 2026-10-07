@@ -332,7 +332,7 @@ test('атрибут, поставленный через API при откры�
 }) => {
   const key = await createProject(request, 'PA');
 
-  await page.goto(`/projects/${key}`);
+  await page.goto(`/projects/${key}?tab=attributes`);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(key);
   await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
   await expect(page.getByText('Атрибутов у проекта нет.')).toBeVisible();
@@ -345,12 +345,23 @@ test('атрибут, поставленный через API при откры�
 
   const attributes = page.getByRole('region', { name: 'Атрибуты' });
   await expect(attributes.getByText('medium')).toBeVisible({ timeout: 5_000 });
+  // Число на вкладке — из той же перечитанной карточки.
+  const sections = page.getByRole('navigation', { name: 'Разделы проекта' });
+  await expect(sections.getByRole('link', { name: 'Атрибуты 1' })).toBeVisible();
 
-  // Та же запись — в описи дела проекта, ещё одним перечитыванием того же кадра.
+  // Опись дела проекта — на вкладке «Дело»: открытая, она перечитывается тем же кадром.
   // Заголовок строит интерфейс из фактов (`entryHeadline`): «Атрибут заведён» и имя.
-  await expect(
-    page.getByRole('table').getByRole('button', { name: 'Атрибут заведён size' }),
-  ).toBeVisible();
+  await sections.getByRole('link', { name: 'Дело' }).click();
+  const index = page.getByRole('table');
+  await expect(index.getByRole('button', { name: 'Атрибут заведён size' })).toBeVisible();
+  const second = await request.put(`/api/v1/projects/${key}/attributes/color`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { value: 'blue' },
+  });
+  expect(second.status()).toBe(200);
+  await expect(index.getByRole('button', { name: 'Атрибут заведён color' })).toBeVisible({
+    timeout: 5_000,
+  });
 });
 
 /*
@@ -365,6 +376,8 @@ test('архивирование проекта через API, пока его 
 
   await page.goto(`/projects/${key}`);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(key);
+  // «В архив» — пункт меню «⋯»: меню открыто, пока приходит кадр.
+  await page.getByRole('button', { name: `Действия с проектом ${key}` }).click();
   const archiveButton = page.getByRole('button', { name: 'В архив', exact: true });
   await expect(archiveButton).toBeVisible();
 

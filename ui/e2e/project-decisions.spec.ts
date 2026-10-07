@@ -85,9 +85,9 @@ test('экран проекта: действующее решение, заме
   request,
 }) => {
   const { oldNo, newNo, taskKey } = await seed(request);
-  await page.goto('/projects/TRK');
+  await page.goto('/projects/TRK?tab=decisions');
 
-  const region = page.getByRole('region', { name: 'Решения' });
+  const region = page.getByRole('region', { name: 'Решения', exact: true });
   const current = decisionRow(region, `TRK#${newNo}`);
   await expect(current).toHaveAttribute('data-status', 'in_force');
   await expect(current).toContainText(NEW);
@@ -108,12 +108,15 @@ test('экран проекта: действующее решение, заме
   await expect(page.getByRole('link', { name: new RegExp(TASK) }).first()).toBeVisible();
   await expect(page.getByText(taskKey).first()).toBeVisible();
 
-  // Ссылка решения раскрывает его запись в деле проекта — тело читается там.
-  await page.goto('/projects/TRK');
-  await decisionRow(page.getByRole('region', { name: 'Решения' }), `TRK#${newNo}`)
+  // Ссылка решения открывает «Дело» с раскрытой записью — тело читается там.
+  await page.goto('/projects/TRK?tab=decisions');
+  await decisionRow(page.getByRole('region', { name: 'Решения', exact: true }), `TRK#${newNo}`)
     .getByRole('link', { name: `TRK#${newNo}`, exact: true })
     .click();
-  await expect(page).toHaveURL(new RegExp(`[?&]entry=${newNo}(&|$)`));
+  await expect(page).toHaveURL(new RegExp(`/projects/TRK\\?entry=${newNo}$`));
+  await expect(
+    page.getByRole('navigation', { name: 'Разделы проекта' }).getByRole('link', { name: 'Дело' }),
+  ).toHaveAttribute('aria-current', 'true');
   await expect(page.getByRole('table').getByRole('button', { name: NEW })).toHaveAttribute(
     'aria-expanded',
     'true',
@@ -149,8 +152,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme });
     await page.setViewportSize({ width: 390, height: 844 });
 
-    await page.goto('/projects/TRK');
-    const region = page.getByRole('region', { name: 'Решения' });
+    await page.goto('/projects/TRK?tab=decisions');
+    const region = page.getByRole('region', { name: 'Решения', exact: true });
     await region.getByRole('button', { name: SUPERSEDED_TOGGLE }).click();
     await expect(decisionRow(region, `TRK#${oldNo}`)).toBeVisible();
     await fontsReady(page);

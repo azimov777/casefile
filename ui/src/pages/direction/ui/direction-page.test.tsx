@@ -1,6 +1,6 @@
 import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   API,
@@ -62,6 +62,19 @@ async function remember(request: Request): Promise<void> {
   });
 }
 
+/** Кнопка меню «⋯» в шапке страницы направления (TRK-618). */
+function menuButton() {
+  return screen.findByRole('button', { name: say.direction('menu.label', { address: ADDRESS }) });
+}
+
+/** Вкладка страницы направления по началу подписи. */
+function tab(name: string) {
+  return within(screen.getByRole('navigation', { name: say.direction('tabs.label') })).getByRole(
+    'link',
+    { name: new RegExp(`^${name}`) },
+  );
+}
+
 function detail(overrides: Parameters<typeof directionDetail>[1] = {}) {
   return directionDetail(ADDRESS, {
     description: 'Каталоги, публикации и **день запуска**.',
@@ -109,7 +122,8 @@ beforeEach(() => {
 });
 
 describe('страница направления', () => {
-  it('показывает адрес, название, описание, атрибуты и опись; ссылки на проект и задачи', async () => {
+  it('показывает адрес, название, описание и опись; атрибуты — вкладкой; ссылки на проект и задачи', async () => {
+    const user = userEvent.setup();
     renderApp('/projects/DEMO/directions/promotion', { language: 'ru' });
 
     const title = await screen.findByRole('heading', { level: 1 });
@@ -117,14 +131,13 @@ describe('страница направления', () => {
     expect(title).toHaveTextContent('Популяризация');
     expect(screen.getByText('день запуска')).toBeInTheDocument();
 
-    const attributes = screen.getByRole('region', { name: say.project('attributes') });
-    expect(within(attributes).getByRole('button', { name: 'channel' })).toBeInTheDocument();
-    expect(within(attributes).getByText('reddit')).toBeInTheDocument();
-
+    // Без параметра открыто «Дело»: «Обзора» у направления нет.
+    expect(tab(say.direction('tabs.case'))).toHaveAttribute('aria-current', 'true');
     const index = await screen.findByRole('table', { name: say.ui('index.count', { count: 3 }) });
     expect(
       within(index).getByRole('button', { name: /Пишем только в каналы, где есть агенты/ }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: say.project('attributes') })).toBeNull();
 
     expect(
       screen.getByRole('link', { name: say.direction('page.project', { key: 'DEMO' }) }),
@@ -142,6 +155,23 @@ describe('страница направления', () => {
       'href',
       '/projects/DEMO',
     );
+
+    // Вкладка «Атрибуты» с числом из карточки.
+    const attributesTab = tab(say.direction('tabs.attributes'));
+    expect(attributesTab).toHaveAccessibleName(`${say.direction('tabs.attributes')} 1`);
+    await user.click(attributesTab);
+    expect(address.current).toBe('/projects/DEMO/directions/promotion?tab=attributes');
+    const attributes = screen.getByRole('region', { name: say.project('attributes') });
+    expect(within(attributes).getByRole('button', { name: 'channel' })).toBeInTheDocument();
+    expect(within(attributes).getByText('reddit')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+
+  it('`tab=decisions` у направления — «Дело»: этой вкладки у него нет', async () => {
+    renderApp('/projects/DEMO/directions/promotion?tab=decisions', { language: 'ru' });
+
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(tab(say.direction('tabs.case'))).toHaveAttribute('aria-current', 'true');
   });
 
   it('тело записи читается адресом записи направления, номер уходит в адрес страницы', async () => {
@@ -160,7 +190,7 @@ describe('страница направления', () => {
 
   it('история атрибута — отбором `attribute` в деле направления', async () => {
     const user = userEvent.setup();
-    renderApp('/projects/DEMO/directions/promotion');
+    renderApp('/projects/DEMO/directions/promotion?tab=attributes');
 
     await user.click(await screen.findByRole('button', { name: 'channel' }));
     await screen.findByRole('region', { name: say.project('history', { name: 'channel' }) });
@@ -170,7 +200,9 @@ describe('страница направления', () => {
           url.pathname === `${PATH}/entries` && url.searchParams.get('attribute') === 'channel',
       ),
     ).toBe(true);
-    expect(address.current).toBe('/projects/DEMO/directions/promotion?attribute=channel');
+    expect(address.current).toBe(
+      '/projects/DEMO/directions/promotion?tab=attributes&attribute=channel',
+    );
   });
 
   it('человек пишет в дело решение: тип выбран, запись `decision` подтверждена ссылкой', async () => {
@@ -215,85 +247,40 @@ describe('страница направления', () => {
     ]);
   });
 
-  it('правка названия и описания уходит `PATCH` по адресу направления', async () => {
-    const user = userEvent.setup();
+  it('правка и архив — за «⋯» в шапке, а не в строке ссылок', async () => {
     renderApp('/projects/DEMO/directions/promotion', { language: 'ru' });
 
-    await user.click(
-      await screen.findByRole('button', {
-        name: say.direction('edit.label', { address: ADDRESS }),
-      }),
-    );
-    const dialog = await screen.findByRole('dialog', {
-      name: say.direction('edit.title', { address: ADDRESS }),
-    });
-    const title = within(dialog).getByLabelText(say.direction('edit.titleLabel'));
-    await user.clear(title);
-    await user.type(title, 'Продвижение');
-    await user.click(within(dialog).getByRole('button', { name: say.direction('edit.submit') }));
-
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(writes).toEqual([
-      {
-        method: 'PATCH',
-        path: PATH,
-        body: { title: 'Продвижение', description: 'Каталоги, публикации и **день запуска**.' },
-      },
-    ]);
+    // Окна правки и архива и пункты меню проверяет `features/manage-project/ui/holder-menu.test.tsx`
+    // (`directionMenuActions`), путь через меню — сквозной.
+    const menu = await menuButton();
+    expect(menu).toHaveAttribute('aria-expanded', 'false');
+    const header = screen.getByRole('heading', { level: 1 }).closest('header') as HTMLElement;
+    expect(within(header).getAllByRole('button')).toEqual([menu]);
+    expect(screen.queryByRole('button', { name: say.direction('edit.open') })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: say.direction('archive.label', { address: ADDRESS }) }),
+    ).toBeNull();
   });
 
-  it('архив без причины не уходит и говорит почему; с причиной — `reason`', async () => {
-    const user = userEvent.setup();
-    renderApp('/projects/DEMO/directions/promotion', { language: 'ru' });
-
-    await user.click(
-      await screen.findByRole('button', {
-        name: say.direction('archive.label', { address: ADDRESS }),
-      }),
-    );
-    const dialog = await screen.findByRole('alertdialog', {
-      name: say.direction('archive.title', { address: ADDRESS }),
-    });
-    const submit = within(dialog).getByRole('button', { name: say.direction('archive.submit') });
-    await user.click(submit);
-    expect(within(dialog).getByRole('alert')).toHaveTextContent(
-      say.direction('archive.reasonEmpty'),
-    );
-    expect(writes).toEqual([]);
-
-    await user.type(
-      within(dialog).getByLabelText(say.direction('archive.reasonLabel')),
-      'Запуск прошёл',
-    );
-    await user.click(submit);
-    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-    expect(writes).toEqual([
-      { method: 'POST', path: `${PATH}/archive`, body: { reason: 'Запуск прошёл' } },
-    ]);
-  });
-
-  it('архивное направление только читается: правки, атрибутов и записи нет, есть «Восстановить»', async () => {
+  it('архивное направление только читается: правки атрибутов и записи нет, «⋯» на месте', async () => {
     server.use(
       http.get(`${API}${PATH}`, () => data(detail({ archived_at: '2026-10-01T10:00:00Z' }))),
     );
+    const user = userEvent.setup();
     renderApp('/projects/DEMO/directions/promotion', { language: 'ru' });
 
-    expect(
-      await screen.findByRole('button', {
-        name: say.direction('restore.label', { address: ADDRESS }),
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Направление в архиве с/)).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: say.direction('edit.label', { address: ADDRESS }) }),
-    ).toBeNull();
-    expect(screen.queryByRole('button', { name: say.project('attribute.add') })).toBeNull();
+    expect(await screen.findByText(/Направление в архиве с/)).toBeInTheDocument();
+    // «Восстановить» — за «⋯»: у архивного направления активного проекта меню есть.
+    expect(await menuButton()).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: say.direction('entry.open') })).toBeNull();
-    // Атрибуты при этом читаются.
-    expect(screen.getByRole('button', { name: 'channel' })).toBeInTheDocument();
+
+    // Атрибуты при этом читаются, но без правки.
+    await user.click(tab(say.direction('tabs.attributes')));
+    expect(await screen.findByRole('button', { name: 'channel' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: say.project('attribute.add') })).toBeNull();
   });
 
-  it('направление архивного проекта: ни правки, ни архива, ни восстановления — сказано почему', async () => {
+  it('направление архивного проекта: меню нет вовсе — ни правки, ни архива, ни восстановления, сказано почему', async () => {
     server.use(
       http.get(`${API}/api/v1/projects/DEMO`, () =>
         data(projectDetail('DEMO', { archived_at: '2026-10-01T10:00:00Z' })),
@@ -303,11 +290,10 @@ describe('страница направления', () => {
 
     expect(await screen.findByText(/Сначала восстанавливают проект/)).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: say.direction('archive.label', { address: ADDRESS }) }),
+      screen.queryByRole('button', { name: say.direction('menu.label', { address: ADDRESS }) }),
     ).toBeNull();
-    expect(
-      screen.queryByRole('button', { name: say.direction('restore.label', { address: ADDRESS }) }),
-    ).toBeNull();
+    expect(screen.queryByRole('button', { name: say.direction('archive.open') })).toBeNull();
+    expect(screen.queryByRole('button', { name: say.direction('restore.open') })).toBeNull();
     expect(screen.queryByRole('button', { name: say.direction('entry.open') })).toBeNull();
   });
 
