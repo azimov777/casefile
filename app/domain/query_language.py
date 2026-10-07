@@ -43,6 +43,13 @@
 расходиться они начнут на краевых случаях, которые никто не пишет нарочно. Скобки в
 языке есть, но группируют они **условия**, а не значения: `(a: 1 or b: 2) and c: 3`.
 
+Так же лечатся ещё четыре формы (TRK-642): значение с пробелом без кавычек, время с
+двоеточиями без кавычек, `!empty()` вместо `!= empty()` и слова без поля. Лексер и разбор
+показывают в `details.hint` ту же строку с поправкой, а код отказа, позицию и `expected`
+не трогают. «Есть значение» пишется только `!= empty()`: опыт на самой простой модели
+показал три разные догадки (`!empty()`, `not empty()`, `!= empty()`), и принять одну
+из них значило бы закрыть треть промахов второй записью, у которой свой разбор.
+
 ## Слова языка нельзя использовать как имена полей без кавычек
 
 `and`, `or`, `in`, `not` разбираются как слова языка везде, где их можно так понять.
@@ -129,6 +136,15 @@ _TWO_CHAR_OPERATORS = {
 _ONE_CHAR_OPERATORS = {"=": Operator.EQ, ">": Operator.GT, "<": Operator.LT, "~": Operator.CONTAINS}
 
 _QUOTES = "\"'"
+
+#: `!empty()` — отрицание «как в коде». Языку оно не принадлежит: «есть значение» пишется
+#: `!= empty()`, как любое другое отрицание, и по этому образцу строится подсказка.
+_NEGATED_EMPTY_RE = re.compile(r"\s*empty\s*\(", re.IGNORECASE)
+
+#: Время в виде ISO 8601 с двоеточиями: лексер режет его на слове и двоеточии, поэтому оно
+#: пишется в кавычках. Дата без времени (`2026-10-01`) двоеточий не содержит и в кавычках
+#: не нуждается.
+_TIME_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:[\d:.]*(?:Z|[+-]\d{2}(?::?\d{2})?)?")
 
 
 class TokenType(StrEnum):
@@ -273,9 +289,14 @@ class _Parser:
 
     def __init__(self, text: str, *, offset: int = 0) -> None:
         self._text = text
+        self._offset = offset
         self._tokens = _tokenize(text, offset=offset)
         self._index = 0
         self._conditions = 0
+        # Поле, двоеточие и первое значение условия, которое разбирается: из них
+        # собирается подсказка, если после значения стоит не то, что ждали.
+        self._condition: tuple[Token, Token, Token] | None = None
+        self._last_value_start: Token | None = None
 
     # --- Точки входа -------------------------------------------------------------
 
@@ -283,7 +304,12 @@ class _Parser:
         node = self._parse_or(depth=0)
         token = self._peek()
         if token.type is not TokenType.END:
-            raise self._error(token, "unexpected_token", expected=["and", "or", "end of query"])
+            raise self._error(
+                token,
+                "unexpected_token",
+                expected=["and", "or", "end of query"],
+                **self._after_value_hint(token),
+            )
         return node
 
     def parse_single_value(self) -> SearchValue:
@@ -322,7 +348,12 @@ class _Parser:
             node = self._parse_or(depth=depth + 1)
             closing = self._peek()
             if closing.type is not TokenType.RPAREN:
-                raise self._error(closing, "unbalanced_parenthesis", expected=[")"])
+                raise self._error(
+                    closing,
+                    "unbalanced_parenthesis",
+                    expected=[")"],
+                    **self._after_value_hint(closing),
+                )
             self._advance()
             return node
         return self._parse_condition()
@@ -351,6 +382,7 @@ class _Parser:
         self._advance()
 
         operator = self._parse_operator()
+        self._condition = (token, colon, self._peek())
         values = self._parse_values()
 
         self._conditions += 1
@@ -381,7 +413,7 @@ class _Parser:
         """
         operator = self._operator_ahead()
         if operator is None:
-            return {}
+            return self._text_without_field_hint(field)
         if operator is Operator.EQ:
             # Равенство — оператор по умолчанию, и писать его незачем.
             shape = f"{field.text}: value"
@@ -390,6 +422,73 @@ class _Parser:
         else:
             shape = f"{field.text}: {operator.value} value"
         return {"hint": f"the operator goes after the colon, values need no parentheses: {shape}"}
+
+    def _text_without_field_hint(self, field: Token) -> dict[str, str]:
+        """Слова без поля — поиск по тексту, который агент написал без `text: ~`.
+
+        Условие без двоеточия и без оператора — не форма из чужого языка, а голые слова
+        (`OpenCode проверка`): человек искал по названию и описанию. Подсказка собирает
+        из его же слов запрос с полем `text`, значение в кавычках — слов может быть
+        несколько. Ключевые слова языка слов поиска не продолжают.
+        """
+        ahead = self._peek()
+        if field.type is not TokenType.WORD or ahead.type not in {TokenType.WORD, TokenType.END}:
+            return {}
+        if field.text.lower() in {name.lower() for name in searchable_names()}:
+            # Имя поля с пропущенным двоеточием (`status open`) — опечатка, а не поиск
+            # слов: вместо неё подсказка про `text` увела бы в сторону.
+            return {}
+        last = field
+        index = self._index
+        while self._tokens[index].type is TokenType.WORD and (
+            self._tokens[index].text.lower() not in KEYWORDS
+        ):
+            last = self._tokens[index]
+            index += 1
+        words = self._source(field.position, last.position + len(last.text))
+        return {"hint": f'to search titles and descriptions: text: ~ "{words}"'}
+
+    def _after_value_hint(self, token: Token) -> dict[str, str]:
+        """Подсказка там, где после значения стоит не `and`, `or` или конец запроса.
+
+        Два случая, и оба — значение, которое агент написал без кавычек. Двоеточие сразу
+        после слова — время (`2026-09-07T23:40:33Z`): лексер разрезал его на слове и
+        двоеточии. Слово после слова — значение с пробелом (`столбец прокручивается`).
+        Подсказка показывает **ту же строку**, которую ввели, но с кавычками: форму
+        запроса менять не нужно, надо только оградить значение.
+        """
+        if self._condition is None or self._last_value_start is None:
+            return {}
+        field, colon, first = self._condition
+        start = self._last_value_start
+        operator = self._source(colon.position + 1, first.position).strip()
+        head = f"{field.text}: {operator} " if operator else f"{field.text}: "
+        before = self._source(first.position, start.position)
+        if token.type is TokenType.COLON:
+            end = start.position
+            while end < len(self._text) + self._offset and self._text[end - self._offset] not in (
+                " \t\n,()\"'"
+            ):
+                end += 1
+            raw = self._source(start.position, end)
+            if not _TIME_RE.fullmatch(raw):
+                return {}
+            return {"hint": f'a time goes in quotes: {head}{before}"{raw}"'}
+        if token.type is TokenType.WORD and token.text.lower() not in KEYWORDS:
+            index = self._tokens.index(token)
+            last = start
+            while self._tokens[index].type is TokenType.WORD and (
+                self._tokens[index].text.lower() not in KEYWORDS
+            ):
+                last = self._tokens[index]
+                index += 1
+            raw = self._source(start.position, last.position + len(last.text))
+            return {"hint": f'a value with spaces goes in quotes: {head}{before}"{raw}"'}
+        return {}
+
+    def _source(self, start: int, end: int) -> str:
+        """Кусок исходной строки по позициям лексем (они считаются со сдвигом `offset`)."""
+        return self._text[start - self._offset : end - self._offset]
 
     def _operator_ahead(self) -> Operator | None:
         """Оператор на текущем месте, не сдвигая разбор. `not in` — две лексемы."""
@@ -443,6 +542,7 @@ class _Parser:
             raise self._error(token, "expected_value")
 
         self._advance()
+        self._last_value_start = token
         if self._peek().type is not TokenType.LPAREN:
             return Literal(text=token.text, position=token.position)
         return self._parse_function(token)
@@ -531,17 +631,28 @@ def _tokenize(text: str, *, offset: int = 0) -> list[Token]:
             index = end
             continue
 
-        raise InvalidSearchQueryError(
-            details={
-                "query": text,
-                "position": position,
-                "reason": "unexpected_character",
-                "token": char,
-            },
-        )
+        details: dict[str, Any] = {
+            "query": text,
+            "position": position,
+            "reason": "unexpected_character",
+            "token": char,
+        }
+        if char == "!" and _NEGATED_EMPTY_RE.match(text, index + 1):
+            field = _field_before_colon(tokens)
+            details["hint"] = f'"has a value" is written != empty(): {field}: != empty()'
+        raise InvalidSearchQueryError(details=details)
 
     tokens.append(Token(TokenType.END, "", size + offset))
     return tokens
+
+
+def _field_before_colon(tokens: list[Token]) -> str:
+    """Имя поля условия, которое пишется сейчас: слово перед двоеточием; иначе `field`."""
+    if len(tokens) >= 2 and tokens[-1].type is TokenType.COLON:
+        name = tokens[-2]
+        if name.type is TokenType.WORD:
+            return name.text
+    return "field"
 
 
 _SIMPLE_TOKENS: dict[str, TokenType] = {

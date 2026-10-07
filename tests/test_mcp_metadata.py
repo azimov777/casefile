@@ -28,6 +28,7 @@ from typing import Any
 import pytest
 from mcp_types import Tool
 
+from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_SIZE
 from app.domain.query_language import QUERY_EXAMPLES
 from app.domain.tasks import TaskStatus
 from conftest import Connect
@@ -408,3 +409,16 @@ def test_the_text_detectors_catch_what_they_are_for() -> None:
     assert PRESCRIBING.search("note is the last choice")
     assert PRESCRIBING.search("it is refused because the key is taken")
     assert not PRESCRIBING.search("Returns the entries in number order")
+
+
+async def test_search_tasks_names_the_quotes_and_the_not_empty_form_and_the_page_limit(
+    tools: list[Tool],
+) -> None:
+    """TRK-642: метадата заранее называет то, на чём агенты получали отказы поиска."""
+    search = next(tool for tool in tools if tool.name == "search_tasks")
+    properties = search.input_schema["properties"]
+
+    query = properties["query"]["description"]
+    assert 'text: ~ "two words"' in query
+    assert "!= empty()" in query
+    assert f"from {MIN_PAGE_SIZE} to {MAX_PAGE_SIZE}" in properties["limit"]["description"]
