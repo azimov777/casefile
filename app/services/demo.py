@@ -31,8 +31,8 @@
   отвязка задачи; открытое с вопросом к человеку — входящая по обсуждениям; заведённое
   человеком запиской — ход за агентом;
 - знание в делах областей (решение `TRK#57`, разделы 5–6): у `DEMO/core` и `DEMO/ui`
-  решения и заметки, одна заметка заменена другой; в `DEMO/ui` своя задача; третья
-  область, `DEMO/webhooks`, с решением уходит в архив;
+  решения и заметки, одна заметка заменена другой; в `DEMO/ui` своя задача (DEMO-3);
+  третья область, `DEMO/webhooks`, с решением уходит в архив;
 - связи всех трёх видов;
 - три автора: человек, постоянный агент и временный агент, подписанный меткой.
 
@@ -150,7 +150,14 @@ async def seed_demo(session: AsyncSession) -> DemoData:
         actor=owner,
         address=DEMO_AREA,
         title="Ядро",
-        description="Основные механики демо-проекта: все его задачи лежат здесь.",
+        description="Основные механики демо-проекта: почти все его задачи лежат здесь.",
+    )
+    await areas_service.create_area(
+        session,
+        actor=owner,
+        address=_UI_AREA,
+        title="Интерфейс",
+        description="Экраны человека: доска, карточка задачи, лента, страница проекта.",
     )
 
     done = await _done_task(session, project, agent=agent, temporary=temporary, human=human)
@@ -194,7 +201,7 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     accepted = await _accepted_warning_task(session, project, agent=agent, human=human)
     deferred = await _deferred_task(session, project, agent=agent)
     await _discussions(session, project, agent=agent, owner=owner, human=human, deferred=deferred)
-    interface = await _area_knowledge(session, project, agent=agent, owner=owner)
+    await _area_knowledge(session, agent=agent, owner=owner)
 
     return DemoData(
         project=project,
@@ -208,22 +215,20 @@ async def seed_demo(session: AsyncSession) -> DemoData:
             cancelled,
             accepted,
             deferred,
-            interface,
         ],
     )
 
 
-async def _area_knowledge(
-    session: AsyncSession, project: Project, *, agent: Actor, owner: Actor
-) -> Task:
-    """Знание в делах областей (решение `TRK#57`, разделы 5–6) и задача второй области.
+async def _area_knowledge(session: AsyncSession, *, agent: Actor, owner: Actor) -> None:
+    """Знание в делах областей (решение `TRK#57`, разделы 5–6).
 
     `DEMO/core` получает решение и две заметки, где вторая заменяет первую: на странице
-    области видно «действует / заменена → преемник». `DEMO/ui` заводит владелец — с
-    решением человека, заметкой агента и своей задачей в `backlog` (кандидатом она не
-    становится). `DEMO/webhooks` с решением уходит в архив: знание архивной области
-    читается, а писать в неё нельзя. Задачи на решения областей не ссылаются: ссылку из
-    карточки задачи интерфейс покажет своей задачей.
+    области видно «действует / заменена → преемник». В `DEMO/ui` — решение человека и
+    заметка агента; задача этой области — кандидат DEMO-3, заведённый с ней. Новой задачи
+    здесь нет: десятая задача демо дала бы ключ `DEMO-10`, и поиск строки `DEMO-1` в
+    сквозных сценариях находил бы две. `DEMO/webhooks` с решением уходит в архив: знание
+    архивной области читается, а писать в неё нельзя. Задачи на решения областей не
+    ссылаются: ссылку из карточки задачи интерфейс покажет своей задачей.
     """
     core = await areas_service.get_area(session, DEMO_AREA)
     await case_service.append_project_entry(
@@ -260,13 +265,7 @@ async def _area_knowledge(
         supersedes=[burnt.no],
     )
 
-    ui = await areas_service.create_area(
-        session,
-        actor=owner,
-        address=_UI_AREA,
-        title="Интерфейс",
-        description="Экраны человека: доска, карточка задачи, страница проекта.",
-    )
+    ui = await areas_service.get_area(session, _UI_AREA)
     await case_service.append_project_entry(
         session,
         ui,
@@ -282,20 +281,6 @@ async def _area_knowledge(
         type=EntryType.FINDING,
         title="Safari прячет полосу прокрутки, пока по списку не провели",
         body="Длинный список на доске в Safari выглядит обрезанным; в Chromium полоса видна.",
-    )
-    interface = await tasks_service.create_task(
-        session,
-        actor=agent,
-        project=project,
-        area=_UI_AREA,
-        title="Подписи кнопок доски — из словаря интерфейса",
-        description="Две кнопки доски подписаны строкой в коде экрана и не переводятся.",
-        goal="Все подписи доски переводятся вместе с языком интерфейса",
-        context="Словари интерфейса уже есть на двух языках",
-        constraints="Порядок и вид кнопок не менять",
-        output="Подписи доски берутся из словарей",
-        checks=["Переключение языка меняет подписи всех кнопок доски"],
-        priority=TaskPriority.LOW,
     )
 
     webhooks = await areas_service.create_area(
@@ -316,7 +301,6 @@ async def _area_knowledge(
     await areas_service.archive_area(
         session, webhooks, actor=owner, reason="Вебхуки сняты: потребители читают ленту"
     )
-    return interface
 
 
 async def _attributes(session: AsyncSession, project: Project, *, agent: Actor) -> None:
@@ -800,12 +784,13 @@ async def _in_progress_task(
 
 
 async def _candidate_task(session: AsyncSession, project: Project, *, agent: Actor) -> Task:
-    """Свободная задача без блокеров и открытых вопросов — кандидат назначателя."""
+    """Свободная задача без блокеров и открытых вопросов — кандидат назначателя. Экран
+    ленты — область `DEMO/ui`: задача второй области демо (решение `TRK#57`)."""
     task = await tasks_service.create_task(
         session,
         actor=agent,
         project=project,
-        area=DEMO_AREA,
+        area=_UI_AREA,
         title="Ссылка на запись дела в ленте не открывает запись",
         description="В ленте ссылка `DEMO-1#3` показана текстом, перейти к записи нельзя.",
         goal="Из ленты можно перейти к записи, на которую сослались",
