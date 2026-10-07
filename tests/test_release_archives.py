@@ -67,6 +67,14 @@ MAX_DESCRIPTION_LENGTH = 320
 REVOKE_HUMAN_KEYS = "9e2c6b4f1a83"
 #: Статус `waiting` снят: задача встаёт в `open` с записью `status_changed` (TRK-573).
 DROP_WAITING = "a9cb1ec147c4"
+#: Вопросы — в обсуждения: открытый вопрос дела задачи получает `answer` с исходом
+#: `withdrawn` от трекера (TRK-671, решение TRK#51, п. 6).
+WITHDRAW_TASK_QUESTIONS = "3b9f4d192289"
+#: Тело такого ответа — литерал, как в самой миграции.
+WITHDRAWN_BODY = (
+    "Вопрос закрыт: вопросы теперь задаются в обсуждениях. "
+    "Агенту — переспросить через обсуждение."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +160,21 @@ def _intended(table: str, column: str, before: Row, after: Row, archive: Before)
     )
 
 
+def _open_task_questions(archive: Before) -> set[tuple[str, int]]:
+    """Вопросы дел задач без ответа в архиве — по задаче и номеру: их снимает миграция."""
+    entries = archive.rows("entries").values()
+    answered = {
+        (str(row["task_id"]), int(json.loads(row["payload"] or "{}")["question_no"]))
+        for row in entries
+        if row["type"] == "answer" and row["task_id"] is not None
+    }
+    return {
+        (str(row["task_id"]), int(str(row["no"])))
+        for row in entries
+        if row["type"] == "question" and row["task_id"] is not None
+    } - answered
+
+
 def _added(table: str, row: Row, archive: Before) -> bool:
     """Строка, которой нет в архиве, но которую обязаны добавить приём или миграции."""
     if table == "tokens":
@@ -159,6 +182,14 @@ def _added(table: str, row: Row, archive: Before) -> bool:
         return row["name"] in MACHINE_KEY_NAMES and row["revoked_at"] is None
     if table != "entries" or row["created_by_kind"] != "tracker":
         return False
+    if WITHDRAW_TASK_QUESTIONS in archive.applied and row["type"] == "answer":
+        payload = json.loads(row["payload"] or "{}")
+        question = (str(row["task_id"]), payload.get("question_no"))
+        return (
+            payload.get("outcome") == "withdrawn"
+            and row["body"] == WITHDRAWN_BODY
+            and question in _open_task_questions(archive)
+        )
     task = archive.rows("tasks").get(str(row["task_id"]))
     if task is not None and DROP_WAITING in archive.applied and task["status"] == "waiting":
         return row["type"] == "status_changed" and row["title"] == (
@@ -238,10 +269,17 @@ async def test_a_release_archive_comes_into_head_whole(
     assert len(stored["tasks"]) == len(before.rows("tasks"))
     waiting = [task for task in before.rows("tasks").values() if task["status"] == "waiting"]
     long = [project for project in before.rows("projects").values() if _long(project)]
-    added = (len(waiting) if DROP_WAITING in before.applied else 0) + (
-        len(long) if LONG_DESCRIPTIONS in before.applied else 0
+    withdrawn = (
+        _open_task_questions(before) if WITHDRAW_TASK_QUESTIONS in before.applied else set()
+    )
+    added = (
+        (len(waiting) if DROP_WAITING in before.applied else 0)
+        + (len(long) if LONG_DESCRIPTIONS in before.applied else 0)
+        + len(withdrawn)
     )
     assert len(stored["entries"]) == len(before.rows("entries")) + added
+    # Открытых вопросов в делах задач после приёма не остаётся (TRK-671).
+    assert not _open_task_questions(Before(tables=stored, applied=before.applied))
 
 
 def test_the_snapshot_script_runs_and_writes_where_this_test_reads() -> None:

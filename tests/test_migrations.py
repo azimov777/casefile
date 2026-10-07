@@ -1629,3 +1629,146 @@ async def test_the_discussions_rollback_refuses_while_discussion_entries_exist(
 
     with pytest.raises(Exception, match="ck_entries_one_owner"):
         await migrate(url, DISCUSSIONS_PREVIOUS, down=True)
+
+
+# --- Вопросы — в обсуждения: открытые вопросы дел задач снимаются (TRK-671) ---------------
+
+#: Ревизия, снимающая открытые вопросы дел задач, и ревизия перед ней.
+WITHDRAW_QUESTIONS_REVISION = "3b9f4d192289"
+WITHDRAW_QUESTIONS_PREVIOUS = DISCUSSIONS_REVISION
+
+#: Тело записи снятия — дословно из решения владельца (TRK-667#17, п. 2).
+WITHDRAWN_BODY = (
+    "Вопрос закрыт: вопросы теперь задаются в обсуждениях. "
+    "Агенту — переспросить через обсуждение."
+)
+
+_INSERT_TASKS_WITH_QUESTIONS = text(
+    "INSERT INTO tasks (key, project_id, title, description, status, created_by_kind, "
+    "created_by_signature) SELECT rows.key, projects.id, rows.title, 'd', rows.status, 'agent', "
+    "'claude' FROM projects, (VALUES ('OLD-1', 'Два открытых', 'open'), "
+    "('OLD-2', 'Закрыта с открытым', 'done'), ('OLD-3', 'Без вопросов', 'open')) "
+    "AS rows (key, title, status) WHERE projects.key = 'OLD'"
+)
+#: Дело OLD-1: открытый блокирующий (#2), отвеченный (#3, ответ #4), снятый (#5, ответ #6)
+#: и открытый неблокирующий (#7). Дело OLD-2: открытый вопрос (#2) у закрытой задачи.
+_INSERT_QUESTION_HISTORY = text(
+    "INSERT INTO entries (task_id, no, type, title, payload, created_by_kind, "
+    "created_by_signature) SELECT tasks.id, rows.no, rows.type, rows.title, "
+    "CAST(rows.payload AS jsonb), 'agent', 'claude' FROM tasks JOIN (VALUES "
+    "('OLD-1', 1, 'created', 'Task created', '{}'), "
+    """('OLD-1', 2, 'question', 'Держит?', '{"addressees": ["owner"], "blocking": true}'), """
+    """('OLD-1', 3, 'question', 'Ответят?', '{"addressees": ["owner"], "blocking": false}'), """
+    """('OLD-1', 4, 'answer', 'Answer to OLD-1#3', '{"question_no": 3}'), """
+    """('OLD-1', 5, 'question', 'Снят?', '{"addressees": ["owner"], "blocking": true}'), """
+    "('OLD-1', 6, 'answer', 'Answer to OLD-1#5: withdrawn', "
+    """'{"question_no": 5, "outcome": "withdrawn", "replaced_by": null}'), """
+    """('OLD-1', 7, 'question', 'Попутный?', '{"addressees": ["owner"], "blocking": false}'), """
+    "('OLD-2', 1, 'created', 'Task created', '{}'), "
+    """('OLD-2', 2, 'question', 'Забыт?', '{"addressees": ["owner"], "blocking": true}'), """
+    "('OLD-3', 1, 'created', 'Task created', '{}')) "
+    "AS rows (key, no, type, title, payload) ON tasks.key = rows.key"
+)
+_INSERT_DISCUSSION_QUESTION = text(
+    "INSERT INTO entries (discussion_id, no, type, title, payload, created_by_kind, "
+    "created_by_signature) SELECT id, 2, 'question', 'Вопрос обсуждения', "
+    """'{"addressees": ["owner"], "blocking": true}'::jsonb, 'agent', 'claude' FROM discussions"""
+)
+
+#: Открытые вопросы дел задач — то же правило, что у выдачи (`_unanswered`).
+_OPEN_TASK_QUESTIONS = text(
+    "SELECT count(*) FROM entries AS question WHERE question.type = 'question' "
+    "AND question.task_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM entries AS reply "
+    "WHERE reply.task_id = question.task_id AND reply.type = 'answer' "
+    "AND (reply.payload ->> 'question_no')::integer = question.no)"
+)
+
+
+async def _seed_task_questions(engine: AsyncEngine) -> None:
+    """Установка до TRK-671: открытые, отвеченные и снятые вопросы в делах задач и открытый
+    вопрос в деле обсуждения."""
+    async with engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+        await connection.execute(_INSERT_TASKS_WITH_QUESTIONS)
+        await connection.execute(_INSERT_QUESTION_HISTORY)
+        await connection.execute(_INSERT_DISCUSSION)
+        await connection.execute(_INSERT_DISCUSSION_ENTRY)
+        await connection.execute(_INSERT_DISCUSSION_QUESTION)
+
+
+async def _task_entries(engine: AsyncEngine) -> list[Any]:
+    async with engine.connect() as connection:
+        return list(
+            await connection.execute(
+                text(
+                    "SELECT tasks.key, entries.no, entries.type, entries.title, entries.body, "
+                    "entries.payload, entries.created_by_kind, entries.created_by_signature, "
+                    "entries.action_id FROM entries JOIN tasks ON tasks.id = entries.task_id "
+                    "ORDER BY entries.seq"
+                )
+            )
+        )
+
+
+async def test_the_migration_withdraws_exactly_the_open_questions_of_task_cases(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Обзорная проверка 1 TRK-671: каждый открытый вопрос дела задачи — и у закрытой
+    задачи — получает `answer` с исходом `withdrawn` от трекера с телом из решения
+    владельца; отвеченные, снятые и вопросы обсуждений не трогаются; открытых не остаётся."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, WITHDRAW_QUESTIONS_PREVIOUS)
+    await _seed_task_questions(migration_engine)
+    async with migration_engine.connect() as connection:
+        open_before = await connection.scalar(_OPEN_TASK_QUESTIONS)
+    before = await _task_entries(migration_engine)
+
+    await migrate(url, WITHDRAW_QUESTIONS_REVISION)
+
+    after = await _task_entries(migration_engine)
+    async with migration_engine.connect() as connection:
+        open_after = await connection.scalar(_OPEN_TASK_QUESTIONS)
+        discussion = list(
+            await connection.execute(
+                text("SELECT no, type FROM entries WHERE discussion_id IS NOT NULL ORDER BY no")
+            )
+        )
+
+    added = after[len(before) :]
+    assert [tuple(row) for row in after[: len(before)]] == [tuple(row) for row in before]
+    assert (open_before, len(added), open_after) == (3, 3, 0)
+    assert [(row.key, row.no, row.title) for row in added] == [
+        ("OLD-1", 8, "Answer to OLD-1#2: withdrawn"),
+        ("OLD-1", 9, "Answer to OLD-1#7: withdrawn"),
+        ("OLD-2", 3, "Answer to OLD-2#2: withdrawn"),
+    ]
+    assert [row.payload for row in added] == [
+        {"question_no": 2, "outcome": "withdrawn", "replaced_by": None},
+        {"question_no": 7, "outcome": "withdrawn", "replaced_by": None},
+        {"question_no": 2, "outcome": "withdrawn", "replaced_by": None},
+    ]
+    assert {(row.type, row.body, row.created_by_kind) for row in added} == {
+        ("answer", WITHDRAWN_BODY, "tracker")
+    }
+    assert {row.created_by_signature for row in added} == {None}
+    assert len({row.action_id for row in added}) == 3
+    assert [tuple(row) for row in discussion] == [(1, "created"), (2, "question")]
+
+
+async def test_the_withdrawal_rolls_back_without_touching_the_case_and_reapplies(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Откат ничего не снимает (дело неизменяемо), повторный подъём ничего не добавляет:
+    снятых вопросов он уже не находит открытыми."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, WITHDRAW_QUESTIONS_PREVIOUS)
+    await _seed_task_questions(migration_engine)
+    await migrate(url, WITHDRAW_QUESTIONS_REVISION)
+    once = await _task_entries(migration_engine)
+
+    await migrate(url, WITHDRAW_QUESTIONS_PREVIOUS, down=True)
+    await migrate(url, WITHDRAW_QUESTIONS_REVISION)
+
+    assert [tuple(row) for row in await _task_entries(migration_engine)] == [
+        tuple(row) for row in once
+    ]
