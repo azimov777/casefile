@@ -21,8 +21,9 @@ FastAPI, и правило, записанное только в схеме, д�
 
 ## Правки полей зависят от статуса
 
-Название, описание и пять разделов меняются только в `backlog`; исполнитель, приоритет и
-решения проекта — в любом незакрытом статусе; в `done` и `cancelled` не меняется ничего.
+Название, описание и пять разделов меняются только в `backlog`; исполнитель, приоритет,
+направление, момент `not_before` и решения проекта — в любом незакрытом статусе; в `done` и
+`cancelled` не меняется ничего.
 Правило выражено одной функцией (`editable_fields`), чтобы частичное обновление и
 инструмент MCP спрашивали её, а не держали по своей копии таблицы.
 """
@@ -30,7 +31,7 @@ FastAPI, и правило, записанное только в схеме, д�
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from dataclasses import fields as dataclass_fields
-from datetime import datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -48,6 +49,7 @@ from app.domain.errors import (
     InvalidTaskKeyError,
     SummaryRequiredError,
     TaskBlockedError,
+    TaskDeferredError,
     TaskFieldsInvalidError,
     TaskHasOpenBlockingQuestionsError,
     TaskHasUnclosedChildrenError,
@@ -373,6 +375,10 @@ class TaskField(StrEnum):
     #: `None`. Обвязка, как приоритет: меняется в любом незакрытом статусе, пишет
     #: `field_changed`. Хранится ссылкой на строку направления, в записи — адресом.
     DIRECTION = "direction"
+    #: Момент «не раньше» (решение проекта `TRK#47`): до него вход в `in_progress`
+    #: отклоняется (`check_not_deferred`). Обвязка: меняется в любом незакрытом статусе,
+    #: пишет `field_changed`, `None` снимает. В записи — строкой момента в UTC.
+    NOT_BEFORE = "not_before"
     #: Решения проекта, на которые опирается задача (`CONCEPT.md`, 3.3): обвязка, а не
     #: задание, поэтому меняется в любом незакрытом статусе и пишет `field_changed`.
     DECISIONS = "decisions"
@@ -395,7 +401,13 @@ BACKLOG_ONLY_FIELDS: frozenset[TaskField] = frozenset(
 
 #: Меняются в любом незакрытом статусе: это не содержание задачи, а её обвязка.
 OPEN_FIELDS: frozenset[TaskField] = frozenset(
-    {TaskField.ASSIGNEE, TaskField.PRIORITY, TaskField.DIRECTION, TaskField.DECISIONS}
+    {
+        TaskField.ASSIGNEE,
+        TaskField.PRIORITY,
+        TaskField.DIRECTION,
+        TaskField.NOT_BEFORE,
+        TaskField.DECISIONS,
+    }
 )
 
 
@@ -598,6 +610,59 @@ def _normalize_direction(value: Any) -> str | None:
     return str(parse_direction_address(address))
 
 
+#: Форма момента `not_before`, которую называет отказ: дата, время и смещение пояса.
+NOT_BEFORE_SHAPE = "YYYY-MM-DDTHH:MM:SS±HH:MM"
+
+
+def _normalize_not_before(value: Any) -> datetime | None:
+    """Момент `not_before` в UTC или `None` — «задача не отложена».
+
+    Строка ISO 8601 обязана нести время и смещение пояса (решение проекта `TRK#47`): она
+    написана по часам устройства того, кто ставит, и без смещения установка не знает, по
+    каким. Дата без времени — `time_required`, время без смещения — `offset_required`;
+    молча подставить полночь или пояс сервера значило бы отложить задачу не на тот момент.
+    Готовый `datetime` (демо, сценарии) проходит то же правило про пояс.
+
+    Сравнения с часами здесь нет: домен часов не читает. Момент в прошлом законен —
+    задача с ним просто не отложена (`deferred` считает база).
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        moment = value
+    else:
+        text = _text(value).strip()
+        try:
+            date.fromisoformat(text)
+        except ValueError:
+            pass
+        else:
+            raise FieldProblem("time_required", expected=NOT_BEFORE_SHAPE, allowed_null=True)
+        try:
+            moment = datetime.fromisoformat(text)
+        except ValueError:
+            raise FieldProblem(
+                "invalid_datetime", expected=NOT_BEFORE_SHAPE, allowed_null=True
+            ) from None
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise FieldProblem("offset_required", expected=NOT_BEFORE_SHAPE, allowed_null=True)
+    try:
+        return moment.astimezone(UTC)
+    except OverflowError:
+        # Крайние даты календаря (`0001-01-01T00:00+05:00`) в UTC выходят за его границы.
+        raise FieldProblem("out_of_range", expected=NOT_BEFORE_SHAPE, allowed_null=True) from None
+
+
+def moment_text(value: datetime) -> str:
+    """Момент строкой в UTC, как его отдаёт API: `2026-10-08T07:00:00Z`.
+
+    Одна запись момента на записи дела (`field_changed`) и `details` отказа
+    `task_deferred`: читающий сравнивает их с полем карточки, и третий вид той же строки
+    заставил бы его разбирать пояс.
+    """
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
 def _normalize_decisions(value: Any) -> list[str]:
     """Решения проекта задачи: канонические ссылки `TRK#15` без повторов, в порядке постановки.
 
@@ -628,6 +693,7 @@ _NORMALIZERS: dict[TaskField, Callable[[Any], Any]] = {
     TaskField.ASSIGNEE: _normalize_assignee,
     TaskField.PRIORITY: _normalize_priority,
     TaskField.DIRECTION: _normalize_direction,
+    TaskField.NOT_BEFORE: _normalize_not_before,
     TaskField.DECISIONS: _normalize_decisions,
 }
 
@@ -731,6 +797,14 @@ class TransitionFacts:
     #: (`Actor.author.signature`). `None` — подписи нет (сам трекер) или факт не
     #: передали; ни то, ни другое не исполнитель, и вход в `in_progress` запрещён.
     requester: str | None = None
+    #: Отложена ли задача: её `not_before` ещё впереди по часам базы (решение проекта
+    #: `TRK#47`). Сравнивает база, а не домен: часов домен не читает, а признак `deferred` и
+    #: отбор `deferred:` считают то же выражение (`app/db/repositories/tasks.py`,
+    #: `deferred_now`). `None` — «факт не считали», и вход в `in_progress` запрещается,
+    #: как у блокеров.
+    deferred: bool | None = None
+    #: Сам момент `not_before` — для `details` отказа; в решении он не участвует.
+    not_before: datetime | None = None
 
 
 #: Одна проверка перехода: молчит, если всё в порядке, иначе бросает доменную ошибку со
@@ -982,6 +1056,38 @@ def check_no_open_blocking_questions(facts: TransitionFacts) -> None:
     )
 
 
+def check_not_deferred(facts: TransitionFacts) -> None:
+    """`* → in_progress`: момент `not_before` пуст или уже наступил по часам базы.
+
+    Третий носитель ожидания (решение проекта `TRK#47`): ход за временем, а не за другой
+    задачей (`check_no_open_blockers`) и не за человеком (`check_no_open_blocking_questions`).
+    Держит только вход: задачу в `in_progress` поле не прерывает, `backlog → open` и
+    остальные ходы момента не видят.
+
+    Это валидация, а не автоматика: наступление момента ничего не подшивает и статус не
+    меняет — при следующей попытке вход просто проходит.
+    """
+    if facts.to_status is not TaskStatus.IN_PROGRESS:
+        return
+    details: dict[str, Any] = {
+        "key": facts.key,
+        "from": facts.from_status.value,
+        "to": facts.to_status.value,
+    }
+    if facts.deferred is None:
+        # Факт не посчитан: как у блокеров, ход запрещается отдельной причиной, а не
+        # моментом, которого никто не сравнивал с часами.
+        raise TaskDeferredError(details={**details, "reason": "deferral_not_collected"})
+    if not facts.deferred:
+        return
+    raise TaskDeferredError(
+        details={
+            **details,
+            "not_before": None if facts.not_before is None else moment_text(facts.not_before),
+        },
+    )
+
+
 def check_children_closed_before_closing(facts: TransitionFacts) -> None:
     """`* → done` и `* → cancelled`: все дети в `done` или в `cancelled`.
 
@@ -1043,6 +1149,7 @@ TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
     check_taken_by_assignee,
     check_no_open_blockers,
     check_no_open_blocking_questions,
+    check_not_deferred,
     check_children_closed_before_closing,
 )
 
@@ -1109,14 +1216,18 @@ class TaskFeatures:
     расходится с делом ровно в тот момент, когда её забыли обновить. Цена — запрос при
     чтении карточки; она приемлема, потому что запрос один и идёт по индексу.
 
-    Все считаются из того, что пакет преемника читает и так: `blocked` — из связей,
-    остальные — из открытых вопросов, неразобранных замечаний и последней сводки.
-    Отдельного запроса ради признака в проекте нет ни одного, и заводить его не нужно:
-    поле отбора, которому понадобился бы свой запрос (`remarks_in_work`, `CONCEPT.md`,
-    4.4), признаком намеренно не стало.
+    Почти все считаются из того, что пакет преемника читает и так: `blocked` — из связей,
+    остальные — из открытых вопросов, неразобранных замечаний и последней сводки. Поле
+    отбора, которому понадобился бы свой запрос по делу или связям (`remarks_in_work`,
+    `CONCEPT.md`, 4.4), признаком намеренно не стало. Исключение одно — `deferred`: ему
+    нужны часы базы, а не прочитанное, и он стоит один короткий запрос без таблиц.
     """
 
     blocked: bool
+    #: Отложена ли задача: `not_before` ещё впереди по часам базы (решение проекта
+    #: `TRK#47`). Пустое поле — `False`. Наступление момента меняет признак само, без
+    #: записи и хода трекера.
+    deferred: bool
     open_questions: int
     open_blocking_questions: int
     #: Сколько замечаний ждут разбора. Считается тем же способом, что и вопросы: сами

@@ -9,7 +9,7 @@ from app.domain.tasks import DEFAULT_PRIORITY
 from app.mcp.arguments import IdempotencyKeyArg, ProjectKeyArg
 from app.mcp.enums import TaskPrioritySchema
 from app.mcp.idempotency import Once
-from app.mcp.tools.tasks.arguments import DecisionsArg, DirectionArg
+from app.mcp.tools.tasks.arguments import DecisionsArg, DirectionArg, NotBeforeArg
 from app.mcp.tools.tasks.views import MutationView, mutation
 from app.mcp.toolset import FILING, Toolset
 from app.services import case as case_service
@@ -104,6 +104,7 @@ def register(tools: Toolset) -> None:
         priority: PriorityArg = DEFAULT_PRIORITY,
         decisions: DecisionsArg = None,
         direction: DirectionArg = None,
+        not_before: NotBeforeArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> MutationView:
         """Creates a task in `backlog`; a new task starts in no other status.
@@ -144,6 +145,7 @@ def register(tools: Toolset) -> None:
                     priority=priority,
                     decisions=decisions or (),
                     direction=direction,
+                    not_before=not_before,
                 )
                 parent_entry: int | None = None
                 if parent_task is not None:
@@ -182,6 +184,7 @@ def register(tools: Toolset) -> None:
                     "priority": priority,
                     "decisions": decisions,
                     "direction": direction,
+                    "not_before": not_before,
                 },
                 build=create,
             )

@@ -9,11 +9,12 @@
 Что наполняется (`TRK-29`):
 
 - проект `DEMO` с описанием — общим контекстом всех его задач;
-- восемь задач: все шесть статусов, `in_progress` — двумя, потому что интересны обе:
-  с живой сводкой и с провальным вердиктом, держащим выход в `done`; `done` — тоже
-  двумя: вторая закрыта с проверкой `unverifiable`, и её предупреждение человек принял
-  (`warning` и `acceptance`, TRK-561). Она заведена последней, чтобы ключи первых семи
-  не сдвинулись: по ним ходят сквозные сценарии интерфейса;
+- задачи всех статусов, `in_progress` — двумя, потому что интересны обе: с живой
+  сводкой и с провальным вердиктом, держащим выход в `done`; `done` — тоже двумя: вторая
+  закрыта с проверкой `unverifiable`, и её предупреждение человек принял (`warning` и
+  `acceptance`, TRK-561). Отложенная задача (`not_before` через неделю от посева) стоит в
+  `open` последней. Новые задачи заводятся в конце, чтобы ключи прежних не сдвинулись: по
+  ним ходят сквозные сценарии интерфейса;
 - записи **всех** типов, включая служебные `section_changed`, `assignee_changed`,
   `link_added` и `link_removed`: экран дела иначе показывал бы половину словаря;
 - атрибуты проекта с историей в его деле: заведение, изменение с причиной и снятие;
@@ -33,13 +34,14 @@
 """
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.models.task import Task
-from app.db.repositories import ParticipantRepository, ProjectRepository
+from app.db.repositories import ParticipantRepository, ProjectRepository, TaskRepository
 from app.domain.authors import label_author
 from app.domain.case import EntryType, RemarkOutcome, VerdictOutcome
 from app.domain.links import LinkKind
@@ -74,7 +76,7 @@ DEMO_LABEL = "nightly_agent"
 _PROJECT_DESCRIPTION = (
     "Демонстрационный проект: на нём видно каждый экран интерфейса. Задачи ненастоящие, "
     "но собраны настоящими сценариями трекера. Кандидат для назначателя здесь ровно один: "
-    "`status: open and blocked: false and open_blocking_questions: 0`."
+    "`status: open and blocked: false and open_blocking_questions: 0 and deferred: false`."
 )
 
 
@@ -157,10 +159,21 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     await _moved_there_and_back(session, cancelled, home=project, owner=owner)
 
     accepted = await _accepted_warning_task(session, project, agent=agent, human=human)
+    deferred = await _deferred_task(session, project, agent=agent)
 
     return DemoData(
         project=project,
-        tasks=[done, in_progress, candidate, awaiting, child, checking, cancelled, accepted],
+        tasks=[
+            done,
+            in_progress,
+            candidate,
+            awaiting,
+            child,
+            checking,
+            cancelled,
+            accepted,
+            deferred,
+        ],
     )
 
 
@@ -460,6 +473,59 @@ async def _accepted_warning_task(
         actor=Actor(author=human.author, participant=human),
         type=EntryType.ACCEPTANCE,
         title="Принято: в Safari посмотрю сам при следующем выпуске",
+    )
+    return task
+
+
+#: На сколько демо откладывает задачу от часов базы при посеве: неделя держит её
+#: отложенной, сколько бы демо ни смотрели после установки.
+DEMO_DEFERRAL = timedelta(days=7)
+
+
+async def _deferred_task(session: AsyncSession, project: Project, *, agent: Actor) -> Task:
+    """Отложенная задача: взять её в работу раньше момента `not_before` нельзя (`TRK#47`).
+
+    Агент взял задачу, увидел, что следующий ход возможен только через неделю, поставил
+    момент «не раньше», написал сводку и ушёл в `open` с причиной, называющей момент.
+    Ожидание держит поле, а не причина и не статус: до момента признак `deferred` поднят,
+    кандидатом задача не считается, и вход в работу отвечает `task_deferred`. Момент — от
+    часов базы при посеве, а не от календарной даты: демо, поставленное позже, иначе
+    показывало бы давно наступивший момент.
+    """
+    task = await tasks_service.create_task(
+        session,
+        actor=agent,
+        project=project,
+        title="Сверить карточку в каталоге после его еженедельной синхронизации",
+        description="Каталог обновляет карточки раз в неделю; новое описание ещё не доехало.",
+        goal="Карточка в каталоге показывает новое описание и ссылку на установку",
+        context="Каталог забирает описание сам по расписанию; ускорить его нельзя",
+        constraints="Описание в репозитории не менять до сверки",
+        output="Запись в деле: что показывает каталог после синхронизации",
+        checks=["Карточка каталога показывает новое описание и ссылку на установку"],
+        assignee=DEMO_AGENT_NAME,
+    )
+    await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
+    await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
+    moment = await TaskRepository(session).clock() + DEMO_DEFERRAL
+    await tasks_service.update_task(
+        session, task, actor=agent, changes=TaskChanges(not_before=moment)
+    )
+    await case_service.add_summary(
+        session,
+        task,
+        actor=agent,
+        done="Новое описание отправлено; каталог заберёт его при следующей синхронизации",
+        remaining="Сверить карточку после синхронизации",
+        blockers="Синхронизация каталога раз в неделю: раньше сверять нечего",
+        next_step="Открыть карточку каталога и сравнить описание с репозиторием",
+    )
+    await tasks_service.transition_task(
+        session,
+        task,
+        actor=agent,
+        to=TaskStatus.OPEN,
+        reason="Жду синхронизации каталога: взять не раньше момента `not_before`",
     )
     return task
 

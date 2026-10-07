@@ -6200,13 +6200,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `direction`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
+              "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `deferred`, `direction`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
               "examples": [
                 "project: TRK and status: open and blocked: false"
               ],
               "title": "Query"
             },
-            "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `direction`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
+            "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `deferred`, `direction`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
           },
           {
             "name": "sort",
@@ -6251,7 +6251,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `direction`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `direction` brings the direction of the task, address and title, or `null`",
+              "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `direction`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `direction` brings the direction of the task, address and title, or `null`",
               "examples": [
                 [
                   "title",
@@ -6260,7 +6260,7 @@
               ],
               "title": "Fields"
             },
-            "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `direction`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `direction` brings the direction of the task, address and title, or `null`"
+            "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `direction`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `direction` brings the direction of the task, address and title, or `null`"
           },
           {
             "name": "limit",
@@ -6575,6 +6575,24 @@
               "title": "Blocked"
             },
             "description": "Whether the task has a `blocked_by` link to a task that is neither `done` nor `cancelled`. Computed from links, not stored"
+          },
+          {
+            "name": "deferred",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Whether the task's `not_before` is still ahead by the database clock. Computed on read, not stored: it turns false by itself when the moment arrives",
+              "title": "Deferred"
+            },
+            "description": "Whether the task's `not_before` is still ahead by the database clock. Computed on read, not stored: it turns false by itself when the moment arrives"
           },
           {
             "name": "open_questions",
@@ -7049,7 +7067,7 @@
           "tasks"
         ],
         "summary": "Update a task",
-        "description": "Меняет только переданные поля.\n\nНазвание, описание и пять разделов — только в `backlog` (иначе `409\ntask_field_locked`); исполнитель, приоритет, направление и решения проекта — в любом\nнезакрытом статусе; в `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое\nизменение подшивает запись: раздел — `section_changed`, исполнитель —\n`assignee_changed`, приоритет, направление и решения — `field_changed`. Направление —\nадрес направления своего проекта или `null`: другой проект — `422\ndirection_project_mismatch`, нет такого — `404 direction_not_found`, архивное — `409\ndirection_archived` (снять направление можно всегда). Новая ссылка на заменённое\nрешение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не\nоставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле\nзадачи, а условие: устаревшая версия отвечает `409 version_conflict`.\n\nПроверку правят двумя способами: `check` меняет текст одной на месте, `checks`\nзаменяет список целиком и годится, когда меняется сам состав. Вместе они не\nпринимаются — это два разных ответа на один вопрос.",
+        "description": "Меняет только переданные поля.\n\nНазвание, описание и пять разделов — только в `backlog` (иначе `409\ntask_field_locked`); исполнитель, приоритет, направление, момент `not_before` и решения\nпроекта — в любом незакрытом статусе; в `done` и `cancelled` не меняется ничего (`409\ntask_closed`). Каждое изменение подшивает запись: раздел — `section_changed`,\nисполнитель — `assignee_changed`, приоритет, направление, момент и решения —\n`field_changed` с автором запроса. Момент `not_before` — строка ISO 8601 со смещением\nпояса или `null`; время без смещения и дата без времени — `422 task_fields_invalid`.\nНаправление — адрес направления своего проекта или `null`: другой проект — `422\ndirection_project_mismatch`, нет такого — `404 direction_not_found`, архивное — `409\ndirection_archived` (снять направление можно всегда). Новая ссылка на заменённое\nрешение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не\nоставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле\nзадачи, а условие: устаревшая версия отвечает `409 version_conflict`.\n\nПроверку правят двумя способами: `check` меняет текст одной на месте, `checks`\nзаменяет список целиком и годится, когда меняется сам состав. Вместе они не\nпринимаются — это два разных ответа на один вопрос.",
         "operationId": "update_task",
         "security": [
           {
@@ -7183,7 +7201,7 @@
           "tasks"
         ],
         "summary": "Move a task to another status",
-        "description": "Переводит задачу по таблице переходов.\n\nПереход не из таблицы — `409 transition_not_allowed` с допустимыми целями в\n`details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422\ntransition_reason_required`); `backlog → open` требует заполненных разделов (`422\ntask_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после\nпоследнего входа в него (`409 summary_required`); `in_progress → done` —\nзасчитанного последнего вердикта по каждой проверке (`passed`, `partial`,\n`unverifiable`), подшитого после последнего входа в `in_progress` (`409\nchecks_not_passed`, незасчитанные проверки в\n`details.checks` парами `check_no` и `reason`). Вход в `in_progress` делает только\nисполнитель задачи: без исполнителя — `409 assignee_required`, от другой подписи\n(имя участника токена или метка `X-Actor-Label`) — `409 assignee_mismatch` с\n`details.assignee` и `details.requester`. Вход в\n`in_progress` отклоняется и при открытом блокере (`409 task_blocked`, их ключи в\n`details.blockers`), и при вопросе с `blocking` без ответа (`409\ntask_has_open_blocking_questions`, номера вопросов в `details.questions`; ни вопрос,\nни ответ статус не меняют), закрытие — и `done`, и `cancelled` — при детях не в `done` и\nне в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).\nПереход подшивает `status_changed` с `from`, `to` и `reason`.\n\nЦель `done` не принимается: закрытие подшивает вердикты и сводку и переводит задачу\nодной транзакцией, и у него свой маршрут — `409 closing_not_a_transition`.",
+        "description": "Переводит задачу по таблице переходов.\n\nПереход не из таблицы — `409 transition_not_allowed` с допустимыми целями в\n`details.allowed`. Шаг назад по цепочке и отмена требуют `reason` (`422\ntransition_reason_required`); `backlog → open` требует заполненных разделов (`422\ntask_sections_incomplete`). Выход из `in_progress` требует сводки, подшитой после\nпоследнего входа в него (`409 summary_required`); `in_progress → done` —\nзасчитанного последнего вердикта по каждой проверке (`passed`, `partial`,\n`unverifiable`), подшитого после последнего входа в `in_progress` (`409\nchecks_not_passed`, незасчитанные проверки в\n`details.checks` парами `check_no` и `reason`). Вход в `in_progress` делает только\nисполнитель задачи: без исполнителя — `409 assignee_required`, от другой подписи\n(имя участника токена или метка `X-Actor-Label`) — `409 assignee_mismatch` с\n`details.assignee` и `details.requester`. Вход в\n`in_progress` отклоняется и при открытом блокере (`409 task_blocked`, их ключи в\n`details.blockers`), и при вопросе с `blocking` без ответа (`409\ntask_has_open_blocking_questions`, номера вопросов в `details.questions`; ни вопрос,\nни ответ статус не меняют), и раньше момента `not_before` по часам базы (`409\ntask_deferred`, момент в `details.not_before`; наступление момента ничего не подшивает),\nзакрытие — и `done`, и `cancelled` — при детях не в `done` и\nне в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).\nПереход подшивает `status_changed` с `from`, `to` и `reason`.\n\nЦель `done` не принимается: закрытие подшивает вердикты и сводку и переводит задачу\nодной транзакцией, и у него свой маршрут — `409 closing_not_a_transition`.",
         "operationId": "transition_task",
         "security": [
           {
@@ -17447,6 +17465,22 @@
               "TRK/promotion"
             ]
           },
+          "not_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "date-time",
+            "title": "Not Before",
+            "description": "Moment before which the task cannot enter `in_progress` (`task_deferred`): ISO 8601 date and time with a UTC offset, by the clock of the device that sets it; null for none. A time without an offset or a date without a time answers `task_fields_invalid`. The moment arrives with no entry and no status change: the `deferred` feature is computed on read by the database clock. Set in any status but `done` and `cancelled`; every change files `field_changed`",
+            "examples": [
+              "2026-10-08T09:00:00+02:00"
+            ]
+          },
           "decisions": {
             "items": {
               "type": "string"
@@ -17559,6 +17593,14 @@
               false
             ]
           },
+          "deferred": {
+            "type": "boolean",
+            "title": "Deferred",
+            "description": "Whether the task's `not_before` is still ahead by the database clock; false without one. Entering `in_progress` is refused with `task_deferred` while it is true; it turns false by itself when the moment arrives",
+            "examples": [
+              false
+            ]
+          },
           "open_questions": {
             "type": "integer",
             "title": "Open Questions",
@@ -17621,6 +17663,7 @@
         "type": "object",
         "required": [
           "blocked",
+          "deferred",
           "open_questions",
           "open_blocking_questions",
           "open_remarks",
@@ -17643,6 +17686,7 @@
           "assignee",
           "priority",
           "direction",
+          "not_before",
           "decisions"
         ],
         "title": "TaskField",
@@ -18215,6 +18259,22 @@
               "normal"
             ]
           },
+          "not_before": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Not Before",
+            "description": "Moment before which the task cannot enter `in_progress`, in UTC; `null` for none. Whether it is still ahead by the database clock is the `deferred` feature",
+            "examples": [
+              "2026-10-08T07:00:00Z"
+            ]
+          },
           "version": {
             "type": "integer",
             "title": "Version",
@@ -18254,6 +18314,7 @@
           "status",
           "assignee",
           "priority",
+          "not_before",
           "version",
           "created_by",
           "created_at",
@@ -18419,6 +18480,19 @@
                 "type": "null"
               }
             ]
+          },
+          "not_before": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Not Before",
+            "description": "Moment before which the task cannot enter `in_progress`; `null` for none"
           },
           "version": {
             "anyOf": [
@@ -18794,6 +18868,22 @@
             "description": "Address `PROJECT/key` of a direction of the task's own project, or null for none. Another project's direction answers `direction_project_mismatch`, an unknown one `direction_not_found`, an archived one `direction_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`. Pass null to take the task out of its direction",
             "examples": [
               "TRK/promotion"
+            ]
+          },
+          "not_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "date-time",
+            "title": "Not Before",
+            "description": "Moment before which the task cannot enter `in_progress` (`task_deferred`): ISO 8601 date and time with a UTC offset, by the clock of the device that sets it; null for none. A time without an offset or a date without a time answers `task_fields_invalid`. The moment arrives with no entry and no status change: the `deferred` feature is computed on read by the database clock. Set in any status but `done` and `cancelled`; every change files `field_changed`. Pass null to clear the moment",
+            "examples": [
+              "2026-10-08T09:00:00+02:00"
             ]
           },
           "decisions": {

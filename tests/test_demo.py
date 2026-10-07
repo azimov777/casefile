@@ -139,6 +139,7 @@ async def test_every_demo_row_carries_the_features_of_its_own_card(
     assert any(features is not None and features.blocked for features in rows.values())
     assert any(features is not None and features.open_questions for features in rows.values())
     assert any(features is not None and features.last_summary_at for features in rows.values())
+    assert any(features is not None and features.deferred for features in rows.values())
 
 
 async def test_every_demo_row_names_the_parent_its_card_shows(
@@ -178,7 +179,7 @@ async def test_decomposed_test_is_a_child_of_the_task_in_progress(
     однажды стояло навыворот (UI-119#8), и здесь проверена именно эта пара задач, а не
     словарь видов связей вообще (им занята `test_demo_fills_every_link_kind`).
     """
-    _done, in_progress, _candidate, _asking, child, _checking, _cancelled, _accepted = seeded.tasks
+    _done, in_progress, _candidate, _asking, child, *_rest = seeded.tasks
     assert in_progress.status is TaskStatus.IN_PROGRESS
     assert child.status is TaskStatus.BACKLOG
 
@@ -212,7 +213,7 @@ async def test_demo_leaves_exactly_one_open_blocking_question(
         actor=reader,
         query=(
             f"project: {DEMO_PROJECT_KEY} and status: open and blocked: false "
-            "and open_blocking_questions: 0"
+            "and open_blocking_questions: 0 and deferred: false"
         ),
     )
     candidates = [found.task.key for found in outcome.page.items]

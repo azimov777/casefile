@@ -3,12 +3,17 @@
 Репозиторий не коммитит и не откатывает: границу транзакции держит вход в приложение.
 Изменения полей задачи идут через объект в сессии, а не массовыми `UPDATE`: версию
 ведёт `version_id_col`, и запрос мимо ORM обошёл бы оптимистичную блокировку.
+
+Здесь же условие «задача отложена» (`deferred_now`): одно выражение на проверку входа в
+`in_progress`, признак `deferred` карточки и строки выдачи и отбор `deferred:`, как
+`open_blockers_of` у `blocked` (`app/db/repositories/links.py`).
 """
 
 import uuid
 from collections.abc import Sequence
+from datetime import datetime
 
-from sqlalchemy import distinct, func, or_, select, true
+from sqlalchemy import DateTime, and_, distinct, func, literal, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -72,6 +77,29 @@ class TaskRepository:
         )
         return {value: int(count) for value, count in (await self._session.execute(statement))}
 
+    async def clock(self) -> datetime:
+        """Часы базы — `now()` транзакции, по которым считается `deferred`.
+
+        Нужны тому, кто ставит момент от часов установки, а не от своих: демо
+        откладывает задачу на неделю от посева, тесты — на день в обе стороны. Часы
+        процесса приложения с ними не совпадают, и задача, отложенная по ним, наступала
+        бы не тогда, когда её отпустит проверка входа.
+        """
+        moment = await self._session.scalar(select(func.now()))
+        assert moment is not None  # `SELECT now()` строку отдаёт всегда.
+        return moment
+
+    async def is_deferred(self, not_before: datetime | None) -> bool:
+        """Отложен ли момент `not_before` по часам базы — тем же выражением, что отбор.
+
+        Значение приходит из объекта задачи, а не из строки таблицы: у перехода, которому
+        тот же вызов только что поменял поле, правка ещё не записана (`autoflush`
+        выключен), а проверить надо будущее состояние. Часы — `now()` транзакции, как у
+        признака в выдаче: часы процесса приложения в сравнении не участвуют.
+        """
+        moment = literal(not_before, type_=DateTime(timezone=True))
+        return bool(await self._session.scalar(select(deferred_now(moment))))
+
     async def add(self, task: Task) -> Task:
         """Кладёт задачу в сессию и отправляет INSERT, не закрывая транзакцию."""
         self._session.add(task)
@@ -87,3 +115,18 @@ def named_by(key: str) -> ColumnElement[bool]:
     поэтому условие находит не больше одной задачи.
     """
     return or_(Task.key == key, Task.previous_keys.contains([key]))
+
+
+def deferred_now(not_before: ColumnElement[datetime | None]) -> ColumnElement[bool]:
+    """Условие «момент `not_before` ещё не наступил» по часам базы (решение проекта `TRK#47`).
+
+    Единственное написание признака `deferred`: им считают и проверку входа в
+    `in_progress` (`TaskRepository.is_deferred`), и колонку признака в выдаче, и отбор
+    `deferred:` (`app/db/repositories/search.py`). Второе написание развело бы «можно ли
+    взять» у перехода и у списка кандидатов ровно в минуту наступления момента.
+
+    Часы — `now()`: время начала транзакции, одно на все сравнения одного запроса. Пустое
+    поле даёт `false`, а не `NULL`: `IS NOT NULL` стоит первым, и отрицание
+    (`deferred: false`) находит задачи без момента.
+    """
+    return and_(not_before.is_not(None), not_before > func.now())

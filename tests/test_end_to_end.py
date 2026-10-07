@@ -168,6 +168,7 @@ async def test_a_task_goes_the_whole_way_through_rest(
     assert last_agent["title"] == CLOSING_SUMMARY["done"]
     assert package["features"] == {
         "blocked": False,
+        "deferred": False,
         "open_questions": 0,
         "open_blocking_questions": 0,
         "open_remarks": 0,

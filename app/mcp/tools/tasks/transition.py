@@ -17,8 +17,8 @@ ReasonArg = Annotated[
             "Why the task moves. Required for any step back along `backlog < open < "
             "in_progress < done` and for `cancelled` (`transition_reason_required` "
             "otherwise), optional elsewhere. Filed in the `status_changed` entry as text "
-            "only: a wait is held by its carrier, an open `blocking` question or "
-            "`blocked_by`, and not by the reason"
+            "only: a wait is held by its carrier — an open `blocking` question, "
+            "`blocked_by` or `not_before` — and not by the reason"
         )
     ),
 ]
@@ -43,16 +43,17 @@ def register(tools: Toolset) -> None:
         `assignee_required`, by anyone but the assignee — `assignee_mismatch` (assignee
         and caller signature in `details`), with an open blocker — `task_blocked`, with
         an unanswered `blocking` question — `task_has_open_blocking_questions` (question
-        numbers in `details.questions`); `open` with incomplete sections —
-        `task_sections_incomplete`; `cancelled` with open children —
-        `task_has_unclosed_children`; `done` — `closing_not_a_transition`, since a task
-        is closed by `close_task`; a move outside the table — `transition_not_allowed`,
-        the allowed targets in `details.allowed`.
+        numbers in `details.questions`), before its `not_before` moment while the
+        `deferred` feature is true — `task_deferred` (the moment in `details.not_before`);
+        `open` with incomplete sections — `task_sections_incomplete`; `cancelled` with
+        open children — `task_has_unclosed_children`; `done` — `closing_not_a_transition`,
+        since a task is closed by `close_task`; a move outside the table —
+        `transition_not_allowed`, the allowed targets in `details.allowed`.
 
-        A task waiting in `open` stays there when its carrier closes: neither an answer
-        nor a closed blocker moves it, and it becomes a candidate again with no
-        `status_changed` entry. Each entry into `in_progress` starts a new pass of the
-        task.
+        A task waiting in `open` stays there when its carrier closes: neither an answer,
+        a closed blocker nor an arrived `not_before` moves it, and it becomes a candidate
+        again with no `status_changed` entry. Each entry into `in_progress` starts a new
+        pass of the task.
 
         `cancelled` takes no verdicts. It clears the `blocked` feature of the tasks this
         one blocked (`blocks`), with no entry in their cases.

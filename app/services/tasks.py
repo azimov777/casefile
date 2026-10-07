@@ -41,6 +41,7 @@ version_conflict`. Проверка двойная: сравнение в Python
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
@@ -87,6 +88,7 @@ from app.domain.tasks import (
     ensure_transition_allowed,
     format_task_key,
     is_closed,
+    moment_text,
     moved_previous_keys,
     normalize_fields,
     normalize_reason,
@@ -129,6 +131,9 @@ class TaskChanges:
     priority: TaskPriority | str = UNSET
     #: Адрес направления проекта задачи; `None` снимает направление.
     direction: str | None = UNSET
+    #: Момент «не раньше»: строка ISO 8601 со смещением пояса или готовый `datetime`;
+    #: `None` снимает момент.
+    not_before: str | datetime | None = UNSET
     decisions: Sequence[str] = UNSET
 
     #: Поля, у которых нет одноимённого поля задачи: они разбираются отдельно.
@@ -273,8 +278,9 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
 
     Признаки не хранятся, а считаются из уже прочитанного: связи, список открытых
     вопросов, последняя сводка и опись нужны пакету целиком, а `blocked`, счётчики,
-    `last_summary_at` и `last_entry_at` — это их производные. Отдельных запросов ради
-    признаков здесь нет.
+    `last_summary_at` и `last_entry_at` — это их производные. Отдельный запрос стоит один
+    признак — `deferred`: ему нужны часы базы, и считает его то же выражение, что проверку
+    входа в `in_progress` и отбор `deferred:`.
     """
     task = await read_task(session, key, actor=actor)
     links = await links_service.list_links(session, task, actor=actor)
@@ -287,6 +293,7 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     index = await case_service.case_index(session, task, actor=actor)
     decisions = await decisions_service.cited_decisions(session, task.decisions, actor=actor)
     last_change = await case_service.last_status_change(session, task, actor=actor)
+    deferred = await TaskRepository(session).is_deferred(task.not_before)
     return TaskPackage(
         task=task,
         state=_task_state(
@@ -304,7 +311,12 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
         links=hierarchy.others,
         decisions=decisions,
         features=case_service.features(
-            questions, summary, index, blocked=links_service.blocked(links), remarks=remarks
+            questions,
+            summary,
+            index,
+            blocked=links_service.blocked(links),
+            deferred=deferred,
+            remarks=remarks,
         ),
         summary=summary,
         questions=questions,
@@ -394,6 +406,7 @@ async def create_task(
     priority: TaskPriority | str = DEFAULT_PRIORITY,
     decisions: Sequence[str] = (),
     direction: str | None = None,
+    not_before: str | datetime | None = None,
 ) -> Task:
     """Заводит задачу в `backlog`. Статус не принимается: новая задача рождается только там.
 
@@ -420,6 +433,7 @@ async def create_task(
             TaskField.ASSIGNEE: assignee,
             TaskField.PRIORITY: priority,
             TaskField.DIRECTION: direction,
+            TaskField.NOT_BEFORE: not_before,
             TaskField.DECISIONS: decisions,
         }
     )
@@ -450,7 +464,23 @@ async def create_task(
     await TaskRepository(session).add(task)
     # Первая страница дела — в той же транзакции: откат уносит обе разом, и ленты
     # никогда не увидит задачу, которой не появилось.
-    await case_service.record_created(session, task, actor=actor)
+    action_id = uuid.uuid4()
+    await case_service.record_created(session, task, actor=actor, action_id=action_id)
+    if task.not_before is not None:
+        # Момент — носитель ожидания (решение проекта `TRK#47`), а у остальных носителей
+        # запись в деле есть всегда: вопрос сам запись, `blocked_by` подшивает
+        # `link_added`. Задача, рождённая отложенной, без этой строки ждала бы молча —
+        # дело не называло бы ни момента, ни того, кто его поставил. Одно действие с
+        # `created`: это один вызов.
+        await case_service.record_field_changed(
+            session,
+            task,
+            actor=actor,
+            field=TaskField.NOT_BEFORE,
+            before=None,
+            after=moment_text(task.not_before),
+            action_id=action_id,
+        )
     return task
 
 
@@ -957,8 +987,9 @@ async def apply_task_changes(
                 action_id=resolved_action_id,
             )
         else:
-            # Обвязка: `priority`, `direction` и `decisions`. Ветка без условия намеренно — новое
-            # поле карточки получит запись само, а не окажется тихо немым в ленте.
+            # Обвязка: `priority`, `direction`, `not_before` и `decisions`. Ветка без условия
+            # намеренно — новое поле карточки получит запись само, а не окажется тихо немым
+            # в ленте.
             entry = await case_service.record_field_changed(
                 session,
                 task,
@@ -1026,9 +1057,12 @@ async def _transition_facts(
         pending_checks = await case_service.verdict_gaps(session, task)
     blockers: list[str] | None = None
     blocking_questions: list[int] | None = None
+    deferred: bool | None = None
     if to_status is TaskStatus.IN_PROGRESS:
         blockers = await links_service.open_blockers(session, task)
         blocking_questions = await case_service.open_blocking_question_nos(session, task)
+        # Момент — из объекта задачи, уже с полями этого вызова; сравнивает его база.
+        deferred = await TaskRepository(session).is_deferred(task.not_before)
     children: list[str] | None = None
     if is_closed(to_status):
         children = await links_service.unclosed_children(session, task)
@@ -1057,6 +1091,8 @@ async def _transition_facts(
         # кладутся всегда: считать их незачем, а проверка сама смотрит на `to_status`.
         assignee=task.assignee,
         requester=requester,
+        deferred=deferred,
+        not_before=task.not_before,
     )
 
 
@@ -1161,9 +1197,11 @@ def _same(before: Any, after: Any) -> bool:
 
 
 def _json(value: Any) -> Any:
-    """«Было» и «стало» в том виде, в каком уедут в `payload`: перечисление — строкой."""
+    """«Было» и «стало» в том виде, в каком уедут в `payload`: перечисление и момент — строкой."""
     if isinstance(value, TaskPriority | TaskStatus):
         return value.value
+    if isinstance(value, datetime):
+        return moment_text(value)
     if isinstance(value, list | tuple):
         return list(value)
     return value

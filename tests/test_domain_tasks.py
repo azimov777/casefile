@@ -13,6 +13,7 @@ from app.domain.errors import (
     InvalidTaskKeyError,
     SummaryRequiredError,
     TaskBlockedError,
+    TaskDeferredError,
     TaskFieldsInvalidError,
     TaskHasOpenBlockingQuestionsError,
     TaskHasUnclosedChildrenError,
@@ -68,6 +69,7 @@ def facts(
     closing: bool = True,
     assignee: str | None = "claude",
     requester: str | None = "claude",
+    deferred: bool | None = False,
 ) -> TransitionFacts:
     """Факты перехода, у которых по умолчанию сошлось всё, кроме проверяемого.
 
@@ -91,6 +93,7 @@ def facts(
         closing=closing,
         assignee=assignee,
         requester=requester,
+        deferred=deferred,
     )
 
 
@@ -251,7 +254,7 @@ def test_the_section_check_only_guards_the_move_into_open() -> None:
 
 def test_the_check_list_is_the_extension_point() -> None:
     """Следующие задачи добавляют проверки в список, а не в таблицу."""
-    assert len(TRANSITION_CHECKS) == 9
+    assert len(TRANSITION_CHECKS) == 10
     assert all(callable(check) for check in TRANSITION_CHECKS)
 
 
@@ -610,6 +613,24 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
 
     assert questions.value.details["reason"] == "questions_not_collected"
     assert "questions" not in questions.value.details
+
+    with pytest.raises(TaskDeferredError) as deferred:
+        ensure_transition_allowed(
+            TransitionFacts(
+                key="TRK-1",
+                from_status=TaskStatus.OPEN,
+                to_status=TaskStatus.IN_PROGRESS,
+                reason=None,
+                sections=FILLED,
+                checks=("первая",),
+                open_blockers=(),
+                open_blocking_questions=(),
+                assignee="claude",
+                requester="claude",
+            )
+        )
+
+    assert deferred.value.details["reason"] == "deferral_not_collected"
 
     with pytest.raises(TaskHasUnclosedChildrenError) as children:
         ensure_transition_allowed(

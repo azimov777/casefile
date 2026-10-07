@@ -130,6 +130,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
     assert package["questions"] == []
     assert package["features"] == {
         "blocked": False,
+        "deferred": False,
         "open_questions": 0,
         "open_blocking_questions": 0,
         "open_remarks": 0,

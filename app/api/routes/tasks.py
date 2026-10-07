@@ -120,6 +120,7 @@ async def create_task(
             assignee=payload.assignee,
             priority=payload.priority,
             direction=payload.direction,
+            not_before=payload.not_before,
             decisions=payload.decisions,
         )
         return DataResponse[TaskRead](data=TaskRead.model_validate(task))
@@ -394,11 +395,13 @@ async def update_task(
     """Меняет только переданные поля.
 
     Название, описание и пять разделов — только в `backlog` (иначе `409
-    task_field_locked`); исполнитель, приоритет, направление и решения проекта — в любом
-    незакрытом статусе; в `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое
-    изменение подшивает запись: раздел — `section_changed`, исполнитель —
-    `assignee_changed`, приоритет, направление и решения — `field_changed`. Направление —
-    адрес направления своего проекта или `null`: другой проект — `422
+    task_field_locked`); исполнитель, приоритет, направление, момент `not_before` и решения
+    проекта — в любом незакрытом статусе; в `done` и `cancelled` не меняется ничего (`409
+    task_closed`). Каждое изменение подшивает запись: раздел — `section_changed`,
+    исполнитель — `assignee_changed`, приоритет, направление, момент и решения —
+    `field_changed` с автором запроса. Момент `not_before` — строка ISO 8601 со смещением
+    пояса или `null`; время без смещения и дата без времени — `422 task_fields_invalid`.
+    Направление — адрес направления своего проекта или `null`: другой проект — `422
     direction_project_mismatch`, нет такого — `404 direction_not_found`, архивное — `409
     direction_archived` (снять направление можно всегда). Новая ссылка на заменённое
     решение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не
@@ -452,7 +455,9 @@ async def transition_task(
     `in_progress` отклоняется и при открытом блокере (`409 task_blocked`, их ключи в
     `details.blockers`), и при вопросе с `blocking` без ответа (`409
     task_has_open_blocking_questions`, номера вопросов в `details.questions`; ни вопрос,
-    ни ответ статус не меняют), закрытие — и `done`, и `cancelled` — при детях не в `done` и
+    ни ответ статус не меняют), и раньше момента `not_before` по часам базы (`409
+    task_deferred`, момент в `details.not_before`; наступление момента ничего не подшивает),
+    закрытие — и `done`, и `cancelled` — при детях не в `done` и
     не в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).
     Переход подшивает `status_changed` с `from`, `to` и `reason`.
 

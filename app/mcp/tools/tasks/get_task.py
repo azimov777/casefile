@@ -240,9 +240,10 @@ def register(tools: Toolset) -> None:
 
         `transitions` lists the targets of the transition table from the current status,
         not moves checked in advance: sections, summary, verdicts, blockers, `blocking`
-        questions and children are checked by the `transition` call itself. Whether
-        `in_progress` is open shows in the `blocked` and `open_blocking_questions`
-        features.
+        questions, the `not_before` moment and children are checked by the `transition`
+        call itself. Whether `in_progress` is open shows in the `blocked`, `deferred` and
+        `open_blocking_questions` features; `deferred` stays true until the card's
+        `not_before` passes, refusing entry with `task_deferred`.
         """
         async with runtime.call() as (session, actor):
             package = await tasks_service.read_task_package(session, key, actor=actor)

@@ -221,6 +221,15 @@ class TaskFilters:
             )
         ),
     ] = None
+    deferred: Annotated[
+        bool | None,
+        Query(
+            description=(
+                "Whether the task's `not_before` is still ahead by the database clock. "
+                "Computed on read, not stored: it turns false by itself when the moment arrives"
+            )
+        ),
+    ] = None
     open_questions: Annotated[
         int | None,
         Query(
@@ -305,6 +314,7 @@ class TaskFilters:
             StructuredTerm(name=name, values=[value])
             for name, value in (
                 ("blocked", self.blocked),
+                ("deferred", self.deferred),
                 ("open_questions", self.open_questions),
                 ("open_blocking_questions", self.open_blocking_questions),
                 ("open_remarks", self.open_remarks),
@@ -380,6 +390,10 @@ class TaskSearchRead(BaseModel):
     status: TaskStatus | None = None
     assignee: str | None = None
     priority: TaskPriority | None = None
+    not_before: datetime | None = Field(
+        default=None,
+        description="Moment before which the task cannot enter `in_progress`; `null` for none",
+    )
     version: int | None = None
     created_by: AuthorRead | None = None
     created_at: datetime | None = None
@@ -433,6 +447,7 @@ class TaskSearchRead(BaseModel):
             "status": task.status,
             "assignee": task.assignee,
             "priority": task.priority,
+            "not_before": task.not_before,
             "version": task.version,
             "created_by": AuthorRead.model_validate(task.created_by, from_attributes=True),
             "created_at": task.created_at,

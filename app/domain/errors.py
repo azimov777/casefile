@@ -614,6 +614,19 @@ class TaskHasOpenBlockingQuestionsError(ConflictError):
     message = "Task has open blocking questions"
 
 
+class TaskDeferredError(ConflictError):
+    """Вход в `in_progress` до момента `not_before` по часам базы: момент в `details.not_before`.
+
+    Третий носитель ожидания (решение проекта `TRK#47`): поле держит только вход в работу.
+    Конфликт состояния: тот же переход пройдёт, когда часы базы дойдут до момента или
+    поле снимут (`not_before: null`). Наступление момента ничего не подшивает и статус не
+    меняет.
+    """
+
+    code = "task_deferred"
+    message = "Task is deferred until its not_before moment"
+
+
 class AssigneeRequiredError(ConflictError):
     """Вход в `in_progress` у задачи без исполнителя.
 

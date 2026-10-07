@@ -440,6 +440,7 @@ async def test_get_task_carries_the_index_and_the_transitions_of_the_table(
     assert package["transitions"] == ["open", "cancelled"]
     assert package["features"] == {
         "blocked": False,
+        "deferred": False,
         "open_questions": 0,
         "open_blocking_questions": 0,
         "open_remarks": 0,
@@ -654,6 +655,7 @@ async def test_search_tasks_returns_the_same_rows_as_rest(
     assert from_mcp["items"] == response.json()["data"]
     assert from_mcp["items"][0]["features"] == {
         "blocked": False,
+        "deferred": False,
         "open_questions": 0,
         "open_blocking_questions": 0,
         "open_remarks": 0,
