@@ -66,6 +66,8 @@ export const task = {
     unassigned: 'not assigned',
     updated: 'Updated',
     created: 'Created',
+    /** Момент «можно взять с …» (TRK-593): ячейка видна, когда он задан или его можно поставить. */
+    notBefore: 'Take into work',
   },
 
   sections: {
@@ -82,5 +84,27 @@ export const task = {
   index: {
     toLatest: 'To the latest entry',
     toTop: 'To the top of the index',
+  },
+
+  /** Момент «можно взять с …» на странице задачи (`features/change-task-not-before`, TRK-593). */
+  notBefore: {
+    line: 'Can be taken into work from {{moment}}',
+    none: 'no restriction',
+    defer: 'Defer…',
+    deferLabel: 'Defer task {{key}}',
+    change: 'Change',
+    changeLabel: 'Change the moment of task {{key}}',
+    clear: 'Clear',
+    clearLabel: 'Clear the moment of task {{key}}',
+    title: 'When {{key}} can be taken',
+    intro:
+      'Until this moment an agent cannot take the task into work. It is not a deadline: the tracker reminds no one.',
+    inputLabel: 'Can be taken from',
+    inputHint: 'Date and time by the clock of this device.',
+    empty: 'Enter a date and time.',
+    submit: 'Save',
+    pending: 'Saving…',
+    cancel: 'Cancel',
+    close: 'Close',
   },
 } as const;

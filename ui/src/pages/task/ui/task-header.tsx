@@ -13,6 +13,7 @@ import {
   type TaskFeatures,
 } from '@/entities/task';
 import { ChangeTaskDirection } from '@/features/change-task-direction';
+import { TaskNotBefore } from '@/features/change-task-not-before';
 import { RelativeTime } from '@/shared/ui';
 
 interface TaskHeaderProps {
@@ -27,6 +28,8 @@ interface TaskHeaderProps {
    * её проект не в архиве. Иначе ячейка только читается — кнопки нет, а не «есть и падает».
    */
   canChangeDirection: boolean;
+  /** Может ли человек поставить, изменить и снять момент «можно взять с …» (TRK-593): те же условия. */
+  canChangeNotBefore: boolean;
 }
 
 /** Отсутствующее значение: курсив вместо прочерка — его читают, а не сканируют. */
@@ -64,9 +67,11 @@ export function TaskHeader({
   parent,
   decisions,
   canChangeDirection,
+  canChangeNotBefore,
 }: TaskHeaderProps) {
   const { t } = useTranslation('task');
   const { t: brick } = useTranslation('ui');
+  const inFlags = { ...features, deferred: false };
 
   return (
     <header className="mt-2 flex flex-col gap-3">
@@ -201,13 +206,32 @@ export function TaskHeader({
           </div>
         ) : null}
 
+        {/*
+         * Момент «можно взять с …» (TRK-593, TRK#47, п. 6): ячейка есть, когда он задан или
+         * его можно поставить. Значок отложенной задачи стоит в ней самой, поэтому из ячейки
+         * признаков он убран: дважды один знак в одной полосе — шум.
+         */}
+        {task.not_before !== null || canChangeNotBefore ? (
+          <div className={CELL}>
+            <dt className={LABEL}>{t('header.notBefore')}</dt>
+            <dd>
+              <TaskNotBefore
+                taskKey={task.key}
+                notBefore={task.not_before}
+                deferred={features.deferred}
+                canChange={canChangeNotBefore}
+              />
+            </dd>
+          </div>
+        ) : null}
+
         {/* Ячейки признаков нет, когда их нет: пустая подпись читалась бы как «данные не
             пришли». Решение то же, что у строки и карточки доски (`hasFeatureBadges`). */}
-        {hasFeatureBadges(features) ? (
+        {hasFeatureBadges(inFlags) ? (
           <div className={CELL}>
             <dt className={LABEL}>{t('header.flags')}</dt>
             <dd className="flex flex-wrap gap-2">
-              <TaskFeatureMarks features={features} pressable />
+              <TaskFeatureMarks features={inFlags} pressable />
             </dd>
           </div>
         ) : null}

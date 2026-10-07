@@ -1,2 +1,2 @@
 export { formatNumber } from './intl';
-export { exactTime, relativeTime, type RelativeTimeOptions } from './time';
+export { exactTime, momentLabel, relativeTime, type RelativeTimeOptions } from './time';

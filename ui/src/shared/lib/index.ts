@@ -23,5 +23,11 @@ export { clearDraft, readDraft, saveDraft, titleFromText, EMPTY_DRAFT, type Draf
 export { useOnceKey } from './once-key';
 export { listReturnHref, listReturnState } from './list-return';
 export { PAGE_GAP, pageCount, pageWindow, type PageSlot } from './paging';
-export { exactTime, formatNumber, relativeTime, type RelativeTimeOptions } from './locale';
+export {
+  exactTime,
+  formatNumber,
+  momentLabel,
+  relativeTime,
+  type RelativeTimeOptions,
+} from './locale';
 export { skipClickWhileSelecting } from './selection';

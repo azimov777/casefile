@@ -233,6 +233,10 @@ export function TaskPage() {
    * который его уже принёс.
    */
   const frozen = task.project.archived_at != null;
+  // Закрытая задача поле не меняет (`task_closed`), архивный проект — ничего
+  // (`project_archived`): кнопок нет, а не «есть и падает» (TRK-557, TRK-593).
+  const canEditCard =
+    rights.write && !frozen && !(CLOSED_STATUSES as readonly string[]).includes(task.status);
   const canAct = !frozen;
 
   /*
@@ -406,11 +410,8 @@ export function TaskPage() {
         features={features}
         parent={parent ?? null}
         decisions={decisions}
-        canChangeDirection={
-          // Закрытая задача поле не меняет (`task_closed`), архивный проект — ничего
-          // (`project_archived`): кнопки нет, а не «есть и падает» (TRK-557).
-          rights.write && !frozen && !(CLOSED_STATUSES as readonly string[]).includes(task.status)
-        }
+        canChangeDirection={canEditCard}
+        canChangeNotBefore={canEditCard}
       />
 
       {/* Почему на карточке нет ни «Ответить», ни «Замечания», сказано словами — и

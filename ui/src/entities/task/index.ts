@@ -45,5 +45,5 @@ export { LinkKindMark, LINK_KIND_ORDER } from './ui/link-kind';
 export { TaskCard } from './ui/task-card';
 export { TaskNav } from './ui/task-nav';
 export { hasFeatureBadges } from './ui/feature-badges';
-export { TaskFeatureMarks } from './ui/feature-marks';
+export { DeferredMark, TaskFeatureMarks } from './ui/feature-marks';
 export { TaskRow } from './ui/task-row';

@@ -11,6 +11,7 @@ import type { TaskFeatures } from '../api/tasks';
 export function hasFeatureBadges(features: TaskFeatures): boolean {
   return (
     features.blocked ||
+    features.deferred ||
     features.open_questions > 0 ||
     features.open_blocking_questions > 0 ||
     features.open_remarks > 0 ||
