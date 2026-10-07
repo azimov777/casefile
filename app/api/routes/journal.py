@@ -157,7 +157,7 @@ def render(message: JournalMessage) -> str:
         entry,
         task_key=message.item.task_key,
         project_key=message.item.project_key,
-        direction=message.item.direction,
+        area=message.item.area,
     ).model_dump_json()
     return f"id: {entry.seq}\nevent: {entry.type.value}\ndata: {data}\n\n"
 
@@ -214,7 +214,7 @@ async def read_journal(
                 item.entry,
                 task_key=item.task_key,
                 project_key=item.project_key,
-                direction=item.direction,
+                area=item.area,
             )
             for item in page.items
         ],

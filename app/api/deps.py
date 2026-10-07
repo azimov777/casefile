@@ -197,7 +197,7 @@ TaskKeyPath = Annotated[
 ]
 
 # Ключ проекта, имя атрибута и отбор истории атрибута принимают два роутера — проекты и
-# их направления (`app/api/routes/directions.py`), поэтому они здесь, рядом с ключом задачи.
+# их области (`app/api/routes/areas.py`), поэтому они здесь, рядом с ключом задачи.
 ProjectKeyPath = Annotated[
     str,
     Path(description="Project key; matching ignores case", examples=["TRK"]),
