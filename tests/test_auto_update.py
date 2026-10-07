@@ -227,6 +227,9 @@ case "$*" in
     [ ! -s "$SCENE/dump-fails" ] || exit 1
     [ ! -s "$SCENE/dump-empty" ] || exit 0
     echo "DUMP$(cat "$SCENE/dump-name" 2>/dev/null)" ;;
+  "compose exec -T db pg_restore --list"*)
+    [ ! -s "$SCENE/list-fails" ] || { echo "pg_restore: error: unsupported" >&2; exit 1; }
+    cat >/dev/null ;;
   "compose exec -T db sh -c pg_restore "*)
     cat >"$SCENE/restored"
     exit "$(cat "$SCENE/restore" 2>/dev/null || echo 0)" ;;
@@ -304,6 +307,8 @@ class Updater:
         #: Том со снимком: каталог `/snapshot` обновлятора.
         self.snapshot = root / "snapshot" / "before-update.dump"
         self.snapshot.parent.mkdir()
+        #: Предыдущий снимок в том же томе.
+        self.previous_snapshot = self.snapshot.with_name("before-update.previous.dump")
         (self.project / "docker-compose.prod.yml").write_text("release: 1\n", encoding="utf-8")
         self.calls = root / "calls"
         self.calls.touch()
@@ -333,6 +338,7 @@ class Updater:
         script = script.replace("/tmp/previous-compose.yml", str(self.root / "previous.yml"))
         script = script.replace("sleep 5", "sleep 0")
         script = script.replace("/tmp/checking", str(self.root / "checking"))
+        script = script.replace(PREVIOUS, str(self.previous_snapshot))
         script = script.replace(SNAPSHOT, str(self.snapshot))
         if tail:
             script = script[: script.index("trap 'exit 0' TERM INT")] + tail
@@ -414,6 +420,7 @@ def test_the_compose_file_of_the_release_replaces_the_local_one(updater: Updater
 
 #: Снимок базы перед обновлением с миграцией — в именованном томе обновлятора (TRK-547).
 SNAPSHOT = "/snapshot/before-update.dump"
+PREVIOUS = "/snapshot/before-update.previous.dump"
 
 #: Том, как его называет подставной `docker`, и как он попадает в журнал обновлятора.
 SNAPSHOT_VOLUME = "test_updater-snapshot"
@@ -783,19 +790,57 @@ def test_the_log_names_the_volume_and_the_file_of_the_snapshot(updater: Updater)
     ) in out
 
 
-def test_the_next_update_with_a_migration_replaces_the_snapshot(updater: Updater) -> None:
-    """Копия одна: второе обновление с миграцией затирает снимок первого."""
+def test_two_updates_with_a_migration_keep_the_last_snapshot_and_the_previous_one(
+    updater: Updater,
+) -> None:
+    """Два выпуска с миграцией подряд: `before-update.dump` — второй снимок, `previous` — первый."""
     updater.set(wanted="sha256:new", schema="rev1\n", head="rev2")
     updater.run("updater", "update\n")
     assert updater.snapshot.read_text() == "DUMP\n"
+    assert not updater.previous_snapshot.exists()
 
     updater.set(schema="rev2\n", head="rev3", dump_name="-second")
     updater.run("updater", "update\n")
 
     assert updater.snapshot.read_text() == "DUMP-second\n"
+    assert updater.previous_snapshot.read_text() == "DUMP\n"
     assert sorted(path.name for path in updater.snapshot.parent.iterdir()) == [
-        "before-update.dump"
-    ], "в томе одна копия, ни временных файлов, ни прежних снимков"
+        "before-update.dump",
+        "before-update.previous.dump",
+    ], "в томе два файла, ни временных, ни третьего"
+
+
+def test_a_third_update_with_a_migration_drops_the_oldest_snapshot(updater: Updater) -> None:
+    updater.set(wanted="sha256:new", schema="rev1\n", head="rev2")
+    updater.run("updater", "update\n")
+    updater.set(schema="rev2\n", head="rev3", dump_name="-second")
+    updater.run("updater", "update\n")
+    updater.set(schema="rev3\n", head="rev4", dump_name="-third")
+    updater.run("updater", "update\n")
+
+    assert updater.snapshot.read_text() == "DUMP-third\n"
+    assert updater.previous_snapshot.read_text() == "DUMP-second\n"
+
+
+def test_an_unreadable_snapshot_stops_the_update_and_keeps_the_earlier_ones(
+    updater: Updater,
+) -> None:
+    """`pg_restore --list` на новом снимке отказал: выпуск не ставится, прежние файлы целы."""
+    updater.snapshot.write_text("EARLIER\n", encoding="utf-8")
+    updater.previous_snapshot.write_text("OLDER\n", encoding="utf-8")
+    updater.set(wanted="sha256:new", schema="rev1\n", head="rev2", list_fails="1")
+
+    out = updater.run("updater", "update\n")
+
+    assert updater.called("compose exec -T db pg_restore --list")
+    assert "could not take a snapshot of the database" in out
+    assert not updater.called("compose up")
+    assert updater.snapshot.read_text() == "EARLIER\n"
+    assert updater.previous_snapshot.read_text() == "OLDER\n"
+    assert sorted(path.name for path in updater.snapshot.parent.iterdir()) == [
+        "before-update.dump",
+        "before-update.previous.dump",
+    ], "ни `.part`, ни лишних файлов"
 
 
 def test_a_release_without_a_migration_leaves_the_earlier_snapshot_alone(
@@ -896,6 +941,7 @@ def test_a_failed_snapshot_does_not_destroy_the_earlier_good_one(updater: Update
     assert "could not take a snapshot of the database" in out
     assert updater.snapshot.read_text() == "EARLIER\n"
     assert [path.name for path in updater.snapshot.parent.iterdir()] == ["before-update.dump"]
+    assert not updater.previous_snapshot.exists()
 
 
 def test_an_empty_dump_is_a_failed_snapshot_and_keeps_the_earlier_one(updater: Updater) -> None:

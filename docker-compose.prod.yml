@@ -89,7 +89,7 @@ x-app-service: &app-service
 # Ревизия службы `updater`: по ней `updater-renew` узнаёт обновлятор прежнего выпуска.
 # Это хеш определения `updater` без самой метки; тест сверяет его и называет верное
 # значение, когда служба поменялась (`tests/test_auto_update.py`).
-x-updater-revision: &updater-revision "c8bd1ca12522"
+x-updater-revision: &updater-revision "a5be5648d537"
 
 services:
   db:
@@ -277,8 +277,9 @@ services:
   # Выпуск, который меняет схему базы, обновлятор предваряет снимком `pg_dump -Fc`. Снимок
   # лежит в именованном томе `updater-snapshot` (в контейнере — `/snapshot`) и остаётся там
   # после обновления: контейнер обновлятора пересоздаётся, и в его `/tmp` копия пропала бы
-  # вместе с ним. Копия одна: следующий удачный снимок затирает прежний, а неудачный его не
-  # трогает. Где лежит и как восстановить — `docs/backup-restore.md` (TRK-547).
+  # вместе с ним. Копий две: `before-update.dump` и прежняя `before-update.previous.dump`;
+  # неудачный или нечитаемый снимок их не трогает. Где лежит и как восстановить —
+  # `docs/backup-restore.md` (TRK-547, TRK-641).
   #
   # Чужой `up` служба не перебивает: не прочёлся этот файл или состояние служб — проверка
   # пропускается, а не зовёт `up`; идёт разовый шаг, `docker compose run` или первая
@@ -512,8 +513,10 @@ services:
         # ручной процедуры (`docs/backup-restore.md`), — годится и для ручного `pg_restore`.
         # Лежит в именованном томе `updater-snapshot`, а не в `/tmp` контейнера и не в
         # каталоге установки: контейнер обновлятора пересоздаётся, и его `/tmp` пропал бы
-        # вместе с ним (TRK-547). Копия одна: её затирает только следующий удачный снимок.
+        # вместе с ним (TRK-547). Копии две: последняя и предыдущая; прежнюю последнюю следующий
+        # удачный снимок переносит в `previous`, а прежнюю предыдущую затирает (TRK-641).
         SNAPSHOT=/snapshot/before-update.dump
+        PREVIOUS=/snapshot/before-update.previous.dump
 
         # Имя тома со снимком, каким его видит Docker, — по монтированию этого контейнера,
         # а не по догадке `<проект>_updater-snapshot`.
@@ -537,12 +540,15 @@ services:
             awk 'NR == 1 { print $$1 }'
         }
 
-        # Снимок пишется во временный файл в том же томе и занимает место прежнего, только
-        # когда не пуст: неудачный снимок не должен стереть прежний удачный.
+        # Снимок пишется во временный файл в том же томе и занимает место последнего, только
+        # когда не пуст и читается `pg_restore --list` (TRK-641): неудачный или порченый снимок
+        # не должен стереть прежний удачный. Прежний последний уходит в `previous`.
         take_snapshot() {
           rm -f "$$SNAPSHOT.part"
           if docker compose exec -T db sh -c 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Fc' \
-            </dev/null >"$$SNAPSHOT.part" 2>/dev/null && [ -s "$$SNAPSHOT.part" ]; then
+            </dev/null >"$$SNAPSHOT.part" 2>/dev/null && [ -s "$$SNAPSHOT.part" ] &&
+            docker compose exec -T db pg_restore --list <"$$SNAPSHOT.part" >/dev/null 2>&1; then
+            [ ! -e "$$SNAPSHOT" ] || mv -f "$$SNAPSHOT" "$$PREVIOUS"
             mv -f "$$SNAPSHOT.part" "$$SNAPSHOT"
           else
             rm -f "$$SNAPSHOT.part"
@@ -814,5 +820,5 @@ volumes:
   pgdata:
   ui-key:
   agent-key:
-  # Последний снимок базы перед обновлением с миграцией; его держит служба `updater`.
+  # Последний и предыдущий снимки базы перед обновлением с миграцией; их держит служба `updater`.
   updater-snapshot:
