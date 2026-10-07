@@ -89,17 +89,6 @@ async def create_account(
     return await once.run(DataResponse[AccountWithPasswordRead], request=payload, build=create)
 
 
-@router.get("/{account_id}", summary="Read an account")
-async def read_account(
-    account_id: AccountIdPath,
-    session: SessionDep,
-    actor: ActorDep,
-) -> DataResponse[AccountRead]:
-    """Карточка учётной записи. Только администратору; свою человек видит в `bootstrap`."""
-    account = await service.read_account(session, account_id, actor=actor)
-    return DataResponse[AccountRead](data=AccountRead.model_validate(account))
-
-
 @router.patch("/{account_id}", summary="Update an account")
 async def update_account(
     account_id: AccountIdPath,

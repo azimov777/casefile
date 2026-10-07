@@ -178,7 +178,6 @@ async def test_only_an_administrator_manages_people(
     calls = [
         ("GET", ACCOUNTS, None),
         ("POST", ACCOUNTS, {"email": "eve@example.com", "name": "eve"}),
-        ("GET", f"{ACCOUNTS}/{owner['id']}", None),
         ("PATCH", f"{ACCOUNTS}/{owner['id']}", {"disabled": True}),
         ("POST", f"{ACCOUNTS}/{owner['id']}/password-reset", {}),
     ]
