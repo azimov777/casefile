@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { fontsReady, readE2eToken, silenceJournal } from './contour';
+import { fileLegacyQuestion, fontsReady, readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -328,17 +328,15 @@ test('открытый вопрос blocking переносит задачу в 
 
   try {
     await silenceJournal(page);
-    const asked = await request.post(`/api/v1/tasks/${key}/entries`, {
-      headers,
-      data: {
-        type: 'question',
-        title: 'Вопрос, на который ждут ответа',
-        body: 'Тело вопроса: задача держится им в «Ждёт ответа».',
-        payload: { addressees: ['owner'], blocking: true },
-      },
+    // Прежний вопрос дела задачи (TRK-671: новые — в обсуждениях): столбец считается из
+    // признака `open_blocking_questions`, который несёт и он.
+    const { no } = fileLegacyQuestion({
+      key,
+      title: 'Вопрос, на который ждут ответа',
+      body: 'Тело вопроса: задача держится им в «Ждёт ответа».',
+      blocking: true,
+      author: 'owner',
     });
-    expect(asked.status()).toBe(201);
-    const no = ((await asked.json()) as { data: { no: number } }).data.no;
 
     await page.goto('/tasks?project=DEMO&view=board');
     const card = (status: string) =>

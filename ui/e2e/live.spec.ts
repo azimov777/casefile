@@ -1,6 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Locator } from '@playwright/test';
-import { compose, fontsReady, readE2eToken, side, signedInByHand, tasksByStatus } from './contour';
+import {
+  compose,
+  fileLegacyQuestion,
+  fontsReady,
+  readE2eToken,
+  side,
+  signedInByHand,
+  tasksByStatus,
+} from './contour';
 
 const token = readE2eToken();
 
@@ -202,17 +210,17 @@ test('вопрос ко мне объявляется уведомлением �
   await fontsReady(page);
   const before = await geometry(watched);
 
-  const response = await request.post('/api/v1/tasks/DEMO-3/entries', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: {
-      type: 'question',
+  // Прежний вопрос дела задачи (TRK-671: новые — в обсуждениях), подшитый той же функцией,
+  // что демо: живой поток несёт его кадром так же, как прежде.
+  const question = {
+    data: fileLegacyQuestion({
+      key: 'DEMO-3',
       title: 'Вопрос владельцу из сквозного теста',
       body: 'Проверяем, доходит ли вопрос до экрана живым потоком.',
-      payload: { addressees: ['owner'], blocking: true },
-    },
-  });
-  expect(response.status()).toBe(201);
-  const question = (await response.json()) as { data: { no: number } };
+      blocking: true,
+      author: 'owner',
+    }),
+  };
 
   const notice = page.getByRole('complementary', { name: 'Вопросы ко мне' });
   await expect(notice.getByText('Вопрос владельцу из сквозного теста')).toBeVisible({
@@ -256,17 +264,13 @@ test('два вопроса подряд видны оба: второй не з
 
   const asked: { key: string; no: number }[] = [];
   for (const key of ['DEMO-3', 'DEMO-4']) {
-    const response = await request.post(`/api/v1/tasks/${key}/entries`, {
-      headers: { Authorization: `Bearer ${token}` },
-      data: {
-        type: 'question',
-        title: `Вопрос из сквозного теста по ${key}`,
-        body: 'Второй вопрос не должен затирать первый.',
-        payload: { addressees: ['owner'], blocking: false },
-      },
+    const { no } = fileLegacyQuestion({
+      key,
+      title: `Вопрос из сквозного теста по ${key}`,
+      body: 'Второй вопрос не должен затирать первый.',
+      author: 'owner',
     });
-    expect(response.status()).toBe(201);
-    asked.push({ key, no: ((await response.json()) as { data: { no: number } }).data.no });
+    asked.push({ key, no });
   }
 
   const notice = page.getByRole('complementary', { name: 'Вопросы ко мне' });

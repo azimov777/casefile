@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 import {
   compose,
   curve,
+  fileLegacyQuestion,
   fontsReady,
   ms,
   readE2eToken,
@@ -642,17 +643,13 @@ async function askOwner(
   key: string,
   title: string,
 ): Promise<{ cleanup: () => Promise<void> }> {
-  const asked = await request.post(`/api/v1/tasks/${key}/entries`, {
-    headers: { Authorization: `Bearer ${token}` },
-    data: {
-      type: 'question',
-      title,
-      body: 'Тело вопроса, на состав которого замер не опирается.',
-      payload: { addressees: ['owner'], blocking: false },
-    },
+  // Прежний вопрос дела задачи: новый REST отвергает (TRK-671).
+  const { no } = fileLegacyQuestion({
+    key,
+    title,
+    body: 'Тело вопроса, на состав которого замер не опирается.',
+    author: 'owner',
   });
-  expect(asked.status()).toBe(201);
-  const no = ((await asked.json()) as { data: { no: number } }).data.no;
 
   return {
     cleanup: async () => {

@@ -140,6 +140,75 @@ export function removeLink(human: string, key: string, kind: string, other: stri
 }
 
 /**
+ * Прежний вопрос в деле задачи — так его подшивали до обсуждений. Новый вопрос в деле задачи
+ * трекер отвергает (`question_not_a_task_entry`, TRK-671: вопросы — в обсуждениях), а
+ * прежние лежат в делах установок, и карточка, опись и входящая их по-прежнему показывают.
+ * Сценарий заводит такой вопрос той же функцией, что демо, — `file_legacy_task_question`, —
+ * как `grantAccess` заводит доступ. Автор — участник по имени или временный агент по метке.
+ */
+const LEGACY_QUESTION = `
+import asyncio, json, sys
+from app.db.repositories import ParticipantRepository
+from app.db.session import dispose_engine, session_scope
+from app.domain.authors import label_author
+from app.services import case, tasks
+from app.services.auth import Actor
+
+async def main(key, author, title, body, blocking, addressees):
+    async with session_scope() as session:
+        participant = await ParticipantRepository(session).get_by_name(author)
+        actor = (
+            Actor(author=participant.author, participant=participant)
+            if participant is not None
+            else Actor(author=label_author(author), participant=None)
+        )
+        entry = await case.file_legacy_task_question(
+            session,
+            await tasks.get_task(session, key),
+            actor=actor,
+            addressees=json.loads(addressees),
+            title=title,
+            body=body,
+            blocking=blocking == 'true',
+        )
+        filed = {'no': entry.no, 'seq': entry.seq}
+    await dispose_engine()
+    print('LEGACY_QUESTION ' + json.dumps(filed))
+
+asyncio.run(main(*sys.argv[1:7]))
+`;
+
+export interface LegacyQuestion {
+  /** Ключ задачи, в дело которой ложится вопрос. */
+  key: string;
+  title: string;
+  body?: string;
+  blocking?: boolean;
+  /** Подпись автора: имя участника реестра или метка временного агента. */
+  author?: string;
+  addressees?: string[];
+}
+
+/** Заводит прежний вопрос в деле задачи и отдаёт его номер и место в ленте. */
+export function fileLegacyQuestion({
+  key,
+  title,
+  body = '',
+  blocking = false,
+  author = 'demo_agent',
+  addressees = ['owner'],
+}: LegacyQuestion): { no: number; seq: number } {
+  const output = compose([
+    ...['run', '--rm', '--no-deps', 'api'],
+    ...['python', '-c', LEGACY_QUESTION, key, author, title, body, String(blocking)],
+    JSON.stringify(addressees),
+  ]);
+  const line = output.split('\n').find((row) => row.startsWith('LEGACY_QUESTION '));
+  if (line === undefined) throw new Error(`legacy question not filed: ${output}`);
+  return JSON.parse(line.slice('LEGACY_QUESTION '.length)) as { no: number; seq: number };
+}
+
+/**
  * Файл с ключом агента для запасного пути — входа на `/login`. Выпускается отдельно от
  * ключа установки (`e2e/global-setup.ts`): наборов у ключей больше нет (TRK-471), а
  * сценарию, проверяющему экран глазами агента, нужен именно ключ агента без учётной

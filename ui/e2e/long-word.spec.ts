@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { fontsReady, readE2eToken, silenceJournal } from './contour';
+import { fileLegacyQuestion, fontsReady, readE2eToken, silenceJournal } from './contour';
 
 /**
  * Длинное слово и встроенный код без единой точки переноса (UI-150): агенты пишут пути
@@ -48,17 +48,15 @@ async function create(request: APIRequestContext): Promise<string> {
  * на карточке (блок «Открытые вопросы»), в деле (лента вопросов и ответов не сворачивает
  * тело) и во входящей, — а находке пришлось бы каждый раз раскрывать строку описи.
  */
-async function ask(request: APIRequestContext, key: string): Promise<void> {
-  const response = await request.post(`/api/v1/tasks/${key}/entries`, {
-    headers: { ...auth(), 'X-Actor-Label': 'ui150_probe' },
-    data: {
-      type: 'question',
-      title: 'Замер переноса длинного слова и кода на узком экране',
-      body: BODY,
-      payload: { addressees: ['owner'], blocking: false },
-    },
+function ask(key: string): void {
+  // Прежний вопрос дела задачи: новый REST отвергает (TRK-671), а три экрана показывают
+  // и такие.
+  fileLegacyQuestion({
+    key,
+    title: 'Замер переноса длинного слова и кода на узком экране',
+    body: BODY,
+    author: 'ui150_probe',
   });
-  expect(response.status()).toBe(201);
 }
 
 async function cancel(request: APIRequestContext, key: string): Promise<void> {
@@ -107,7 +105,7 @@ test('длинное слово и код без пробелов не тяну�
   const key = await create(request);
 
   try {
-    await ask(request, key);
+    ask(key);
 
     await silenceJournal(page);
     await page.setViewportSize({ width: 390, height: 844 });

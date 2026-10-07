@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { fontsReady, readE2eToken, side } from './contour';
+import { fileLegacyQuestion, fontsReady, readE2eToken, side } from './contour';
 
 /*
  * Архив проекта в интерфейсе (UI-176): архивирование и восстановление с причиной,
@@ -50,16 +50,13 @@ async function taskWithQuestion(request: APIRequestContext, project: string): Pr
   });
   expect(created.status()).toBe(201);
   const key = ((await created.json()) as { data: { key: string } }).data.key;
-  const asked = await request.post(`/api/v1/tasks/${key}/entries`, {
-    headers: auth(),
-    data: {
-      type: 'question',
-      title: 'Хранить ли дело вечно?',
-      body: 'Вопрос сквозного теста UI-176.',
-      payload: { addressees: ['owner'], blocking: false },
-    },
+  // Прежний вопрос дела задачи: новый REST отвергает (TRK-671).
+  fileLegacyQuestion({
+    key,
+    title: 'Хранить ли дело вечно?',
+    body: 'Вопрос сквозного теста UI-176.',
+    author: 'owner',
   });
-  expect(asked.status()).toBe(201);
   return key;
 }
 

@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { fontsReady, readE2eToken, side } from './contour';
+import { fileLegacyQuestion, fontsReady, readE2eToken, side } from './contour';
 
 const token = readE2eToken();
 
@@ -101,12 +101,9 @@ async function askOwner(
   title: string,
   body: string,
 ): Promise<{ no: number; cleanup: () => Promise<void> }> {
-  const asked = await request.post(`/api/v1/tasks/${key}/entries`, {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { type: 'question', title, body, payload: { addressees: ['owner'], blocking: false } },
-  });
-  expect(asked.status()).toBe(201);
-  const no = ((await asked.json()) as { data: { no: number } }).data.no;
+  // Прежний вопрос дела задачи: новый вопрос REST отвергает (TRK-671), а форма ответа
+  // работает с теми, что уже лежат в делах.
+  const { no } = fileLegacyQuestion({ key, title, body, author: 'owner' });
 
   return {
     no,

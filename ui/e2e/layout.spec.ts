@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { readE2eToken, silenceJournal } from './contour';
+import { fileLegacyQuestion, readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -68,11 +68,12 @@ async function busyTask(request: APIRequestContext): Promise<string> {
     });
   }
 
-  await addEntry(request, key, {
-    type: 'question',
+  // Прежний вопрос дела задачи: новый REST отвергает (TRK-671), а карточка их показывает.
+  fileLegacyQuestion({
+    key,
     title: 'Считать ли пропуск записи ошибкой контракта?',
     body: 'Нужен ответ, чтобы продолжить.',
-    payload: { addressees: ['owner'], blocking: false },
+    author: 'owner',
   });
 
   return key;
