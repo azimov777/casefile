@@ -103,6 +103,8 @@ export const entryKeys = {
   bodies: (taskKey: string, nos: number[]) => ['task', taskKey, 'entries', nos] as const,
   /** Лента дела: страницы копятся, поэтому свой ключ, а не ключ тел записей. */
   feed: (taskKey: string, params: EntryListParams) => ['task', taskKey, 'case', params] as const,
+  /** Тело записи дела обсуждения: под префиксом обсуждения, как тела задачи — под её. */
+  discussionBody: (address: string, no: number) => ['discussion', address, 'entries', no] as const,
   /** Тело одной записи дела проекта: под префиксом проекта, как тела задачи — под её. */
   projectBody: (projectKey: string, no: number) => ['project', projectKey, 'entries', no] as const,
   /** Дело проекта страницами, с отбором по типам или без. */
@@ -139,7 +141,9 @@ export function entryQueryOptions(owner: EntryOwner, no: number) {
       ? entryKeys.projectBody(owner.key, no)
       : owner.kind === 'area'
         ? entryKeys.areaBody(owner.key, no)
-        : entryKeys.bodies(owner.key, [no]);
+        : owner.kind === 'discussion'
+          ? entryKeys.discussionBody(owner.key, no)
+          : entryKeys.bodies(owner.key, [no]);
   return queryOptions({
     queryKey,
     queryFn: (): Promise<Entry | null> =>
@@ -147,7 +151,9 @@ export function entryQueryOptions(owner: EntryOwner, no: number) {
         ? readProjectEntry(owner.key, no)
         : owner.kind === 'area'
           ? readAreaEntry(owner.key, no)
-          : readTaskEntry(owner.key, no),
+          : owner.kind === 'discussion'
+            ? readDiscussionEntry(owner.key, no)
+            : readTaskEntry(owner.key, no),
   });
 }
 
@@ -155,6 +161,15 @@ async function readTaskEntry(taskKey: string, no: number): Promise<Entry | null>
   const page = await unwrapPage(
     apiClient.GET('/api/v1/tasks/{task_key}/entries', {
       params: { path: { task_key: taskKey }, query: { nos: [no] } },
+    }),
+  );
+  return page.items[0] ?? null;
+}
+
+async function readDiscussionEntry(address: string, no: number): Promise<Entry | null> {
+  const page = await unwrapPage(
+    apiClient.GET('/api/v1/discussions/{discussion}/entries', {
+      params: { path: { discussion: address }, query: { nos: [no] } },
     }),
   );
   return page.items[0] ?? null;

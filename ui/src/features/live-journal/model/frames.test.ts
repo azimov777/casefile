@@ -6,6 +6,7 @@ function frame(owner: {
   task_key: string | null;
   project_key: string | null;
   area?: string | null;
+  discussion?: string | null;
 }): string {
   return JSON.stringify({ seq: 7, no: 2, type: 'note', title: 'Заметка', ...owner });
 }
@@ -33,6 +34,12 @@ describe('parseFrame', () => {
     expect(
       parseFrame(frame({ task_key: null, project_key: null, area: 'TRK/promotion' })),
     ).toMatchObject({ taskKey: null, projectKey: null, area: 'TRK/promotion' });
+  });
+
+  it('разбирает запись дела обсуждения: назван его адрес (TRK-672)', () => {
+    expect(
+      parseFrame(frame({ task_key: null, project_key: null, discussion: 'TRK~7' })),
+    ).toMatchObject({ taskKey: null, projectKey: null, area: null, discussion: 'TRK~7' });
   });
 
   it('отбрасывает кадр без владельца: ни задачи, ни проекта', () => {

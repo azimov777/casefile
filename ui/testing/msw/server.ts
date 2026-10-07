@@ -1,6 +1,6 @@
 import { http } from 'msw';
 import { setupServer } from 'msw/node';
-import { API, data, release } from './responses';
+import { API, collection, data, release } from './responses';
 
 /**
  * Обработчики задаёт каждый тест сам: общего набора «на всё» нет намеренно.
@@ -10,7 +10,12 @@ import { API, data, release } from './responses';
  * неперехваченном запросе, к которому сам отношения не имеет. Запасной ответ —
  * «обновления нет», то, что отвечает бэкенд вне `production`. Он стоит начальным
  * обработчиком: `resetHandlers` его не снимает, а `server.use` теста перекрывает.
+ *
+ * Второе исключение — список обсуждений (TRK-672). Его читают входящая и карточка любой
+ * задачи, то есть почти каждый страничный тест, и без запасного ответа «обсуждений нет»
+ * каждый падал бы на неперехваченном запросе, к которому сам отношения не имеет.
  */
 export const server = setupServer(
   http.get(`${API}/api/v1/installation/release`, () => data(release())),
+  http.get(`${API}/api/v1/discussions`, () => collection([])),
 );

@@ -80,13 +80,15 @@ export default tseslint.config(
           /*
            * Взятие подписи из словаря подписью не является. Список перебивает
            * умолчания правила целиком (`{...defaults, ...options}` в его `create`),
-           * поэтому умолчания переписаны сюда, а наших имён в нём четыре: `brick` — тот же
+           * поэтому умолчания переписаны сюда, а наших имён в нём пять: `brick` — тот же
            * `t`, переименованный при разборе (`const { t: brick } = useTranslation('ui')`),
            * `tStart` — так же переименованный `t` словаря `start` на экране, который
            * читает фразы для агента из чужого словаря, а не заводит свою копию
            * (`ui/src/pages/connect/ui/connect-page.tsx`, `TRK-367`), `tArea` — `t`
            * словаря `area` в разделах, общих проекту и области
-           * (`ui/src/features/manage-project`, TRK-557), `say.*` — помощник страничных
+           * (`ui/src/features/manage-project`, TRK-557), `tDiscussions` — `t` словаря `discussions` на карточке
+           * задачи, где блок обсуждений собирается рядом с фразами её собственного словаря
+           * (TRK-672), `say.*` — помощник страничных
            * тестов (`testing/say.ts`).
            */
           callees: {
@@ -96,6 +98,7 @@ export default tseslint.config(
               'brick',
               'tStart',
               'tArea',
+              'tDiscussions',
               'say\\.\\w+',
               'require',
               'addEventListener',

@@ -6,16 +6,18 @@ type AnswerOutcome = components['schemas']['AnswerOutcome'];
 export const questions = {
   /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-362`). */
   explanation: {
-    body: 'Questions that agents asked you arrive here. While a blocking question has no answer, work on that task stands still; your answer is filed in its case, and the agent reads it from there when it resumes work. If the agent has already stopped, tell it in its chat that you have answered.',
+    body: 'Discussions where an agent waits for your answer arrive here: the whole conversation about one narrow question, with a conclusion on top. You answer on the discussion screen and the agent reads the answer from there; while a discussion has an unanswered question, the tasks attached to it stand still. If the agent has already stopped, tell it in its chat that you have answered.',
   },
   intro:
-    'Tasks closed not in full, the questions agents are waiting on from you, and your remarks you are waiting on.',
+    'The discussions where agents wait for your answer, tasks closed not in full, and your remarks you are waiting on.',
   filterLabel: 'Inbox selection',
   project: 'Project',
   allProjects: 'every project',
   projectNote: 'The project filters every part of the inbox.',
 
   questionsTitle: 'Questions for me',
+  questionsIntro:
+    'Earlier questions asked in task cases. New questions are asked in discussions (above).',
   blockingOnly: 'blocking only',
   loadingQuestions: 'Reading the inbox…',
   noQuestions: 'There are no questions without an answer: no agent is waiting on you.',
@@ -41,7 +43,7 @@ export const questions = {
     history: 'Question history',
   },
   historyIntro:
-    'Every question with its answers, newest first. You cannot answer from here: open questions wait in the inbox.',
+    'Every discussion and every question from task cases with its answers, newest first. You cannot answer from here: whatever waits for an answer is in the inbox.',
   historyFilterLabel: 'History selection',
   onlyMine: 'addressed to me only',
   historyTitle: 'Questions and answers',

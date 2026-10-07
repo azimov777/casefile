@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
 import { MessageSquarePlus } from 'lucide-react';
+import { DiscussionRow, taskDiscussionsQueryOptions } from '@/entities/discussion';
 import { EntryBody, EntryIndex, type EntryIndexHandle, type Question } from '@/entities/entry';
 import { CLOSED_STATUSES, TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import {
@@ -128,6 +129,9 @@ export function TaskPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const pkg = useQuery(taskPackageQueryOptions(key));
+  // Обсуждения задачи (TRK-672): пакет преемника их не несёт, список берётся отбором
+  // `task`. Ошибка этого запроса карточку не ломает — блок скажет об отказе сам.
+  const discussions = useInfiniteQuery(taskDiscussionsQueryOptions(key));
   const rights = useProjectRights();
 
   /**
@@ -196,6 +200,7 @@ export function TaskPage() {
   );
 
   const { t } = useTranslation('task');
+  const { t: tDiscussions } = useTranslation('discussions');
   // Кнопка замечания стоит в блоке «Замечания», а подпись у неё та же, что у формы:
   // действие одно, и называться двумя фразами оно не должно.
   const { t: brick } = useTranslation('ui');
@@ -386,6 +391,43 @@ export function TaskPage() {
           {remarkOpen && canAct ? (
             <RemarkForm taskKey={task.key} onCancel={() => setRemarkOpen(false)} />
           ) : null}
+        </section>
+      ),
+    });
+  }
+
+  /*
+   * Обсуждения задачи (TRK-672, `TRK#51`, п. 8): адрес, название и чей ход. Вопросы
+   * человеку живут там, а не в деле задачи, поэтому блок стоит рядом с блоком вопросов:
+   * сюда человек приходит с вопросом «чего ждёт эта задача».
+   */
+  const taskDiscussions = discussions.data?.pages.flatMap((page) => page.items) ?? [];
+  if (taskDiscussions.length === 0) {
+    cardBlocks.push({
+      empty: true,
+      key: 'discussions',
+      id: 'discussions',
+      title: tDiscussions('taskBlock.title'),
+      text: discussions.isPending
+        ? tDiscussions('taskBlock.loading')
+        : tDiscussions('taskBlock.none'),
+    });
+  } else {
+    cardBlocks.push({
+      empty: false,
+      key: 'discussions',
+      node: (
+        <section key="discussions" className={block()} aria-labelledby="discussions">
+          <h2 className={blockTitle()} id="discussions">
+            {tDiscussions('taskBlock.title')}
+          </h2>
+          <ul className={NOTICE_LIST}>
+            {taskDiscussions.map((discussion) => (
+              <li key={discussion.address}>
+                <DiscussionRow discussion={discussion} />
+              </li>
+            ))}
+          </ul>
         </section>
       ),
     });

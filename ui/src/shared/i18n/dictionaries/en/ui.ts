@@ -105,6 +105,9 @@ export const ui = {
     openQuestions_zero: 'No open questions',
     openQuestions_one: '{{count, number}} open question',
     openQuestions_other: '{{count, number}} open questions',
+    // Discussions where the move is a person's (TRK-672): a mark of its own beside the questions.
+    openDiscussions_one: '{{count, number}} discussion is waiting for you',
+    openDiscussions_other: '{{count, number}} discussions are waiting for you',
     openWarnings_one: '{{count, number}} task closed not in full',
     openWarnings_other: '{{count, number}} tasks closed not in full',
     loadingParticipant: 'Loading the participant…',

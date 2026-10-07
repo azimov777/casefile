@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { cn, taskRefHref } from '@/shared/lib';
+import { cn, ownerRefHref } from '@/shared/lib';
 import { Badge } from '@/shared/ui';
 import type { Headline, HeadlinePart } from '../model/headline';
 
@@ -67,7 +67,7 @@ function Piece({ part, linked }: { part: HeadlinePart; linked: boolean }) {
       );
     case 'entry':
       return linked ? (
-        <Link className={KEY} to={taskRefHref({ key: part.key, entryNo: part.no })}>
+        <Link className={KEY} to={ownerRefHref(part.key, part.no)}>
           {part.key}#{part.no}
         </Link>
       ) : (

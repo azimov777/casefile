@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/shared/ui';
 import { cn, useExitHoldList } from '@/shared/lib';
-import { taskRefHref } from '@/shared/lib/task-refs';
+import { ownerRefHref } from '@/shared/lib/task-refs';
 import type { LiveJournal } from '../model/use-live-journal';
 
 /**
@@ -139,10 +139,10 @@ export function QuestionNotice({
                   // Цвет от карточки, а не ссылочный акцент: янтарный текст уведомления
                   // подобран под его же заливку, и синяя ссылка выпала бы из пары.
                   className="font-mono text-meta font-semibold text-inherit"
-                  to={taskRefHref({ key: question.taskKey, entryNo: question.no })}
+                  to={ownerRefHref(question.discussion ?? question.taskKey ?? '', question.no)}
                   onClick={() => dismissQuestion(question.id)}
                 >
-                  {question.taskKey}#{question.no}
+                  {question.discussion ?? question.taskKey}#{question.no}
                 </Link>
                 {question.blocking ? (
                   <Badge tone="danger" title={t('live.blockingTitle')}>
@@ -168,7 +168,7 @@ export function QuestionNotice({
                 type="button"
                 onClick={() => dismissQuestion(question.id)}
                 aria-label={t('live.dismiss', {
-                  reference: `${question.taskKey}#${question.no}`,
+                  reference: `${question.discussion ?? question.taskKey}#${question.no}`,
                 })}
               >
                 ×

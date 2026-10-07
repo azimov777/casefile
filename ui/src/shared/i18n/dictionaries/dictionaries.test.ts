@@ -70,6 +70,9 @@ describe('словари языков', () => {
     const sameOnPurpose = new Set([
       'access.agent.namePlaceholder',
       'people.create.namePlaceholder',
+      // Ключи задач в подсказке поля — идентификаторы контракта, а не слова (TRK-672).
+      'discussions.attach.placeholder',
+      'discussions.create.tasksPlaceholder',
       'ui.app.name',
       'ui.app.mark',
       'login.title',
