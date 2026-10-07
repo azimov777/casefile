@@ -49,7 +49,7 @@ function serve(decisions: ProjectDecision[]) {
   server.use(
     http.get(`${API}/api/v1/projects/DEMO`, () => data(projectDetail('DEMO', { decisions }))),
     http.get(`${API}/api/v1/projects/DEMO/entries`, () => collection([])),
-    http.get(`${API}/api/v1/projects/DEMO/directions`, () => collection([])),
+    http.get(`${API}/api/v1/projects/DEMO/areas`, () => collection([])),
     // Счётчики шапки (TRK-619) читают список задач; их числа здесь не проверяются.
     http.get(`${API}/api/v1/tasks`, () => collection([], { total: 0 })),
   );

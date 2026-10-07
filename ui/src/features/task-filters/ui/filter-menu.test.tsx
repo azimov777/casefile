@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { API, collection, directionCard } from '@testing/msw/responses';
+import { API, collection, areaCard } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { say } from '@testing/say';
 import { setToken } from '@/shared/api';
@@ -19,7 +19,7 @@ import { FilterMenu } from './filter-menu';
 function renderMenu(filters: Partial<TaskFilters> = {}, board = false) {
   const onApply = vi.fn();
   const onAssignee = vi.fn();
-  // Направления проекта панель читает сама (TRK-557): без проекта запроса нет вовсе, а
+  // Области проекта панель читает сама (TRK-557): без проекта запроса нет вовсе, а
   // клиент запросов нужен хуку и тогда.
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -133,30 +133,30 @@ describe('панель «Фильтр»', () => {
     expect(toggle('priorityLabel', 'high')).toBeInTheDocument();
   });
 
-  it('направление (TRK-557): без проекта — «любое» и «без направления», выбор уходит как есть', async () => {
+  it('область (TRK-557): без проекта — «любая» и «без области», выбор уходит как есть', async () => {
     const user = userEvent.setup();
     const { onApply } = renderMenu({});
 
-    const field = screen.getByLabelText(say.tasks('filters.directionLegend'));
+    const field = screen.getByLabelText(say.tasks('filters.areaLegend'));
     expect(field).toHaveValue('');
     expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
-      say.tasks('filters.directionAny'),
-      say.tasks('filters.directionNone'),
+      say.tasks('filters.areaAny'),
+      say.tasks('filters.areaNone'),
     ]);
 
-    await user.selectOptions(field, say.tasks('filters.directionNone'));
-    expect(onApply).toHaveBeenLastCalledWith({ direction: 'empty()' });
+    await user.selectOptions(field, say.tasks('filters.areaNone'));
+    expect(onApply).toHaveBeenLastCalledWith({ area: 'empty()' });
   });
 
-  it('направления проекта — с архивными и пометкой; чужой адрес из ссылки стоит своим адресом', async () => {
+  it('области проекта — с архивными и пометкой; чужой адрес из ссылки стоит своим адресом', async () => {
     setToken('trk_test');
     const seen: string[] = [];
     server.use(
-      http.get(`${API}/api/v1/projects/DEMO/directions`, ({ request }) => {
+      http.get(`${API}/api/v1/projects/DEMO/areas`, ({ request }) => {
         seen.push(request.url);
         return collection([
-          directionCard('DEMO/promotion'),
-          directionCard('DEMO/commerce', {
+          areaCard('DEMO/promotion'),
+          areaCard('DEMO/commerce', {
             title: 'Коммерция',
             archived_at: '2026-10-01T10:00:00Z',
           }),
@@ -164,11 +164,11 @@ describe('панель «Фильтр»', () => {
       }),
     );
     const user = userEvent.setup();
-    const { onApply } = renderMenu({ project: 'DEMO', direction: 'OPS/infra' });
+    const { onApply } = renderMenu({ project: 'DEMO', area: 'OPS/infra' });
 
     expect(
       await screen.findByRole('option', {
-        name: say.tasks('filters.directionOption', {
+        name: say.tasks('filters.areaOption', {
           title: 'Популяризация',
           address: 'DEMO/promotion',
         }),
@@ -176,19 +176,19 @@ describe('панель «Фильтр»', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole('option', {
-        name: say.tasks('filters.directionArchived', {
+        name: say.tasks('filters.areaArchived', {
           title: 'Коммерция',
           address: 'DEMO/commerce',
         }),
       }),
     ).toBeInTheDocument();
     expect(new URL(seen[0] ?? '').searchParams.get('include_archived')).toBe('true');
-    expect(screen.getByLabelText(say.tasks('filters.directionLegend'))).toHaveValue('OPS/infra');
+    expect(screen.getByLabelText(say.tasks('filters.areaLegend'))).toHaveValue('OPS/infra');
 
     await user.selectOptions(
-      screen.getByLabelText(say.tasks('filters.directionLegend')),
+      screen.getByLabelText(say.tasks('filters.areaLegend')),
       'DEMO/promotion',
     );
-    expect(onApply).toHaveBeenLastCalledWith({ direction: 'DEMO/promotion' });
+    expect(onApply).toHaveBeenLastCalledWith({ area: 'DEMO/promotion' });
   });
 });

@@ -97,8 +97,8 @@ export type Headline =
 
 const words = (text: string): HeadlinePart => ({ kind: 'words', text });
 
-/** Владелец дела — направление: косая черта есть только в его адресе `TRK/promotion`. */
-const isDirection = (ownerKey: string): boolean => ownerKey.includes('/');
+/** Владелец дела — область: косая черта есть только в её адресе `TRK/promotion`. */
+const isArea = (ownerKey: string): boolean => ownerKey.includes('/');
 const id = (text: string): HeadlinePart => ({ kind: 'id', text });
 const flag = (text: string): HeadlinePart => ({ kind: 'flag', text });
 
@@ -112,10 +112,10 @@ const flag = (text: string): HeadlinePart => ({ kind: 'flag', text });
  * сужает. Внешний `type` этого не умел — TypeScript про его связь с плоским объектом
  * не знал, и каждое поле приходилось проверять на `null` заново.
  *
- * `taskKey` — ключ владельца дела: задачи, проекта или адрес направления. Он нужен ответу
+ * `taskKey` — ключ владельца дела: задачи, проекта или адрес области. Он нужен ответу
  * и разбору замечания (они ссылаются на запись в той же задаче, а в фактах описи лежит
- * только её номер), заведению — «задача заведена», «проект заведён» или «направление
- * заведено», — и архиву.
+ * только её номер), заведению — «задача заведена», «проект заведён» или «область
+ * заведена», — и архиву.
  *
  * Подписи приходят функцией перевода, а не берутся из экземпляра `i18next`: заголовок
  * собирают компоненты, и они же обязаны быть подписаны на смену языка. Пространство
@@ -123,16 +123,16 @@ const flag = (text: string): HeadlinePart => ({ kind: 'flag', text });
  */
 export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'ui'>): Headline {
   switch (facts.type) {
-    // `created` подшивается и в дело проекта (TRK-156), и в дело направления (TRK-557).
+    // `created` подшивается и в дело проекта (TRK-156), и в дело области (TRK-557).
     // Чьё это дело, видно по ключу владельца: дефис есть только в ключе задачи, косая
-    // черта — только в адресе направления (`../docs/CONCEPT.md`, 3.4, 3.7).
+    // черта — только в адресе области (`../docs/CONCEPT.md`, 3.4, 3.7).
     case 'created':
       return {
         kind: 'built',
         parts: [
           words(
-            isDirection(taskKey)
-              ? t('entry.headline.directionCreated')
+            isArea(taskKey)
+              ? t('entry.headline.areaCreated')
               : taskKey.includes('-')
                 ? t('entry.headline.created')
                 : t('entry.headline.projectCreated'),
@@ -241,15 +241,15 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
         ],
       };
 
-    // Архив проекта (TRK-159) или направления (TRK-557): что случилось. Причина —
+    // Архив проекта (TRK-159) или области (TRK-557): что случилось. Причина —
     // свободный текст, она в теле.
     case 'archived':
       return {
         kind: 'built',
         parts: [
           words(
-            isDirection(taskKey)
-              ? t('entry.headline.directionArchived')
+            isArea(taskKey)
+              ? t('entry.headline.areaArchived')
               : t('entry.headline.projectArchived'),
           ),
         ],
@@ -259,8 +259,8 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
         kind: 'built',
         parts: [
           words(
-            isDirection(taskKey)
-              ? t('entry.headline.directionRestored')
+            isArea(taskKey)
+              ? t('entry.headline.areaRestored')
               : t('entry.headline.projectRestored'),
           ),
         ],

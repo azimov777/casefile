@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   caseHref,
-  directionHref,
+  areaHref,
   projectHref,
   readEntryNo,
-  splitDirectionAddress,
+  splitAreaAddress,
   splitTaskRefs,
   taskRefHref,
 } from './task-refs';
@@ -45,33 +45,33 @@ describe('ссылки на задачи в тексте', () => {
     ]);
   });
 
-  it('запись дела направления `TRK/promotion#3` ведёт на страницу направления (TRK-557)', () => {
+  it('запись дела области `TRK/promotion#3` ведёт на страницу области (TRK-557)', () => {
     expect(splitTaskRefs('решено в TRK/promotion#3 и TRK#7')).toEqual([
       { kind: 'text', value: 'решено в ' },
       {
         kind: 'ref',
         value: 'TRK/promotion#3',
-        href: '/projects/TRK/directions/promotion?entry=3',
+        href: '/projects/TRK/areas/promotion?entry=3',
       },
       { kind: 'text', value: ' и ' },
       { kind: 'ref', value: 'TRK#7', href: '/projects/TRK?entry=7' },
     ]);
   });
 
-  it('адрес направления без номера записи и путь вроде `API/v1` ссылкой не становятся', () => {
-    expect(splitTaskRefs('направление TRK/promotion, путь API/v1')).toEqual([
-      { kind: 'text', value: 'направление TRK/promotion, путь API/v1' },
+  it('адрес области без номера записи и путь вроде `API/v1` ссылкой не становятся', () => {
+    expect(splitTaskRefs('область TRK/promotion, путь API/v1')).toEqual([
+      { kind: 'text', value: 'область TRK/promotion, путь API/v1' },
     ]);
   });
 
-  it('страница направления — под проектом, запись — параметром `entry`', () => {
-    expect(directionHref('TRK/promotion')).toBe('/projects/TRK/directions/promotion');
-    expect(directionHref('TRK/promotion', 3)).toBe('/projects/TRK/directions/promotion?entry=3');
-    expect(splitDirectionAddress('TRK/promotion')).toEqual({
+  it('страница области — под проектом, запись — параметром `entry`', () => {
+    expect(areaHref('TRK/promotion')).toBe('/projects/TRK/areas/promotion');
+    expect(areaHref('TRK/promotion', 3)).toBe('/projects/TRK/areas/promotion?entry=3');
+    expect(splitAreaAddress('TRK/promotion')).toEqual({
       projectKey: 'TRK',
-      directionKey: 'promotion',
+      areaKey: 'promotion',
     });
-    expect(splitDirectionAddress('TRK')).toEqual({ projectKey: 'TRK', directionKey: '' });
+    expect(splitAreaAddress('TRK')).toEqual({ projectKey: 'TRK', areaKey: '' });
   });
 
   it('экран проекта — по ключу, запись — параметром `entry`', () => {

@@ -8,14 +8,14 @@ export {
 } from './exit-hold';
 export {
   caseHref,
-  directionHref,
+  areaHref,
   projectHref,
   projectOfKey,
   readEntryNo,
-  splitDirectionAddress,
+  splitAreaAddress,
   splitTaskRefs,
   taskRefHref,
-  type DirectionPath,
+  type AreaPath,
   type TaskRef,
   type TextPart,
 } from './task-refs';

@@ -20,9 +20,9 @@ describe('entryAddress', () => {
     );
   });
 
-  it('запись дела направления открывается на странице направления под проектом (TRK-557)', () => {
-    expect(
-      entryAddress({ kind: 'direction', key: 'TRK/promotion' }, 3, 'http://127.0.0.1:8080'),
-    ).toBe('http://127.0.0.1:8080/projects/TRK/directions/promotion?entry=3');
+  it('запись дела области открывается на странице области под проектом (TRK-557)', () => {
+    expect(entryAddress({ kind: 'area', key: 'TRK/promotion' }, 3, 'http://127.0.0.1:8080')).toBe(
+      'http://127.0.0.1:8080/projects/TRK/areas/promotion?entry=3',
+    );
   });
 });

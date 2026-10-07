@@ -109,7 +109,7 @@ export const ui = {
     crumbTasks: 'Задачи',
     crumbCase: 'Дело',
     crumbProject: 'Проект',
-    crumbDirection: 'Направление',
+    crumbArea: 'Область',
     broken: {
       title: 'Интерфейс сломался на этом месте',
       text: 'Экран не отрисовался из-за ошибки в самом интерфейсе — данные тут ни при чём. Подробности ошибки лежат в консоли браузера.',
@@ -352,7 +352,7 @@ export const ui = {
     headline: {
       created: 'Задача заведена',
       projectCreated: 'Проект заведён',
-      directionCreated: 'Направление заведено',
+      areaCreated: 'Область заведена',
       status: 'Статус',
       withReason: '· с причиной',
       sectionEdited: 'Правка раздела',
@@ -367,8 +367,8 @@ export const ui = {
       attributeRemoved: 'Атрибут снят',
       projectArchived: 'Проект в архиве',
       projectRestored: 'Проект восстановлен',
-      directionArchived: 'Направление в архиве',
-      directionRestored: 'Направление восстановлено',
+      areaArchived: 'Область в архиве',
+      areaRestored: 'Область восстановлена',
       // Кем вторая задача приходится этой (UI-166). Только у `parent`/`child`: их
       // идентификатор, прочитанный фразой («parent DEMO-9»), называет роль наоборот —
       // у `blocks DEMO-3` и `relates DEMO-3` фраза читается верно и без слов.

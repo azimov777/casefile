@@ -53,9 +53,9 @@ export const task = {
     // диктору, — владелец выбрал полосу с подписями (UI-143#10).
     status: 'Status',
     priority: 'Priority',
-    /** Направление задачи в проекте (TRK-557): адрес или «без направления». */
-    direction: 'Direction',
-    noDirection: 'no direction',
+    /** Область задачи в проекте (TRK-557): адрес или «без области». */
+    area: 'Area',
+    noArea: 'no area',
     assignee: 'Assignee',
     /** Prior keys of a moved task (TRK-173): the cell shows up only when there are any. */
     previousKeys: 'Previous keys',

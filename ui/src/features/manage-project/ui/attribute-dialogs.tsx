@@ -22,7 +22,7 @@ import { ReasonField } from './reason-field';
 
 /**
  * Кнопка «Добавить атрибут» и окно заведения: имя и значение — у проекта или у его
- * направления (`holder`, TRK-557): правила атрибута у них одни.
+ * области (`holder`, TRK-557): правила атрибута у них одни.
  */
 export function AddAttribute({ holder }: { holder: Holder }) {
   const [open, setOpen] = useState(false);
@@ -33,9 +33,7 @@ export function AddAttribute({ holder }: { holder: Holder }) {
       open={open}
       onOpenChange={setOpen}
       title={t('attribute.addTitle')}
-      description={t(
-        holder.kind === 'direction' ? 'attribute.addIntroDirection' : 'attribute.addIntro',
-      )}
+      description={t(holder.kind === 'area' ? 'attribute.addIntroArea' : 'attribute.addIntro')}
       closeLabel={t('close')}
       trigger={
         <Button tone="quiet" size="sm">
@@ -235,7 +233,7 @@ export function RemoveAttribute({
       onOpenChange={setOpen}
       title={t('attribute.removeTitle', { name: attribute.name })}
       description={t(
-        holder.kind === 'direction' ? 'attribute.removeIntroDirection' : 'attribute.removeIntro',
+        holder.kind === 'area' ? 'attribute.removeIntroArea' : 'attribute.removeIntro',
       )}
       closeLabel={t('close')}
       trigger={

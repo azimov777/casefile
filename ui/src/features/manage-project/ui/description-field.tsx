@@ -4,8 +4,8 @@ import { PROJECT_DESCRIPTION_LIMIT, descriptionLength } from '@/entities/project
 import { Textarea } from '@/shared/ui';
 
 /**
- * Поле описания проекта или направления с остатком до предела (`PROJECT_DESCRIPTION_LIMIT`
- * у проекта, `DIRECTION_DESCRIPTION_LIMIT` у направления — `limit`). Длину оба бэкенд
+ * Поле описания проекта или области с остатком до предела (`PROJECT_DESCRIPTION_LIMIT`
+ * у проекта, `AREA_DESCRIPTION_LIMIT` у области — `limit`). Длину оба бэкенд
  * меряет одинаково (`descriptionLength`), различаются предел и подсказка.
  *
  * Остаток — единственное, что окно считает само (`UI-175`, ограничения): он виден,

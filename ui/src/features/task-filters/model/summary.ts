@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import { NO_DIRECTION } from '@/entities/direction';
+import { NO_AREA } from '@/entities/area';
 import type { TaskFilters } from './filters';
 
 /**
@@ -9,7 +9,7 @@ import type { TaskFilters } from './filters';
  * проверка остаётся на месте.
  */
 export type ConditionId =
-  | 'direction'
+  | 'area'
   | 'status'
   | 'priority'
   | 'assignee'
@@ -35,7 +35,7 @@ export interface FilterCondition {
  * тем же путём, что и форма, и никакого второго состояния не заводит.
  */
 export const CONDITION_RESET = {
-  direction: { direction: '' },
+  area: { area: '' },
   status: { status: [] },
   priority: { priority: [] },
   assignee: { assignee: '' },
@@ -79,16 +79,16 @@ export function describeFilters(filters: TaskFilters, t: TFunction<'tasks'>): Fi
   const conditions: FilterCondition[] = [];
   const board = filters.view === 'board';
 
-  // Направление — условие, а не место (TRK-557): оно сужает выдачу проекта, а не
+  // Область — условие, а не место (TRK-557): она сужает выдачу проекта, а не
   // переносит человека в другое место панели, и снимается чипом, как статус.
-  const direction = filters.direction.trim();
-  if (direction !== '') {
+  const area = filters.area.trim();
+  if (area !== '') {
     conditions.push({
-      id: 'direction',
+      id: 'area',
       label:
-        direction === NO_DIRECTION
-          ? t('filters.condition.noDirection')
-          : t('filters.condition.direction', { value: direction }),
+        area === NO_AREA
+          ? t('filters.condition.noArea')
+          : t('filters.condition.area', { value: area }),
     });
   }
 

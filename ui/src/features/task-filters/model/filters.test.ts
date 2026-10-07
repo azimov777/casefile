@@ -26,7 +26,7 @@ describe('чтение отбора из адреса', () => {
     expect(readFilters(params)).toEqual({
       view: 'table',
       project: 'DEMO',
-      direction: '',
+      area: '',
       status: ['open', 'in_progress'],
       priority: ['high'],
       assignee: 'owner',
@@ -246,32 +246,31 @@ describe('архив', () => {
   });
 });
 
-describe('отбор по направлению (TRK-557)', () => {
-  it('адрес направления и «без направления» проходят круг «адрес → отбор → адрес» как есть', () => {
-    for (const direction of ['DEMO/promotion', 'empty()']) {
-      const params = writeFilters(filters({ project: 'DEMO', direction }));
-      expect(params.get('direction')).toBe(direction);
-      expect(readFilters(params).direction).toBe(direction);
+describe('отбор по области (TRK-557)', () => {
+  it('адрес области и «без области» проходят круг «адрес → отбор → адрес» как есть', () => {
+    for (const area of ['DEMO/promotion', 'empty()']) {
+      const params = writeFilters(filters({ project: 'DEMO', area }));
+      expect(params.get('area')).toBe(area);
+      expect(readFilters(params).area).toBe(area);
     }
-    expect(writeFilters(filters({ direction: '' })).has('direction')).toBe(false);
+    expect(writeFilters(filters({ area: '' })).has('area')).toBe(false);
   });
 
-  it('уходит структурным параметром `direction` — тем же условием, что у агента', () => {
+  it('уходит структурным параметром `area` — тем же условием, что у агента', () => {
+    expect(filtersToListParams(filters({ project: 'DEMO', area: 'DEMO/promotion' })).area).toEqual([
+      'DEMO/promotion',
+    ]);
+    expect(filtersToListParams(filters({ area: 'empty()' })).area).toEqual(['empty()']);
+    expect(filtersToListParams(filters()).area).toBeUndefined();
+  });
+
+  it('область — условие: пустая выдача с ним предлагает сброс, а не «в проекте пусто»', () => {
+    expect(hasConditions(filters({ project: 'DEMO', area: 'DEMO/promotion' }))).toBe(true);
+  });
+
+  it('заполненный запрос отменяет и область, как любой структурный отбор', () => {
     expect(
-      filtersToListParams(filters({ project: 'DEMO', direction: 'DEMO/promotion' })).direction,
-    ).toEqual(['DEMO/promotion']);
-    expect(filtersToListParams(filters({ direction: 'empty()' })).direction).toEqual(['empty()']);
-    expect(filtersToListParams(filters()).direction).toBeUndefined();
-  });
-
-  it('направление — условие: пустая выдача с ним предлагает сброс, а не «в проекте пусто»', () => {
-    expect(hasConditions(filters({ project: 'DEMO', direction: 'DEMO/promotion' }))).toBe(true);
-  });
-
-  it('заполненный запрос отменяет и направление, как любой структурный отбор', () => {
-    expect(
-      filtersToListParams(filters({ direction: 'DEMO/promotion', query: 'status: open' }))
-        .direction,
+      filtersToListParams(filters({ area: 'DEMO/promotion', query: 'status: open' })).area,
     ).toBeUndefined();
   });
 });

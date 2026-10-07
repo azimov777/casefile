@@ -1,30 +1,30 @@
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
-import { directionKeys } from '@/entities/direction';
+import { areaKeys } from '@/entities/area';
 import { questionKeys, remarkKeys } from '@/entities/entry';
 import { projectKeys } from '@/entities/project';
 import { sessionKeys } from '@/entities/session';
-import { splitDirectionAddress, useOnceKey } from '@/shared/lib';
+import { splitAreaAddress, useOnceKey } from '@/shared/lib';
 import {
-  archiveDirection,
+  archiveArea,
   archiveProject,
-  createDirection,
+  createArea,
   createProject,
   fileEntry,
   removeAttribute,
-  restoreDirection,
+  restoreArea,
   restoreProject,
   setAttribute,
-  updateDirection,
+  updateArea,
   updateProject,
   type ArchivingInput,
-  type CreateDirectionInput,
+  type CreateAreaInput,
   type CreateProjectInput,
-  type DirectionArchivingInput,
+  type AreaArchivingInput,
   type EntryInput,
   type Holder,
   type RemoveAttributeInput,
   type SetAttributeInput,
-  type UpdateDirectionInput,
+  type UpdateAreaInput,
 } from '../api/projects';
 
 type Input<TInput> = Omit<TInput, 'idempotencyKey'>;
@@ -42,12 +42,10 @@ type Input<TInput> = Omit<TInput, 'idempotencyKey'>;
 
 /**
  * Префикс того, что устарело от атрибута или записи в деле: карточка с атрибутами, дело
- * и тела записей проекта — `['project', key]`, направления — `['direction', адрес]`.
+ * и тела записей проекта — `['project', key]`, области — `['area', адрес]`.
  */
 function holderKey(holder: Holder): QueryKey {
-  return holder.kind === 'direction'
-    ? directionKeys.detail(holder.key)
-    : projectKeys.detail(holder.key);
+  return holder.kind === 'area' ? areaKeys.detail(holder.key) : projectKeys.detail(holder.key);
 }
 
 /** Заводит проект: он обязан появиться в панели сразу, а не после перезагрузки. */
@@ -78,7 +76,7 @@ export function useUpdateProject() {
   });
 }
 
-/** Заводит или меняет атрибут: новое значение и запись в деле проекта или направления. */
+/** Заводит или меняет атрибут: новое значение и запись в деле проекта или области. */
 export function useSetAttribute() {
   const queryClient = useQueryClient();
   const once = useOnceKey<Input<SetAttributeInput>>();
@@ -109,7 +107,7 @@ export function useRemoveAttribute() {
 }
 
 /**
- * Запись человека в дело проекта или направления. Ключ повтора приходит из черновика
+ * Запись человека в дело проекта или области. Ключ повтора приходит из черновика
  * формы (`Composer`), как у замечания: он переживает и провал попытки, и перезагрузку
  * вкладки.
  */
@@ -158,69 +156,69 @@ export function useRestoreProject() {
 }
 
 /*
- * Действия с направлением (TRK-557). Список направлений живёт под префиксом проекта
- * (`directionKeys.list`), поэтому заведение, правка и архив перечитывают проект целиком —
- * его карточку с активными направлениями и раздел «Направления». Правка и архив меняют
- * ещё и то, что о направлении знает каждая его задача: название и признак архива едут в
+ * Действия с областью (TRK-557). Список областей живёт под префиксом проекта
+ * (`areaKeys.list`), поэтому заведение, правка и архив перечитывают проект целиком —
+ * его карточку с активными областями и раздел «Области». Правка и архив меняют
+ * ещё и то, что об области знает каждая её задача: название и признак архива едут в
  * пакете карточки (`['task']`) и в строке выдачи (`['tasks']`). Какие задачи затронуты,
  * интерфейс не вычисляет — перечитывается всё прочитанное, а бэкенд отвечает как есть.
  */
 
-/** Заводит направление; ключ повтора окна переживает провал попытки. */
-export function useCreateDirection() {
+/** Заводит область; ключ повтора окна переживает провал попытки. */
+export function useCreateArea() {
   const queryClient = useQueryClient();
-  const once = useOnceKey<Input<CreateDirectionInput>>();
+  const once = useOnceKey<Input<CreateAreaInput>>();
 
   return useMutation({
-    mutationFn: (input: Input<CreateDirectionInput>) =>
-      createDirection({ ...input, idempotencyKey: once.keyFor(input) }),
-    onSuccess: (_direction, { projectKey }) => {
+    mutationFn: (input: Input<CreateAreaInput>) =>
+      createArea({ ...input, idempotencyKey: once.keyFor(input) }),
+    onSuccess: (_area, { projectKey }) => {
       once.forget();
       void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectKey) });
     },
   });
 }
 
-/** Что перечитать после правки или архива направления — см. комментарий выше. */
-function directionChanged(address: string): QueryKey[] {
+/** Что перечитать после правки или архива области — см. комментарий выше. */
+function areaChanged(address: string): QueryKey[] {
   return [
-    directionKeys.detail(address),
-    projectKeys.detail(splitDirectionAddress(address).projectKey),
+    areaKeys.detail(address),
+    projectKeys.detail(splitAreaAddress(address).projectKey),
     ['task'],
     ['tasks'],
   ];
 }
 
-export function useUpdateDirection() {
+export function useUpdateArea() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: UpdateDirectionInput) => updateDirection(input),
-    onSuccess: (_direction, { address }) => {
-      for (const queryKey of directionChanged(address)) {
+    mutationFn: (input: UpdateAreaInput) => updateArea(input),
+    onSuccess: (_area, { address }) => {
+      for (const queryKey of areaChanged(address)) {
         void queryClient.invalidateQueries({ queryKey });
       }
     },
   });
 }
 
-function useDirectionArchiving(mutationFn: (input: DirectionArchivingInput) => Promise<unknown>) {
+function useAreaArchiving(mutationFn: (input: AreaArchivingInput) => Promise<unknown>) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn,
-    onSuccess: (_direction, { address }) => {
-      for (const queryKey of directionChanged(address)) {
+    onSuccess: (_area, { address }) => {
+      for (const queryKey of areaChanged(address)) {
         void queryClient.invalidateQueries({ queryKey });
       }
     },
   });
 }
 
-export function useArchiveDirection() {
-  return useDirectionArchiving(archiveDirection);
+export function useArchiveArea() {
+  return useAreaArchiving(archiveArea);
 }
 
-export function useRestoreDirection() {
-  return useDirectionArchiving(restoreDirection);
+export function useRestoreArea() {
+  return useAreaArchiving(restoreArea);
 }

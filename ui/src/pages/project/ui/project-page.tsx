@@ -19,13 +19,13 @@ import { useLanguage } from '@/shared/i18n';
 import { exactTime } from '@/shared/lib';
 import { Callout, QueryState } from '@/shared/ui';
 import { ProjectDecisions } from './project-decisions';
-import { ProjectDirections } from './project-directions';
+import { ProjectAreas } from './project-areas';
 import { ProjectOverview } from './project-overview';
 
 /**
  * Экран проекта (UI-174; раскладка вкладками — TRK-618, решение проекта TRK#46): шапка —
  * ключ, название, описание, «Задачи проекта», меню «⋯», — и вкладки «Обзор», «Решения»,
- * «Атрибуты», «Направления», «Дело» под ней. Каркас общий со страницей направления
+ * «Атрибуты», «Области», «Дело» под ней. Каркас общий со страницей области
  * (`HolderScreen`).
  *
  * Всё состояние — в адресе (`useHolderAddress`): `?tab=` называет вкладку, `?entry=N` —
@@ -76,7 +76,7 @@ export function ProjectPage() {
   const holder = { kind: 'project', key: card.key } as const;
 
   // Числа вкладок — из карточки проекта, без своих запросов: действующие решения
-  // (статус считает бэкенд), атрибуты и активные направления. У дела числа нет:
+  // (статус считает бэкенд), атрибуты и активные области. У дела числа нет:
   // `meta.total` у дела проекта не считается.
   const tabs: HolderTabLink[] = [
     { tab: 'overview', label: t('tabs.overview') },
@@ -86,7 +86,7 @@ export function ProjectPage() {
       count: card.decisions.filter((decision) => decision.status === 'in_force').length,
     },
     { tab: 'attributes', label: t('tabs.attributes'), count: card.attributes.length },
-    { tab: 'directions', label: t('tabs.directions'), count: card.directions.length },
+    { tab: 'areas', label: t('tabs.areas'), count: card.areas.length },
     { tab: 'case', label: t('tabs.case') },
   ];
 
@@ -137,8 +137,8 @@ export function ProjectPage() {
           open={address.attribute}
           onOpenChange={address.rememberAttribute}
         />
-      ) : address.tab === 'directions' ? (
-        <ProjectDirections projectKey={card.key} canWrite={canWrite} />
+      ) : address.tab === 'areas' ? (
+        <ProjectAreas projectKey={card.key} canWrite={canWrite} />
       ) : address.tab === 'case' ? (
         <CaseSection
           holder={holder}
@@ -149,7 +149,7 @@ export function ProjectPage() {
       ) : (
         <ProjectOverview
           projectKey={card.key}
-          directions={card.directions}
+          areas={card.areas}
           decisions={card.decisions}
           entryHref={address.entryHref}
           tabHref={address.tabHref}

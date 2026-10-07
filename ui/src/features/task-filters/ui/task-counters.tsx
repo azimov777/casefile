@@ -13,7 +13,7 @@ type CounterId = 'inProgress' | 'open' | 'waiting' | 'warnings';
 /** Четыре отбора строки (TRK#46): независимые, задача может попасть в два сразу. */
 function counterChanges(
   id: CounterId,
-  scope: Pick<TaskFilters, 'project' | 'direction'>,
+  scope: Pick<TaskFilters, 'project' | 'area'>,
 ): Partial<TaskFilters> {
   switch (id) {
     case 'inProgress':
@@ -32,12 +32,12 @@ const COUNTERS: readonly CounterId[] = ['inProgress', 'open', 'waiting', 'warnin
 interface TaskCountersProps {
   /** Ключ проекта. */
   project: string;
-  /** Адрес направления `PROJECT/key`; без него — весь проект. */
-  direction?: string;
+  /** Адрес области `PROJECT/key`; без него — весь проект. */
+  area?: string;
 }
 
 /**
- * Строка из четырёх чисел под описанием проекта или направления (TRK-619, решение
+ * Строка из четырёх чисел под описанием проекта или области (TRK-619, решение
  * TRK#46): «В работе», «Открыто», «Ждут ответа», «Закрыты не целиком».
  *
  * Отбор один и питает и число, и ссылку: `filtersToListParams` даёт запрос, `tasksHref`
@@ -46,7 +46,7 @@ interface TaskCountersProps {
  * нет. Ноль — нулём и тоже ссылкой; `null` — ссылка без числа; отказ одного запроса
  * ставит у его счётчика прочерк и не трогает остальные.
  */
-export function TaskCounters({ project, direction }: TaskCountersProps) {
+export function TaskCounters({ project, area }: TaskCountersProps) {
   const { t } = useTranslation('tasks');
 
   return (
@@ -57,26 +57,18 @@ export function TaskCounters({ project, direction }: TaskCountersProps) {
     >
       {COUNTERS.map((id) => (
         <li key={id}>
-          <Counter id={id} project={project} direction={direction ?? ''} />
+          <Counter id={id} project={project} area={area ?? ''} />
         </li>
       ))}
     </ul>
   );
 }
 
-function Counter({
-  id,
-  project,
-  direction,
-}: {
-  id: CounterId;
-  project: string;
-  direction: string;
-}) {
+function Counter({ id, project, area }: { id: CounterId; project: string; area: string }) {
   const { t } = useTranslation('tasks');
   const { language } = useLanguage();
 
-  const changes = counterChanges(id, { project, direction });
+  const changes = counterChanges(id, { project, area });
   const filters: TaskFilters = { ...EMPTY_FILTERS, ...changes };
   const total = useQuery(tasksTotalQueryOptions(filtersToListParams(filters)));
   const failed = total.isError && total.data === undefined;

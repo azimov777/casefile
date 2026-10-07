@@ -13,7 +13,7 @@ const LIST_BLOCK = 'flex flex-col gap-0 rounded-control border border-line bg-su
 const BLOCK_HEAD = 'flex flex-col gap-1 border-b border-b-line px-3 pt-3 pb-2';
 
 interface AttributesSectionProps {
-  /** Чьи атрибуты: проекта или его направления (TRK-557) — правила у них одни. */
+  /** Чьи атрибуты: проекта или его области (TRK-557) — правила у них одни. */
   holder: Holder;
   attributes: ProjectAttribute[];
   /** Ставить, менять и снимать атрибуты: запись открыта всем (`useProjectRights`). */
@@ -24,10 +24,10 @@ interface AttributesSectionProps {
 }
 
 /**
- * Атрибуты проекта или направления: имя и нынешнее значение, история — по клику на имя.
+ * Атрибуты проекта или области: имя и нынешнее значение, история — по клику на имя.
  *
  * Раздел живёт в действиях, а не на экране: его рисуют два экрана — проект и
- * направление (TRK-557), — а экраны друг друга не импортируют. Здесь же стоят его
+ * область (TRK-557), — а экраны друг друга не импортируют. Здесь же стоят его
  * действия: «Добавить» над списком, «Изменить» и «Снять» — в открытой истории атрибута.
  *
  * Порядок — тот, что отдал бэкенд (по имени без учёта регистра). Значение — простой
@@ -43,7 +43,7 @@ export function AttributesSection({
   onOpenChange,
 }: AttributesSectionProps) {
   const { t } = useTranslation('project');
-  const { t: tDirection } = useTranslation('direction');
+  const { t: tArea } = useTranslation('area');
   const headingId = `${holder.kind}-attributes`;
 
   return (
@@ -62,7 +62,7 @@ export function AttributesSection({
 
       {attributes.length === 0 ? (
         <p className="px-3 py-2 text-muted italic">
-          {holder.kind === 'direction' ? tDirection('attributes.none') : t('noAttributes')}
+          {holder.kind === 'area' ? tArea('attributes.none') : t('noAttributes')}
         </p>
       ) : (
         <ul className="flex list-none flex-col p-0">
@@ -120,7 +120,7 @@ export function AttributesSection({
 }
 
 /**
- * История одного атрибута: записи дела проекта или направления о нём, по порядку номеров — заведение,
+ * История одного атрибута: записи дела проекта или области о нём, по порядку номеров — заведение,
  * изменения с прежним и новым значением и снятие, каждая с причиной.
  *
  * Отбор — серверный параметр `attribute` (TRK-166): бэкенд сам сужает выдачу до трёх
@@ -144,7 +144,7 @@ function AttributeHistory({
   const name = attribute.name;
   const feed = useInfiniteQuery(holderCaseQueryOptions(holder, { attribute: name }));
   const { t } = useTranslation('project');
-  const { t: tDirection } = useTranslation('direction');
+  const { t: tArea } = useTranslation('area');
 
   const history = feed.data?.pages.flatMap((page) => page.items) ?? [];
 
@@ -166,7 +166,7 @@ function AttributeHistory({
         <QueryState query={feed} loading={t('historyLoading')} />
       ) : history.length === 0 && !feed.hasNextPage ? (
         <p className="text-muted italic">
-          {holder.kind === 'direction' ? tDirection('attributes.historyEmpty') : t('historyEmpty')}
+          {holder.kind === 'area' ? tArea('attributes.historyEmpty') : t('historyEmpty')}
         </p>
       ) : (
         /* Нить времени — та же, что у ленты дела: точка рода каждой записи стоит на ней. */

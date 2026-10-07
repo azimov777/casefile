@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { DirectionLink } from '@/entities/direction';
+import { AreaLink } from '@/entities/area';
 import { DecisionStatusMark, decisionHref } from '@/entities/project';
 import {
   PriorityMark,
@@ -12,7 +12,7 @@ import {
   type LinkedTask,
   type TaskFeatures,
 } from '@/entities/task';
-import { ChangeTaskDirection } from '@/features/change-task-direction';
+import { ChangeTaskArea } from '@/features/change-task-area';
 import { TaskNotBefore } from '@/features/change-task-not-before';
 import { RelativeTime } from '@/shared/ui';
 
@@ -24,10 +24,10 @@ interface TaskHeaderProps {
   /** Решения проекта, на которые опирается задача (`decisions` пакета, TRK-554). */
   decisions: CitedDecision[];
   /**
-   * Может ли человек сменить направление (TRK-557): сеанс известен, задача не закрыта и
+   * Может ли человек сменить область (TRK-557): сеанс известен, задача не закрыта и
    * её проект не в архиве. Иначе ячейка только читается — кнопки нет, а не «есть и падает».
    */
-  canChangeDirection: boolean;
+  canChangeArea: boolean;
   /** Может ли человек поставить, изменить и снять момент «можно взять с …» (TRK-593): те же условия. */
   canChangeNotBefore: boolean;
 }
@@ -48,8 +48,8 @@ const DECISION_REF = 'font-mono text-mark whitespace-nowrap';
  * Шапка карточки — группы, которые читаются с первого взгляда (UI-143, вариант B,
  * выбранный владельцем в UI-143#10):
  *
- * 1. «Где» и «что» — проект, направление, родители и название — одна группа с шагом
- *    4 px: проект, направление и родитель читаются надписью над названием, а не
+ * 1. «Где» и «что» — проект, область, родители и название — одна группа с шагом
+ *    4 px: проект, область и родитель читаются надписью над названием, а не
  *    отдельной строкой.
  * 2. Состояние и время — полоса свойств между двумя линиями, в 12 px под названием.
  *    Каждое значение подписано (`dt`), поэтому статус принадлежит задаче по подписи,
@@ -66,7 +66,7 @@ export function TaskHeader({
   features,
   parent,
   decisions,
-  canChangeDirection,
+  canChangeArea,
   canChangeNotBefore,
 }: TaskHeaderProps) {
   const { t } = useTranslation('task');
@@ -81,19 +81,19 @@ export function TaskHeader({
             {task.project.key} — {task.project.title}
           </Link>
           {/*
-           * Направление — рядом с проектом (TRK-557, TRK#16, ч. 4): тоже ответ на вопрос
+           * Область — рядом с проектом (TRK-557, TRK#16, ч. 4): тоже ответ на вопрос
            * «где», но другой оси, чем родитель, — «про что эта работа в проекте». Поэтому
-           * отделено точкой, а не косой чертой: шагом вниз по пути оно не является.
+           * отделена точкой, а не косой чертой: шагом вниз по пути она не является.
            */}
-          {task.direction === null ? null : (
+          {task.area === null ? null : (
             <>
               <span className="text-faint" aria-hidden="true">
                 ·
               </span>
-              <DirectionLink
-                address={task.direction.address}
-                title={task.direction.title}
-                archivedAt={task.direction.archived_at}
+              <AreaLink
+                address={task.area.address}
+                title={task.area.title}
+                archivedAt={task.area.archived_at}
               />
             </>
           )}
@@ -145,23 +145,23 @@ export function TaskHeader({
           </dd>
         </div>
         {/*
-         * Направление — сразу за приоритетом: поле обвязки, которое человек правит там же,
+         * Область — сразу за приоритетом: поле обвязки, которое человек правит там же,
          * где видит (TRK#16, ч. 4). Значение — адресом моноширинным: название уже стоит
          * ссылкой над заголовком, а здесь — то, что уходит в поле задачи и в отбор.
          */}
         <div className={CELL}>
-          <dt className={LABEL}>{t('header.direction')}</dt>
+          <dt className={LABEL}>{t('header.area')}</dt>
           <dd className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            {task.direction === null ? (
-              <span className={EMPTY}>{t('header.noDirection')}</span>
+            {task.area === null ? (
+              <span className={EMPTY}>{t('header.noArea')}</span>
             ) : (
-              <span className="font-mono text-mark text-muted">{task.direction.address}</span>
+              <span className="font-mono text-mark text-muted">{task.area.address}</span>
             )}
-            {canChangeDirection ? (
-              <ChangeTaskDirection
+            {canChangeArea ? (
+              <ChangeTaskArea
                 taskKey={task.key}
                 projectKey={task.project.key}
-                current={task.direction}
+                current={task.area}
               />
             ) : null}
           </dd>

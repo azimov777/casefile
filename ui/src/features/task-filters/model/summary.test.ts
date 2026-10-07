@@ -74,11 +74,11 @@ describe('условия отбора словами', () => {
     ]);
   });
 
-  it('направление (TRK-557) — чипом с адресом, «без направления» — словами; снимается своим сбросом', () => {
-    expect(labels({ project: 'DEMO', direction: 'DEMO/promotion' })).toEqual([
-      say.tasks('filters.condition.direction', { value: 'DEMO/promotion' }),
+  it('область (TRK-557) — чипом с адресом, «без области» — словами; снимается своим сбросом', () => {
+    expect(labels({ project: 'DEMO', area: 'DEMO/promotion' })).toEqual([
+      say.tasks('filters.condition.area', { value: 'DEMO/promotion' }),
     ]);
-    expect(labels({ direction: 'empty()' })).toEqual([say.tasks('filters.condition.noDirection')]);
-    expect(CONDITION_RESET.direction).toEqual({ direction: '' });
+    expect(labels({ area: 'empty()' })).toEqual([say.tasks('filters.condition.noArea')]);
+    expect(CONDITION_RESET.area).toEqual({ area: '' });
   });
 });

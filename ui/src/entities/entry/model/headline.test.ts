@@ -245,12 +245,11 @@ describe.each(LANGUAGES)('заголовок записи по фактам на
     );
   });
 
-  it('в деле направления (TRK-557) — «направление заведено», архив и восстановление — его', () => {
-    const direction = (facts: EntryFacts) =>
-      headlineText(entryHeadline(facts, 'TRK/promotion', say.ui));
-    expect(direction(FACTS.created)).toBe(say.ui('entry.headline.directionCreated'));
-    expect(direction({ type: 'archived' })).toBe(say.ui('entry.headline.directionArchived'));
-    expect(direction({ type: 'restored' })).toBe(say.ui('entry.headline.directionRestored'));
+  it('в деле области (TRK-557) — «область заведена», архив и восстановление — её', () => {
+    const area = (facts: EntryFacts) => headlineText(entryHeadline(facts, 'TRK/promotion', say.ui));
+    expect(area(FACTS.created)).toBe(say.ui('entry.headline.areaCreated'));
+    expect(area({ type: 'archived' })).toBe(say.ui('entry.headline.areaArchived'));
+    expect(area({ type: 'restored' })).toBe(say.ui('entry.headline.areaRestored'));
     // У проекта — по-прежнему проектные.
     expect(headlineText(entryHeadline({ type: 'archived' }, 'TRK', say.ui))).toBe(
       say.ui('entry.headline.projectArchived'),

@@ -13,10 +13,10 @@
 
 | Экран | Что показывает | Откуда данные |
 |---|---|---|
-| Список задач | Задачи с фильтрами по проекту, статусу, исполнителю, приоритету, признаку «заблокирована», открытым вопросам, направлению (TRK-557); в каждой строке — вычисляемые признаки | `GET /api/v1/tasks?query=...` |
-| Карточка задачи | Поля, пять разделов, статус, связи, последняя сводка, открытые вопросы, неразобранные замечания, опись дела; тела записей по клику. Здесь же форма замечания и правка направления задачи (TRK-557) | `GET /api/v1/tasks/{task_key}`, `GET /api/v1/tasks/{task_key}/entries`, `POST /api/v1/tasks/{task_key}/entries` с типом `remark`, `PATCH /api/v1/tasks/{task_key}` только с `direction` |
+| Список задач | Задачи с фильтрами по проекту, статусу, исполнителю, приоритету, признаку «заблокирована», открытым вопросам, области (TRK-557); в каждой строке — вычисляемые признаки | `GET /api/v1/tasks?query=...` |
+| Карточка задачи | Поля, пять разделов, статус, связи, последняя сводка, открытые вопросы, неразобранные замечания, опись дела; тела записей по клику. Здесь же форма замечания и правка области задачи (TRK-557) | `GET /api/v1/tasks/{task_key}`, `GET /api/v1/tasks/{task_key}/entries`, `POST /api/v1/tasks/{task_key}/entries` с типом `remark`, `PATCH /api/v1/tasks/{task_key}` только с `area` |
 | Проект | Карточка проекта (ключ, название, описание), атрибуты с историей по клику, опись дела проекта; тела по клику (UI-174). Действия (UI-175): «Новый проект» в панели и правка карточки; атрибуты с причиной и заметка. Все действия открыты всем — наборов токена нет (TRK-471). Архив (UI-176): «В архив» и «Восстановить» с причиной; архивный только читается | `GET /api/v1/projects/{project_key}`, `GET /api/v1/projects/{project_key}/entries`, `GET /api/v1/projects/{project_key}/entries/{entry_no}`, `POST /api/v1/projects`, `PATCH /api/v1/projects/{project_key}`, `PUT /api/v1/projects/{project_key}/attributes/{attribute_name}`, `POST /api/v1/projects/{project_key}/attributes/{attribute_name}/remove`, `POST /api/v1/projects/{project_key}/entries`, `POST /api/v1/projects/{project_key}/archive`, `POST /api/v1/projects/{project_key}/restore` |
-| Направление | Страница направления проекта (TRK-557): карточка, атрибуты с историей, дело описью; заметка или решение в дело, правка, архив с причиной; на экране проекта — раздел «Направления» со списком и заведением | `GET`/`POST /api/v1/projects/{project_key}/directions`, `GET`/`PATCH …/directions/{direction_key}`, `…/archive`, `…/restore`, `…/attributes/{attribute_name}`, `…/entries` |
+| Область | Страница области проекта (TRK-557): карточка, атрибуты с историей, дело описью; заметка или решение в дело, правка, архив с причиной; на экране проекта — раздел «Области» со списком и заведением | `GET`/`POST /api/v1/projects/{project_key}/areas`, `GET`/`PATCH …/areas/{area_key}`, `…/archive`, `…/restore`, `…/attributes/{attribute_name}`, `…/entries` |
 | Открытые вопросы | Вопросы без ответа, адресованные текущему участнику, с признаком «блокирующий» | `GET /api/v1/questions` |
 | История вопросов | Все вопросы с ответами, от свежих к старым; по умолчанию адресованные текущему участнику, условие снимается | `GET /api/v1/questions?open=false&order=newest` |
 | Ответ | Форма ответа на вопрос | `POST /api/v1/tasks/{task_key}/entries` с типом `answer` |
@@ -31,8 +31,8 @@
 Сверх этого человек распоряжается доступами самой установки: заводит агенту участника,
 выпускает и отзывает токены (решение владельца 2026-09-11, `UI-104`; раздел «Доступы»
 ниже). В задачах это ничего не меняет — переходы, правка и создание задач по-прежнему
-за агентами. Исключение одно — поле `direction` задачи (TRK#16, ч. 4; TRK-557): его
-человек ставит и снимает в карточке; раздел «Направление» ниже.
+за агентами. Исключение одно — поле `area` задачи (TRK#16, ч. 4; TRK-557): его
+человек ставит и снимает в карточке; раздел «Область» ниже.
 
 Записей человека три: `answer` на вопрос, `remark` — замечание к сделанному — и
 `acceptance`, принятие предупреждения закрытия (раздел «Предупреждение закрытия» ниже).
@@ -440,50 +440,50 @@ project_reason_required`, повтор — `409 project_archived` или `projec
 попадают. В пакете карточки задачи (`TaskProjectRead`) `archived_at` нет — карточка
 читает проект вторым запросом (TRK-167 вернёт поле в пакет).
 
-## Направление: карточка, атрибуты, дело и поле задачи
+## Область: карточка, атрибуты, дело и поле задачи
 
-Направление — часть работы проекта без конца (`../docs/CONCEPT.md`, 3.7; TRK-555, TRK-556);
+Область — часть работы проекта без конца (`../docs/CONCEPT.md`, 3.7; TRK-555, TRK-556);
 интерфейс — TRK-557. Адрес — `ПРОЕКТ/ключ` (`TRK/promotion`): ключ проекта заглавными, ключ
-направления строчными, на входе регистр любой, на выходе канонический. Путь API собран из
+области строчными, на входе регистр любой, на выходе канонический. Путь API собран из
 двух сегментов, а не из адреса целиком: косая черта внутри сегмента потребовала бы
-экранирования. Тем же правилом устроен путь страницы: `/projects/TRK/directions/promotion`
-(`directionHref` в `src/shared/lib/task-refs.ts`).
+экранирования. Тем же правилом устроен путь страницы: `/projects/TRK/areas/promotion`
+(`areaHref` в `src/shared/lib/task-refs.ts`).
 
-- Список: `GET /api/v1/projects/{project_key}/directions` — `DirectionRead` (адрес, название,
+- Список: `GET /api/v1/projects/{project_key}/areas` — `AreaRead` (адрес, название,
   описание, `archived_at`), по ключу; архивные — только с `include_archived=true`. В
-  карточке проекта `directions` — только активные и только адрес с названием
-  (`DirectionRefRead`), поэтому раздел «Направления» читает список отдельно.
-- Карточка: `GET …/directions/{direction_key}` — `DirectionDetailRead` с `attributes`.
+  карточке проекта `areas` — только активные и только адрес с названием
+  (`AreaRefRead`), поэтому раздел «Области» читает список отдельно.
+- Карточка: `GET …/areas/{area_key}` — `AreaDetailRead` с `attributes`.
   Правка — `PATCH` с `title` и `description` (ключа нет, лишнее поле — `422`). Описание —
-  до 320 знаков после обрезки (`direction_description_too_long`).
-- Заведение: `POST …/directions` с `key`, `title`, `description` и `Idempotency-Key`;
-  неверный ключ — `422 invalid_direction_key`, занятый — `409 direction_key_taken`.
+  до 320 знаков после обрезки (`area_description_too_long`).
+- Заведение: `POST …/areas` с `key`, `title`, `description` и `Idempotency-Key`;
+  неверный ключ — `422 invalid_area_key`, занятый — `409 area_key_taken`.
 - Архив и восстановление: `POST …/archive` и `…/restore` с `{reason}`; пустая причина —
-  `422 direction_reason_required`, повтор — `409 direction_archived` или
-  `direction_not_archived`; у направления архивного проекта — `409 project_archived`.
-  Архивное заморожено: карточка, атрибуты и дело — `409 direction_archived`.
+  `422 area_reason_required`, повтор — `409 area_archived` или
+  `area_not_archived`; у области архивного проекта — `409 project_archived`.
+  Архивная заморожена: карточка, атрибуты и дело — `409 area_archived`.
 - Атрибуты — те же правила и коды, что у проекта: `PUT …/attributes/{attribute_name}`,
   `POST …/attributes/{attribute_name}/remove`.
 - Дело: `GET …/entries` (отборы `types`, `nos`, `after_no`, `attribute` — как у дела
   проекта), `GET …/entries/{entry_no}`, `POST …/entries` с `type` из `note`, `decision`,
   `finding`, `artifact` (`supersedes` нет). Человек пишет `note` и `decision`. У записи
-  дела направления `task_key` и `project_key` — `null`, `direction` — адрес; ссылка —
-  `TRK/promotion#3`. Живой поток отдаёт и эти записи с полем `direction`.
+  дела области `task_key` и `project_key` — `null`, `area` — адрес; ссылка —
+  `TRK/promotion#3`. Живой поток отдаёт и эти записи с полем `area`.
 
-Поле задачи. В пакете карточки `task.direction` — `TaskDirectionRead` (адрес, название,
+Поле задачи. В пакете карточки `task.area` — `TaskAreaRead` (адрес, название,
 описание, `archived_at`) или `null`. Правка — `PATCH /api/v1/tasks/{task_key}` с
-`{"direction": "TRK/promotion" | null}`; интерфейс шлёт только это поле и без `version`:
+`{"area": "TRK/promotion" | null}`; интерфейс шлёт только это поле и без `version`:
 агент двигает версию каждым переходом, и сверка ловила бы его шаги, а не чужую правку
-поля. Отказы: `404 direction_not_found`, `422 direction_project_mismatch` (`details`:
-`direction`, `task_project`, `direction_project`), `409 direction_archived` (снять можно
+поля. Отказы: `404 area_not_found`, `422 area_project_mismatch` (`details`:
+`area`, `task_project`, `area_project`), `409 area_archived` (снять можно
 всегда), `409 task_closed` у закрытой задачи. Правка подшивает в дело задачи
-`field_changed` с `field: direction`. Перенос задачи в другой проект снимает направление.
+`field_changed` с `field: area`. Перенос задачи в другой проект снимает область.
 
-Отбор. `GET /api/v1/tasks?direction=TRK/promotion` (несколько значений; `empty()` — без
-направления) или `query=direction: TRK/promotion`; неизвестный адрес — `422
-search_value_invalid`, а не пустая выдача. Поле строки `direction` — `{address, title}`
-или `null`; приходит, когда `fields` пуст или называет `direction` (набор полей списка
-его не просит: строка направление не показывает).
+Отбор. `GET /api/v1/tasks?area=TRK/promotion` (несколько значений; `empty()` — без
+области) или `query=area: TRK/promotion`; неизвестный адрес — `422
+search_value_invalid`, а не пустая выдача. Поле строки `area` — `{address, title}`
+или `null`; приходит, когда `fields` пуст или называет `area` (набор полей списка
+его не просит: строка область не показывает).
 
 ## Строка списка: значок «заблокирована» и родитель без второго запроса
 

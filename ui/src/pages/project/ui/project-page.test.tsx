@@ -28,7 +28,7 @@ function projectDetail(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
       { name: 'repo', value: 'github.com/demo', ...STAMPS },
     ],
     decisions: [],
-    directions: [],
+    areas: [],
     ...overrides,
   };
 }
@@ -96,7 +96,7 @@ beforeEach(() => {
     http.get(`${API}/api/v1/tasks`, () => collection([], { total: 0 })),
     http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
     http.get(`${API}/api/v1/projects/DEMO`, () => data(projectDetail())),
-    http.get(`${API}/api/v1/projects/DEMO/directions`, () => collection([])),
+    http.get(`${API}/api/v1/projects/DEMO/areas`, () => collection([])),
     http.get(`${API}/api/v1/projects/DEMO/entries`, ({ request }) => {
       const url = new URL(request.url);
       seen.push(url);
@@ -134,7 +134,7 @@ describe('экран проекта', () => {
     expect(title).toHaveTextContent('Демонстрация');
     expect(screen.getByText('app/')).toBeInTheDocument();
 
-    // Числа — из карточки: действующих решений нет, атрибутов два, направлений нет;
+    // Числа — из карточки: действующих решений нет, атрибутов два, областей нет;
     // у «Дела» числа нет вовсе. Открыт «Обзор», остальные вкладки — ссылки на `?tab=`.
     expect(tabLink(say.project('tabs.overview'))).toHaveAttribute('aria-current', 'true');
     expect(tabLink(say.project('tabs.decisions'), 0)).toHaveAttribute(
@@ -145,9 +145,9 @@ describe('экран проекта', () => {
       'href',
       '/projects/DEMO?tab=attributes',
     );
-    expect(tabLink(say.project('tabs.directions'), 0)).toHaveAttribute(
+    expect(tabLink(say.project('tabs.areas'), 0)).toHaveAttribute(
       'href',
-      '/projects/DEMO?tab=directions',
+      '/projects/DEMO?tab=areas',
     );
     expect(tabLink(say.project('tabs.case'))).toHaveAttribute('href', '/projects/DEMO?tab=case');
     expect(tabLink(say.project('tabs.case'))).not.toHaveAttribute('aria-current');
@@ -328,12 +328,12 @@ describe('экран проекта', () => {
 });
 
 describe('вкладка «Обзор»', () => {
-  it('направления списком: название ссылкой на страницу направления и адрес', async () => {
+  it('области списком: название ссылкой на страницу области и адрес', async () => {
     server.use(
       http.get(`${API}/api/v1/projects/DEMO`, () =>
         data(
           projectDetail({
-            directions: [
+            areas: [
               { address: 'DEMO/promotion', title: 'Популяризация' },
               { address: 'DEMO/sales', title: 'Продажи' },
             ],
@@ -343,14 +343,14 @@ describe('вкладка «Обзор»', () => {
     );
     renderApp('/projects/DEMO', { language: 'ru' });
 
-    const block = await screen.findByRole('region', { name: say.project('overview.directions') });
+    const block = await screen.findByRole('region', { name: say.project('overview.areas') });
     const rows = within(block).getAllByRole('listitem');
     expect(rows).toHaveLength(2);
     expect(
       within(rows[0] as HTMLElement).getByRole('link', { name: /Популяризация/ }),
-    ).toHaveAttribute('href', '/projects/DEMO/directions/promotion');
+    ).toHaveAttribute('href', '/projects/DEMO/areas/promotion');
     expect(rows[0]).toHaveTextContent('DEMO/promotion');
-    expect(tabLink(say.project('tabs.directions'), 2)).toBeInTheDocument();
+    expect(tabLink(say.project('tabs.areas'), 2)).toBeInTheDocument();
   });
 
   it('три последних действующих решения по номеру, сверху новое; «Все N решений» — на вкладку', async () => {
@@ -456,7 +456,7 @@ describe('вкладка «Обзор»', () => {
     server.use(http.get(`${API}/api/v1/projects/DEMO/entries`, () => collection([])));
     renderApp('/projects/DEMO', { language: 'ru' });
 
-    expect(await screen.findByText(say.project('overview.directionsNone'))).toBeInTheDocument();
+    expect(await screen.findByText(say.project('overview.areasNone'))).toBeInTheDocument();
     expect(screen.getByText(say.project('decisions.none'))).toBeInTheDocument();
     expect(await screen.findByText(say.project('overview.caseNone'))).toBeInTheDocument();
     // Ссылок «Все решения» и «Всё дело» у пустого нет: вести некуда.

@@ -86,7 +86,7 @@ function installation({
       data(projectDetail(String(params.key))),
     ),
     http.get(`${API}/api/v1/projects/:key/entries`, () => collection([])),
-    http.get(`${API}/api/v1/projects/:key/directions`, () => collection([])),
+    http.get(`${API}/api/v1/projects/:key/areas`, () => collection([])),
     http.get(`${API}/api/v1/questions`, () => collection([])),
     http.get(`${API}/api/v1/tokens`, () => collection([])),
     http.get(`${API}/api/v1/participants`, () => collection([])),

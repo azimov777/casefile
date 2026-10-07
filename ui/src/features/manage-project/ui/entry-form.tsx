@@ -10,14 +10,14 @@ import { useFileEntry } from '../model/use-project-actions';
 
 /**
  * Типы записи, которые человек пишет в дело: в дело проекта — только заметку (`UI-175`),
- * в дело направления — заметку и решение (TRK#16, ч. 4; TRK-557).
+ * в дело области — заметку и решение (TRK#16, ч. 4; TRK-557).
  */
 function entryTypesOf(holder: Holder): HumanEntryType[] {
-  return holder.kind === 'direction' ? ['note', 'decision'] : ['note'];
+  return holder.kind === 'area' ? ['note', 'decision'] : ['note'];
 }
 
 /**
- * Запись человека в дело проекта или направления (`UI-175`, TRK-557): та же форма
+ * Запись человека в дело проекта или области (`UI-175`, TRK-557): та же форма
  * записи, что у замечания к задаче (`Composer`), — поле markdown, черновик, предпросмотр,
  * отмена с вопросом о непустом черновике (`UI-142`), — и то же подтверждение на её месте
  * (`Receipt`).
@@ -27,8 +27,8 @@ function entryTypesOf(holder: Holder): HumanEntryType[] {
  * строка текста (`titleFromText`), как у замечания: второе поле ради строки описи —
  * форма, которую человек закроет.
  *
- * У направления над полем стоит выбор типа — «заметка» или «решение»: тип меняет то, как
- * запись читают задачи направления, а не форму, поэтому поле и черновик у них общие.
+ * У области над полем стоит выбор типа — «заметка» или «решение»: тип меняет то, как
+ * запись читают задачи области, а не форму, поэтому поле и черновик у них общие.
  */
 export function EntryForm({ holder, onCancel }: { holder: Holder; onCancel: () => void }) {
   const entry = useFileEntry();
@@ -43,18 +43,18 @@ export function EntryForm({ holder, onCancel }: { holder: Holder; onCancel: () =
   const fieldReason = fields?.body ?? fields?.title;
   const legendId = useId();
   const { t } = useTranslation('project');
-  const { t: tDirection } = useTranslation('direction');
-  const direction = holder.kind === 'direction';
+  const { t: tArea } = useTranslation('area');
+  const area = holder.kind === 'area';
 
   if (filed !== null) {
     return (
       <Receipt
         label={
-          direction
-            ? tDirection(`entry.receiptLabel.${filed.type}`, { address: holder.key })
+          area
+            ? tArea(`entry.receiptLabel.${filed.type}`, { address: holder.key })
             : t('note.receiptLabel', { key: holder.key })
         }
-        headline={direction ? tDirection(`entry.receipt.${filed.type}`) : t('note.receiptHeadline')}
+        headline={area ? tArea(`entry.receipt.${filed.type}`) : t('note.receiptHeadline')}
         owner={holder}
         entryNo={filed.entryNo}
         body={filed.body}
@@ -73,7 +73,7 @@ export function EntryForm({ holder, onCancel }: { holder: Holder; onCancel: () =
          */
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="text-meta text-muted" id={legendId}>
-            {tDirection('entry.typeLegend')}
+            {tArea('entry.typeLegend')}
           </span>
           <div role="radiogroup" aria-labelledby={legendId} className="flex flex-wrap gap-x-4">
             {types.map((option) => (
@@ -90,7 +90,7 @@ export function EntryForm({ holder, onCancel }: { holder: Holder; onCancel: () =
                   onChange={() => setType(option)}
                   className="size-(--ui-mark) accent-accent"
                 />
-                {tDirection(`entry.type.${option}`)}
+                {tArea(`entry.type.${option}`)}
               </label>
             ))}
           </div>
@@ -99,16 +99,16 @@ export function EntryForm({ holder, onCancel }: { holder: Holder; onCancel: () =
 
       <Composer
         label={
-          direction
-            ? tDirection('entry.formLabel', { address: holder.key })
+          area
+            ? tArea('entry.formLabel', { address: holder.key })
             : t('note.formLabel', { key: holder.key })
         }
-        fieldLabel={direction ? tDirection(`entry.fieldLabel.${type}`) : t('note.fieldLabel')}
+        fieldLabel={area ? tArea(`entry.fieldLabel.${type}`) : t('note.fieldLabel')}
         storageKey={noteDraftKey(holder)}
-        submitLabel={direction ? tDirection(`entry.submit.${type}`) : t('note.submit')}
+        submitLabel={area ? tArea(`entry.submit.${type}`) : t('note.submit')}
         pendingLabel={t('note.pending')}
-        emptyProblem={direction ? tDirection(`entry.empty.${type}`) : t('note.empty')}
-        placeholder={direction ? tDirection(`entry.placeholder.${type}`) : t('note.placeholder')}
+        emptyProblem={area ? tArea(`entry.empty.${type}`) : t('note.empty')}
+        placeholder={area ? tArea(`entry.placeholder.${type}`) : t('note.placeholder')}
         problem={fieldReason === undefined ? undefined : fieldReasonText(fieldReason)}
         isPending={entry.isPending}
         onCancel={onCancel}
