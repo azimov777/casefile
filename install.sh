@@ -174,6 +174,55 @@ hold_updater() {
   trap 'docker start "$updater" </dev/null >/dev/null 2>&1 || true' EXIT
 }
 
+# Снимок базы перед `up` (TRK-654): повторный запуск установщика и смена `CASEFILE_VERSION`
+# мигрируют базу так же, как обновлятор, и ей нужна та же копия на случай беды. Правило и
+# запрос те же, что в `schema_revision` службы `updater` (`docker-compose.prod.yml`, TRK-652):
+# `no-table` — таблицы версии нет, база пуста, снимка нет; ревизия — сравнить с головой
+# образа; пусто (не прочлось) — как «может меняться»: снимок. Общего файла между compose и
+# установщиком нет, поэтому запрос продублирован. Снимок — тот же `pg_dump -Fc`, в том же
+# томе `updater-snapshot`, под тем же именем `before-update.dump`: сначала целиком во
+# временный файл, прежний снимок затирает лишь непустой. Сбой снимка — остановка до `up`.
+SNAPSHOT_REVISION_SQL="SELECT CASE WHEN to_regclass('public.alembic_version') IS NULL THEN 'no-table' ELSE (xpath('/row/version_num/text()', query_to_xml('SELECT version_num FROM public.alembic_version', false, true, '')))[1]::text END"
+
+snapshot_before_up() {
+  # Контейнера базы нет — установка первая, снимать нечего.
+  [ -n "$(docker compose ps -aq db </dev/null 2>/dev/null)" ] || return 0
+  revision=$(docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$1"' sh \
+    "$SNAPSHOT_REVISION_SQL" </dev/null 2>/dev/null | head -n 1)
+  [ "$revision" != no-table ] || return 0
+  why=
+  if [ -z "$revision" ]; then
+    why="could not read the schema revision of the database"
+  else
+    api_image=$(docker compose config </dev/null 2>/dev/null |
+      awk '/^  [^ ]/ { cur = $1 } cur == "api:" && /^    image: / { print $2; exit }')
+    head_revision=
+    [ -z "$api_image" ] ||
+      head_revision=$(docker run --rm --pull never --network none --entrypoint alembic "$api_image" heads \
+        </dev/null 2>/dev/null | awk 'NR == 1 { print $1 }')
+    if [ -z "$head_revision" ]; then
+      why="could not read the latest schema revision of the new image"
+    elif [ "$head_revision" != "$revision" ]; then
+      why="the release changes the database ($revision -> $head_revision)"
+    fi
+  fi
+  [ -n "$why" ] || return 0
+
+  bold "Taking a snapshot of the database before the update ($why)..."
+  dump=$(mktemp "${TMPDIR:-/tmp}/casefile-snapshot.XXXXXX")
+  if docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+      </dev/null >"$dump" 2>/dev/null && [ -s "$dump" ] &&
+    docker compose run --rm --no-deps -T --entrypoint sh updater -c \
+      'cat >/snapshot/before-update.dump.part && [ -s /snapshot/before-update.dump.part ] &&
+       mv -f /snapshot/before-update.dump.part /snapshot/before-update.dump' <"$dump" >/dev/null 2>&1; then
+    rm -f "$dump"
+    echo "  Snapshot kept in the volume updater-snapshot as before-update.dump (docs/backup-restore.md)."
+  else
+    rm -f "$dump"
+    fail "could not take a snapshot of the database before the update ($why); nothing was changed. Check that the database is running (docker compose ps db) and try again."
+  fi
+}
+
 # --- Скил во все найденные харнессы (TRK-408, решения TRK-401#11, #18) -------------------
 # Напечатанную команду агент может не выполнить, поэтому скил ставит сам установщик: для
 # каждого найденного `claude`, `codex`, `hermes` — маркетплейс и плагин, для прочих
@@ -843,6 +892,7 @@ main() {
 
   bold "Starting Casefile (the first run downloads the images)..."
   docker compose pull --quiet </dev/null
+  snapshot_before_up
   docker compose up -d --remove-orphans </dev/null
   trap - EXIT
 
