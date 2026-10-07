@@ -58,7 +58,7 @@ from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, Actor
-from conftest import Connect, call, refuse, tool_text
+from conftest import Connect, call, refuse, tool_text, without_empty_standing
 
 #: Инструменты рабочего цикла — ровно те, что перечислены в `CONCEPT.md`, 5.2.
 TASK_TOOLS = {
@@ -379,7 +379,7 @@ async def test_get_task_returns_the_same_package_as_rest(
     response = await auth_client.get(f"/api/v1/tasks/{open_task.key}")
     assert response.status_code == 200, response.text
 
-    assert from_mcp == response.json()["data"]
+    assert from_mcp == without_empty_standing(response.json()["data"])
 
 
 async def test_every_tool_declares_the_shape_of_its_answer(

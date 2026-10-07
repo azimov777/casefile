@@ -42,7 +42,7 @@ from app.services import directions as service
 from app.services import journal as journal_service
 from app.services import projects as projects_service
 from app.services.auth import Actor
-from conftest import Connect, call, refuse
+from conftest import Connect, call, refuse, without_empty_standing
 
 DIRECTIONS = "/api/v1/projects/{key}/directions"
 DIRECTION = "/api/v1/projects/{key}/directions/{direction}"
@@ -641,5 +641,5 @@ async def test_a_direction_entry_reads_the_same_through_mcp_and_rest(
     response = await auth_client.get(f"{DIRECTION.format(key='TRK', direction='x')}/entries")
     assert response.status_code == 200, response.text
 
-    assert from_mcp["items"] == response.json()["data"]
+    assert from_mcp["items"] == without_empty_standing(response.json()["data"])
     assert from_mcp["items"][1]["payload"] == {"supersedes": []}

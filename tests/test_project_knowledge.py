@@ -27,7 +27,7 @@ from app.domain.errors import EntryFieldsInvalidError, FindingNotInForceError
 from app.services import case as case_service
 from app.services import directions as directions_service
 from app.services.auth import Actor
-from conftest import Connect, call, refuse
+from conftest import Connect, call, refuse, without_empty_standing
 
 ENTRIES = "/api/v1/projects/TRK/entries"
 
@@ -48,7 +48,7 @@ async def _file(
 
 
 def _standing(item: dict[str, Any]) -> tuple[int, str | None, int | None]:
-    return item["no"], item["status"], item["superseded_by"]
+    return item["no"], item.get("status"), item.get("superseded_by")
 
 
 # --- Домен -------------------------------------------------------------------------------
@@ -103,7 +103,7 @@ async def test_a_finding_superseded_by_a_finding_reads_with_its_successor_throug
     ]
     assert [item["no"] for item in superseded["items"]] == [a["no"]]
     # Записи без статуса — служебная `created` и заметка `note` — приходят с `null`.
-    assert {(item["type"], item["status"]) for item in everything["items"]} == {
+    assert {(item["type"], item.get("status")) for item in everything["items"]} == {
         ("created", None),
         ("finding", "superseded"),
         ("finding", "in_force"),
@@ -145,7 +145,7 @@ async def test_a_finding_superseded_by_a_finding_reads_the_same_through_rest(
     async with mcp_session(task_secret) as session:
         from_mcp = await call(session, "read_project_entries", key="TRK")
     from_rest = await auth_client.get(ENTRIES)
-    assert from_mcp["items"] == from_rest.json()["data"]
+    assert from_mcp["items"] == without_empty_standing(from_rest.json()["data"])
 
 
 async def test_in_force_combines_with_the_other_filters(
@@ -320,7 +320,9 @@ async def test_a_direction_case_keeps_refusing_supersedes_and_has_no_status(
 
     assert "entry_fields_invalid" in refused
     assert "supersedes" in refused
-    assert {(item["status"], item["superseded_by"]) for item in listed["items"]} == {(None, None)}
+    assert {(item.get("status"), item.get("superseded_by")) for item in listed["items"]} == {
+        (None, None)
+    }
     assert in_force["items"] == []
     rest = await auth_client.get(f"/api/v1/projects/TRK/directions/x/entries/{fact['no']}")
     assert rest.status_code == 200, rest.text
@@ -339,8 +341,41 @@ async def test_a_task_finding_reads_without_a_status(
         listed = await call(session, "read_entries", key=task.key, types=["finding"])
 
     [fact] = listed["items"]
-    assert (fact["status"], fact["superseded_by"], fact["payload"]) == (
+    assert (fact.get("status"), fact.get("superseded_by"), fact["payload"]) == (
         None,
         None,
         {"supersedes": []},
     )
+
+
+async def test_an_entry_without_a_status_carries_neither_status_key_in_mcp(
+    mcp_session: Connect, task_secret: str, task: Task, project: Project
+) -> None:
+    """TRK-665, проверка 2: у записи дела задачи в `read_entries`, `get_task` и
+    `wait_journal` нет ключей `status` и `superseded_by`; решение дела проекта в
+    `read_project_entries` их несёт, и у действующего `superseded_by` — `null`."""
+    async with mcp_session(task_secret) as session:
+        await call(session, "add_entry", key=task.key, type="finding", title="Факт")
+        await call(
+            session,
+            "add_summary",
+            key=task.key,
+            done="Сделано",
+            remaining="Остальное",
+            blockers="нет",
+            next_step="Дальше",
+        )
+        read = await call(session, "read_entries", key=task.key)
+        got = await call(session, "get_task", key=task.key)
+        tail = await call(session, "wait_journal", after=0, task=task.key)
+        await call(session, "add_project_entry", key=project.key, type="decision", title="Решение")
+        kept = await call(session, "read_project_entries", key=project.key, types=["decision"])
+
+    got_entries = [got["summary"]]
+    for items in (read["items"], got_entries, tail["items"]):
+        assert items
+        for item in items:
+            assert "status" not in item
+            assert "superseded_by" not in item
+    [decision] = kept["items"]
+    assert (decision["status"], decision["superseded_by"]) == ("in_force", None)
