@@ -914,8 +914,23 @@ $SnapshotRevisionSql = "SELECT CASE WHEN to_regclass('public.alembic_version') I
 
 function Invoke-SnapshotBeforeUp {
     $ErrorActionPreference = 'Continue'
+    # Первая установка — нет тома базы, а не нет контейнера `db` (TRK-664): после
+    # `docker compose down` без `-v` контейнеров нет, а том `pgdata` цел. Том есть —
+    # поднять одну `db`, дождаться здоровья, дальше те же правила.
     $dbId = (& docker compose ps -aq db 2>$null | Out-String).Trim()
-    if (-not $dbId) { return }
+    if (-not $dbId) {
+        $project = ''
+        foreach ($line in (& docker compose config 2>$null)) {
+            if ($line -match '^name: (\S+)') { $project = $Matches[1]; break }
+        }
+        if (-not $project) { $project = (Split-Path -Leaf (Get-Location).Path).ToLower() }
+        $volume = (& docker volume ls -q --filter "label=com.docker.compose.project=$project" --filter 'label=com.docker.compose.volume=pgdata' 2>$null | Out-String).Trim()
+        if (-not $volume) { return }
+        & docker compose up -d --wait db *> $null
+        if ($LASTEXITCODE -ne 0) {
+            Fail 'the database volume exists but the database did not start, so it could not be snapshotted; nothing was changed. See: docker compose logs db'
+        }
+    }
     $revision = (& docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$1"' sh $SnapshotRevisionSql 2>$null |
         Select-Object -First 1 | Out-String).Trim()
     if ($revision -eq 'no-table') { return }
