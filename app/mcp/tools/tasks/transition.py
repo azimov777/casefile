@@ -17,8 +17,8 @@ ReasonArg = Annotated[
             "Why the task moves. Required for any step back along `backlog < open < "
             "in_progress < done` and for `cancelled` (`transition_reason_required` "
             "otherwise), optional elsewhere. Filed in the `status_changed` entry as text "
-            "only: a wait is held by its carrier — an open `blocking` question, "
-            "`blocked_by` or `not_before` — and not by the reason"
+            "only: a wait is held by its carrier — an open question of an attached "
+            "discussion, `blocked_by` or `not_before` — and not by the reason"
         )
     ),
 ]
@@ -42,11 +42,12 @@ def register(tools: Toolset) -> None:
         into it — `summary_required`; entering `in_progress` without an assignee —
         `assignee_required`, by anyone but the assignee — `assignee_mismatch` (assignee
         and caller signature in `details`), with an open blocker — `task_blocked`, with
-        an unanswered `blocking` question — `task_has_open_blocking_questions` (question
-        numbers in `details.questions`), before its `not_before` moment while the
-        `deferred` feature is true — `task_deferred` (the moment in `details.not_before`);
+        an unanswered question of an attached discussion — `task_has_open_blocking_questions`
+        (question addresses in `details.questions`), before its `not_before` moment while
+        the `deferred` feature is true — `task_deferred` (the moment in `details.not_before`);
         `open` with incomplete sections — `task_sections_incomplete`; `cancelled` with
-        open children — `task_has_unclosed_children`; `done` — `closing_not_a_transition`,
+        open children — `task_has_unclosed_children`, with an attached discussion not
+        closed — `task_has_open_discussions`; `done` — `closing_not_a_transition`,
         since a task is closed by `close_task`; a move outside the table —
         `transition_not_allowed`, the allowed targets in `details.allowed`.
 

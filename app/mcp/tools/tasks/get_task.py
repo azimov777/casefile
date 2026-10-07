@@ -21,6 +21,7 @@ from app.mcp.toolset import READ_ONLY, Toolset
 from app.mcp.views import AuthorView, author
 from app.services import tasks as tasks_service
 from app.services.decisions import CitedDecision, DecisionRef
+from app.services.discussions import TaskDiscussion
 from app.services.links import TaskLink
 from app.services.tasks import TaskPackage
 
@@ -112,6 +113,40 @@ def cited_decision(value: CitedDecision) -> CitedDecisionView:
     )
 
 
+# Обсуждение в пакете: адрес, название, статус и чей ход строками — перечисление
+# встало бы в схему копией, а смысл значений сказан в описании `turn`. Записи — та же
+# `EntryView`, что у вопросов и сводки: её форма в `outputSchema` уже есть.
+class TaskDiscussionView(BaseModel):
+    """Discussion the task is attached to."""
+
+    address: str
+    title: str
+    status: str = Field(description="`open` or `closed`")
+    turn: str | None = Field(
+        description=(
+            "`human`: a question has no answer; `agent`: an answer or a person's entry "
+            "follows the latest conclusion; else `null`"
+        )
+    )
+    open_questions: list[EntryView]
+    conclusion: EntryView | None = Field(description="Latest conclusion")
+
+
+def task_discussion(value: TaskDiscussion) -> TaskDiscussionView:
+    """Обсуждение в пакете преемника — тот же набор полей, что `TaskDiscussionRead` в REST."""
+    address = value.discussion.address
+    return TaskDiscussionView(
+        address=address,
+        title=value.discussion.title,
+        status=value.discussion.status.value,
+        turn=None if value.turn is None else value.turn.value,
+        open_questions=[entry(item, discussion=address) for item in value.open_questions],
+        conclusion=None
+        if value.conclusion is None
+        else entry(value.conclusion, discussion=address),
+    )
+
+
 def parent_card(value: TaskLink) -> ParentCardView:
     """Родитель в карточке ребёнка: как `link_other`, плюс цель не длиннее потолка."""
     goal, truncated = clip_parent_goal(value.other.goal)
@@ -141,6 +176,13 @@ class TaskPackageView(BaseModel):
     summary: EntryView | None = None
     questions: list[EntryView] = Field(default=None)  # type: ignore[assignment]
     remarks: list[EntryView] = Field(default=None)  # type: ignore[assignment]
+    discussions: list[TaskDiscussionView] = Field(
+        default=None,  # type: ignore[assignment]
+        description=(
+            "Discussions the task is attached to, by address. Their answers, entries of "
+            "people and latest conclusions set the work together with the sections"
+        ),
+    )
     transitions: list[TaskStatusSchema]
     index: list[HeadingView] = Field(default=None)  # type: ignore[assignment]
 
@@ -164,6 +206,7 @@ def task_package(package: TaskPackage) -> TaskPackageView:
         summary=None if package.summary is None else entry(package.summary, task_key=key),
         questions=[entry(question, task_key=key) for question in package.questions],
         remarks=[entry(remark, task_key=key) for remark in package.remarks],
+        discussions=[task_discussion(item) for item in package.discussions],
         transitions=list(package.transitions),
         index=[heading(item) for item in package.index],
     )
@@ -216,14 +259,15 @@ def register(tools: Toolset) -> None:
     async def get_task(key: TaskKeyArg, brief: BriefArg = False) -> TaskPackageView:
         """Returns everything about one task in a single call: `state` first, card, parent
         and children, links from both sides, the project decisions it relies on, computed
-        features, latest summary, open questions, unresolved remarks, case index and
-        transition targets.
+        features, latest summary, open questions of its case, unresolved remarks, the
+        discussions it is attached to, case index and transition targets.
 
         `state` is computed on read: last transition with its reason, parts of the latest
-        summary, entries after it, open questions and remarks, blockers, children by status
-        and the decisions filed after the sections were last edited. `brief=true` returns
-        `state`, a short `task` header, `parent`, `features` and `transitions`; the sections
-        that set the work come without it.
+        summary, entries after it, open questions of the case and of its discussions,
+        remarks, blockers, children by status, and the decisions, conclusions and entries
+        of people in its discussions filed after the sections were last edited.
+        `brief=true` returns `state`, a short `task` header, `parent`, `features` and
+        `transitions`; the sections that set the work come without it.
 
         `parent` and `children` are fields of their own and are absent from `links`,
         which holds `blocks`, `blocked_by` and `relates`, each named by this task's
@@ -239,7 +283,7 @@ def register(tools: Toolset) -> None:
         stays in `remarks` and in `open_remarks` until `resolve` gives it an outcome.
 
         `transitions` lists the targets of the transition table from the current status,
-        not moves checked in advance: sections, summary, verdicts, blockers, `blocking`
+        not moves checked in advance: sections, summary, verdicts, blockers, unanswered
         questions, the `not_before` moment and children are checked by the `transition`
         call itself. Whether `in_progress` is open shows in the `blocked`, `deferred` and
         `open_blocking_questions` features; `deferred` stays true until the card's

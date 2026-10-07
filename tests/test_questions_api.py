@@ -7,9 +7,11 @@
 from typing import Any
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 from tests.test_case_api import append, create, package, refuse
 
 from app.db.models.project import Project
+from conftest import legacy_question
 
 
 async def register(client: AsyncClient, name: str) -> None:
@@ -20,15 +22,10 @@ async def register(client: AsyncClient, name: str) -> None:
     assert response.status_code == 201, response.text
 
 
-async def ask(client: AsyncClient, key: str, title: str, *, to: str, blocking: bool) -> int:
-    entry = await append(
-        client,
-        key,
-        type="question",
-        title=title,
-        payload={"addressees": [to], "blocking": blocking},
-    )
-    return entry["no"]
+async def ask(session: AsyncSession, key: str, title: str, *, to: str, blocking: bool) -> int:
+    """Прежний вопрос дела задачи: выдача вопросов читает именно такие (TRK-671)."""
+    entry = await legacy_question(session, key, title=title, addressees=[to], blocking=blocking)
+    return entry.no
 
 
 async def questions(client: AsyncClient, **params: Any) -> list[dict[str, Any]]:
@@ -40,14 +37,14 @@ async def questions(client: AsyncClient, **params: Any) -> list[dict[str, Any]]:
 
 
 async def test_the_inbox_keeps_the_open_blocking_questions_of_the_current_participant(
-    auth_client: AsyncClient, project: Project
+    db_session: AsyncSession, auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 9."""
     await register(auth_client, "reviewer")
     await create(auth_client)
-    blocking_no = await ask(auth_client, "TRK-1", "Ждёт ответа", to="owner", blocking=True)
-    await ask(auth_client, "TRK-1", "Ждать не нужно", to="owner", blocking=False)
-    await ask(auth_client, "TRK-1", "Чужой", to="reviewer", blocking=True)
+    blocking_no = await ask(db_session, "TRK-1", "Ждёт ответа", to="owner", blocking=True)
+    await ask(db_session, "TRK-1", "Ждать не нужно", to="owner", blocking=False)
+    await ask(db_session, "TRK-1", "Чужой", to="reviewer", blocking=True)
 
     blocking = await questions(auth_client, blocking=True)
     assert [question["title"] for question in blocking] == ["Ждёт ответа"]
@@ -68,11 +65,11 @@ async def test_the_inbox_keeps_the_open_blocking_questions_of_the_current_partic
 
 
 async def test_the_answered_questions_are_readable_too(
-    auth_client: AsyncClient, project: Project
+    db_session: AsyncSession, auth_client: AsyncClient, project: Project
 ) -> None:
     """`open=false` — вторая половина выдачи; «все вопросы задачи» читаются из её дела."""
     await create(auth_client)
-    no = await ask(auth_client, "TRK-1", "Ждёт ответа", to="owner", blocking=False)
+    no = await ask(db_session, "TRK-1", "Ждёт ответа", to="owner", blocking=False)
     await append(auth_client, "TRK-1", type="answer", body="Да", payload={"question_no": no})
 
     assert await questions(auth_client) == []
@@ -82,7 +79,7 @@ async def test_the_answered_questions_are_readable_too(
 
 
 async def test_the_inbox_is_filtered_by_addressee_and_project(
-    auth_client: AsyncClient, project: Project
+    db_session: AsyncSession, auth_client: AsyncClient, project: Project
 ) -> None:
     await register(auth_client, "reviewer")
     created = await auth_client.post(
@@ -95,8 +92,8 @@ async def test_the_inbox_is_filtered_by_addressee_and_project(
     assert core.status_code == 201, core.text
     await create(auth_client)
     await create(auth_client, project="OPS", area="OPS/core")
-    await ask(auth_client, "TRK-1", "Вопрос в TRK", to="reviewer", blocking=False)
-    await ask(auth_client, "OPS-1", "Вопрос в OPS", to="reviewer", blocking=False)
+    await ask(db_session, "TRK-1", "Вопрос в TRK", to="reviewer", blocking=False)
+    await ask(db_session, "OPS-1", "Вопрос в OPS", to="reviewer", blocking=False)
 
     # Адресация мягкая по регистру — как и везде, где адресуют по имени.
     assert [q["title"] for q in await questions(auth_client, addressee="Reviewer")] == [
@@ -135,7 +132,7 @@ async def test_a_shared_agent_token_must_name_the_addressee(
 
 
 async def test_a_question_carries_its_answers_in_order_and_only_its_own(
-    auth_client: AsyncClient, project: Project
+    db_session: AsyncSession, auth_client: AsyncClient, project: Project
 ) -> None:
     """История: ответы едут со строкой вопроса, а не отдельным запросом на задачу.
 
@@ -144,8 +141,8 @@ async def test_a_question_carries_its_answers_in_order_and_only_its_own(
     """
     await create(auth_client)
     await create(auth_client)
-    answered = await ask(auth_client, "TRK-1", "Отвеченный", to="owner", blocking=False)
-    twin = await ask(auth_client, "TRK-2", "Тот же номер", to="owner", blocking=False)
+    answered = await ask(db_session, "TRK-1", "Отвеченный", to="owner", blocking=False)
+    twin = await ask(db_session, "TRK-2", "Тот же номер", to="owner", blocking=False)
     assert answered == twin
     first = await append(
         auth_client, "TRK-1", type="answer", body="Да", payload={"question_no": answered}
@@ -174,11 +171,11 @@ async def test_a_question_carries_its_answers_in_order_and_only_its_own(
 
 
 async def test_the_newest_order_pages_backwards_with_its_own_cursor(
-    auth_client: AsyncClient, project: Project
+    db_session: AsyncSession, auth_client: AsyncClient, project: Project
 ) -> None:
     await create(auth_client)
     for title in ("Первый", "Второй", "Третий"):
-        await ask(auth_client, "TRK-1", title, to="owner", blocking=False)
+        await ask(db_session, "TRK-1", title, to="owner", blocking=False)
 
     first = await auth_client.get(
         "/api/v1/questions", params={"order": "newest", "limit": 2, "open": False}
@@ -208,12 +205,12 @@ async def test_the_newest_order_pages_backwards_with_its_own_cursor(
 
 
 async def test_any_addressee_drops_the_addressee_filter(
-    auth_client: AsyncClient, project: Project
+    db_session: AsyncSession, auth_client: AsyncClient, project: Project
 ) -> None:
     await register(auth_client, "reviewer")
     await create(auth_client)
-    await ask(auth_client, "TRK-1", "Мне", to="owner", blocking=False)
-    await ask(auth_client, "TRK-1", "Ему", to="reviewer", blocking=False)
+    await ask(db_session, "TRK-1", "Мне", to="owner", blocking=False)
+    await ask(db_session, "TRK-1", "Ему", to="reviewer", blocking=False)
 
     assert [q["title"] for q in await questions(auth_client)] == ["Мне"]
     assert [q["title"] for q in await questions(auth_client, any_addressee=True)] == [
@@ -249,16 +246,14 @@ async def case_size(client: AsyncClient, key: str) -> int:
 
 
 async def test_a_withdrawn_question_leaves_the_inbox_and_its_history_names_why(
-    auth_client: AsyncClient, project: Project
+    db_session: AsyncSession, auth_client: AsyncClient, project: Project
 ) -> None:
     """(б) и (в) через REST: снятый и заменённый вопрос уходят из входящей и счётчиков,
     а в истории стоят с записью исхода под собой."""
     await create(auth_client)
-    dropped = await ask(
-        auth_client, "TRK-1", "Нужен ли старый эндпоинт?", to="owner", blocking=True
-    )
-    stale = await ask(auth_client, "TRK-1", "Какой ключ канонический?", to="owner", blocking=True)
-    fresh = await ask(auth_client, "TRK-1", "Верхний годится?", to="owner", blocking=False)
+    dropped = await ask(db_session, "TRK-1", "Нужен ли старый эндпоинт?", to="owner", blocking=True)
+    stale = await ask(db_session, "TRK-1", "Какой ключ канонический?", to="owner", blocking=True)
+    fresh = await ask(db_session, "TRK-1", "Верхний годится?", to="owner", blocking=False)
     before = (await package(auth_client, "TRK-1"))["features"]
     assert (before["open_questions"], before["open_blocking_questions"]) == (3, 2)
 
@@ -311,12 +306,12 @@ async def test_a_withdrawn_question_leaves_the_inbox_and_its_history_names_why(
 
 
 async def test_every_refusal_of_a_withdrawal_is_named_and_files_nothing(
-    auth_client: AsyncClient, project: Project
+    db_session: AsyncSession, auth_client: AsyncClient, project: Project
 ) -> None:
     """(г) Каждое правило отказывает `entry_fields_invalid` с причиной; дело не растёт."""
     await create(auth_client)
-    stale = await ask(auth_client, "TRK-1", "Какой ключ?", to="owner", blocking=False)
-    fresh = await ask(auth_client, "TRK-1", "Верхний?", to="owner", blocking=False)
+    stale = await ask(db_session, "TRK-1", "Какой ключ?", to="owner", blocking=False)
+    fresh = await ask(db_session, "TRK-1", "Верхний?", to="owner", blocking=False)
     note = await append(auth_client, "TRK-1", type="note", title="Заметка")
     size = await case_size(auth_client, "TRK-1")
 
@@ -418,11 +413,11 @@ async def test_every_refusal_of_a_withdrawal_is_named_and_files_nothing(
 
 
 async def test_a_repeated_withdrawal_answers_with_the_first_entry(
-    auth_client: AsyncClient, project: Project
+    db_session: AsyncSession, auth_client: AsyncClient, project: Project
 ) -> None:
     """(ж) Повтор с тем же `Idempotency-Key` отдаёт первую запись, а не отказ «уже снят»."""
     await create(auth_client)
-    stale = await ask(auth_client, "TRK-1", "Какой ключ?", to="owner", blocking=False)
+    stale = await ask(db_session, "TRK-1", "Какой ключ?", to="owner", blocking=False)
     headers = {"Idempotency-Key": "c0ffee00-0000-4000-8000-000000000552"}
     entry = {
         "type": "answer",

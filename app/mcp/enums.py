@@ -71,6 +71,36 @@ LinkKindSchema = Annotated[
     LinkKind,
     described(LinkKind, "Link kind, named by the role of the task the link is shown for"),
 ]
+
+
+class LinkToolKind(StrEnum):
+    """Вид в аргументе `link` и `unlink`: виды связи домена и привязка к обсуждению.
+
+    Привязка задачи к обсуждению — не связь двух задач (`TRK#51`, п. 3), и в `LinkKind`
+    её нет: там перечислены виды строк таблицы связей. Инструменты связи принимают её
+    видом `attached` (решение TRK-671#11), поэтому у аргумента своё перечисление —
+    виды домена и `attached`. Что виды домена здесь все и те же, стережёт проверка ниже.
+    """
+
+    PARENT = LinkKind.PARENT.value
+    CHILD = LinkKind.CHILD.value
+    BLOCKS = LinkKind.BLOCKS.value
+    BLOCKED_BY = LinkKind.BLOCKED_BY.value
+    RELATES = LinkKind.RELATES.value
+    ATTACHED = EntryType.ATTACHED.value
+
+
+assert {kind.value for kind in LinkToolKind} == {kind.value for kind in LinkKind} | {
+    LinkToolKind.ATTACHED.value
+}, "виды связи домена и аргумента `link` разошлись"
+
+LinkToolKindSchema = Annotated[
+    LinkToolKind,
+    described(
+        LinkToolKind,
+        "Link kind, named by the role of the task `key`; `attached` attaches it to a discussion",
+    ),
+]
 AuthorKindSchema = Annotated[
     AuthorKind,
     described(

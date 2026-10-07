@@ -222,7 +222,12 @@ OpenQuestionsArg = Annotated[
 
 OpenBlockingQuestionsArg = Annotated[
     int | None,
-    Field(description="Exact number of unanswered `blocking` questions; `0` means none blocks"),
+    Field(
+        description=(
+            "Exact number of unanswered questions that hold the task: all of its attached "
+            "discussions, `blocking` ones of its own case; `0` means none blocks"
+        )
+    ),
 ]
 
 OpenRemarksArg = Annotated[

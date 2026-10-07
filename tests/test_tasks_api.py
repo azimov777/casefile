@@ -5,9 +5,11 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.project import Project
 from app.db.models.task import Task
+from conftest import legacy_question
 
 READY = {
     "project": "trk",
@@ -112,6 +114,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
     assert sorted(package) == [
         "children",
         "decisions",
+        "discussions",
         "features",
         "index",
         "links",
@@ -125,6 +128,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
     ]
     assert package["links"] == []
     assert package["decisions"] == []
+    assert package["discussions"] == []
     assert package["task"]["key"] == "TRK-1"
     assert package["transitions"] == ["open", "cancelled"]
     assert package["summary"] is None
@@ -223,22 +227,15 @@ async def test_waiting_is_refused_as_a_target_by_the_value_check(
     assert task["status"] == "open"
 
 
-async def ask(client: AsyncClient, key: str, *, blocking: bool) -> int:
-    """Вопрос владельцу; возвращает номер записи — по нему ответ и отказ называют вопрос."""
-    response = await client.post(
-        f"/api/v1/tasks/{key}/entries",
-        json={
-            "type": "question",
-            "title": "Блокирующий" if blocking else "Попутный",
-            "payload": {"addressees": ["owner"], "blocking": blocking},
-        },
-    )
-    assert response.status_code == 201, response.text
-    return response.json()["data"]["no"]
+async def ask(session: AsyncSession, key: str, *, blocking: bool) -> int:
+    """Прежний вопрос владельцу в деле задачи (TRK-671: новых там нет); возвращает номер
+    записи — по нему ответ и отказ называют вопрос."""
+    title = "Блокирующий" if blocking else "Попутный"
+    return (await legacy_question(session, key, title=title, blocking=blocking)).no
 
 
 async def test_an_open_blocking_question_keeps_the_task_out_of_work(
-    auth_client: AsyncClient, project: Project
+    db_session: AsyncSession, auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 4 TRK-573: вход в работу держит открытый вопрос с `blocking`.
 
@@ -249,8 +246,8 @@ async def test_an_open_blocking_question_keeps_the_task_out_of_work(
     """
     await create(auth_client)
     await move(auth_client, "TRK-1", "open")
-    blocking = await ask(auth_client, "TRK-1", blocking=True)
-    side = await ask(auth_client, "TRK-1", blocking=False)
+    blocking = await ask(db_session, "TRK-1", blocking=True)
+    side = await ask(db_session, "TRK-1", blocking=False)
 
     refused = await auth_client.post("/api/v1/tasks/TRK-1/transition", json={"to": "in_progress"})
     assert refused.status_code == 409, refused.text
@@ -280,12 +277,12 @@ async def test_an_open_blocking_question_keeps_the_task_out_of_work(
 
 
 async def test_a_non_blocking_question_alone_does_not_hold_the_way_into_work(
-    auth_client: AsyncClient, project: Project
+    db_session: AsyncSession, auth_client: AsyncClient, project: Project
 ) -> None:
     """Обзорная проверка 4 TRK-573, вторая часть: открытый неблокирующий вопрос — вход проходит."""
     await create(auth_client)
     await move(auth_client, "TRK-1", "open")
-    await ask(auth_client, "TRK-1", blocking=False)
+    await ask(db_session, "TRK-1", blocking=False)
 
     passed = await auth_client.post("/api/v1/tasks/TRK-1/transition", json={"to": "in_progress"})
 

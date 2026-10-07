@@ -69,6 +69,7 @@ def _state(index: list[EntryHeading], **overrides: Any) -> Any:
         "remarks": [],
         "open_blockers": [],
         "children": [],
+        "discussions_after_card": [],
     }
     arguments.update(overrides)
     return build_state(**arguments)
@@ -153,30 +154,33 @@ async def test_state_reflects_the_wait_the_answer_and_the_open_question(
             blockers="Нужен ответ владельца",
             next_step="Ждать ответа",
         )
-        await call(
-            session,
-            "ask",
-            key=key,
-            addressees=["owner"],
-            title="Брать вариант 3?",
-            blocking=True,
-        )
-        await call(session, "transition", key=key, to="open", reason="Жду ответа на " + key + "#5")
+        asked = await call(session, "ask", key=key, addressees=["owner"], title="Брать вариант 3?")
+        waited = f"{asked['discussion']}#{asked['no']}"
+        await call(session, "transition", key=key, to="open", reason="Жду ответа на " + waited)
         await call(session, "add_entry", key=key, type="finding", title="Свежая находка")
         package = await call(session, "get_task", key=key)
 
     assert next(iter(package)) == "state"
     state = package["state"]
     assert state["status"] == "open"
-    assert state["last_transition"]["reason"] == f"Жду ответа на {key}#5"
+    assert state["last_transition"]["reason"] == f"Жду ответа на {waited}"
     assert state["last_transition"]["from_status"] == "in_progress"
     assert state["last_summary"]["next_step"] == "Ждать ответа"
     assert state["last_summary"]["unmeasured"] is None
     assert state["after_summary"] == state["last_summary"]["no"]
-    assert state["recent_total"] == 2
+    # После сводки в деле задачи — привязка к обсуждению (служебная) и находка: вопрос
+    # лежит в деле обсуждения (TRK-671), и строкой после сводки его здесь нет.
+    assert state["recent_total"] == 1
     assert state["recent"][-1].endswith(": Свежая находка")
+    # Вопрос — в обсуждении задачи (TRK-671): номер в его деле и адрес обсуждения.
     assert state["questions"] == [
-        {"no": 5, "to": ["owner"], "blocking": True, "title": "Брать вариант 3?"}
+        {
+            "no": asked["no"],
+            "to": ["owner"],
+            "blocking": True,
+            "title": "Брать вариант 3?",
+            "discussion": asked["discussion"],
+        }
     ]
     assert state["children"] == {}
     assert state["children_unclosed"] == []

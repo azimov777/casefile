@@ -27,7 +27,7 @@
 
 from collections.abc import Callable, Sequence
 
-from app.mcp.tools import case, journal, links, registries, tasks
+from app.mcp.tools import case, discussions, journal, links, registries, tasks
 from app.mcp.toolset import Toolset
 
 #: Порядок сборки. Он же порядок, в котором инструменты появляются в `tools/list`, —
@@ -35,6 +35,7 @@ from app.mcp.toolset import Toolset
 REGISTRARS: Sequence[Callable[[Toolset], None]] = (
     tasks.register,
     case.register,
+    discussions.register,
     links.register,
     registries.register,
     journal.register,

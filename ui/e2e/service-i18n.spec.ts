@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { LANGUAGE_STORAGE_KEY } from '../src/shared/i18n/languages';
-import { readE2eToken, removeLink, silenceJournal } from './contour';
+import { fileLegacyQuestion, readE2eToken, removeLink, silenceJournal } from './contour';
 
 /*
  * Служебное на языке человека (UI-140): карточка задачи и лента её дела на русском не
@@ -121,18 +121,14 @@ function seed(request: APIRequestContext): Promise<Seeded> {
         { type: 'decision', title: GREEK.text, body: GREEK.text },
         201,
       );
-      const question = await api(
-        request,
-        'post',
-        entries,
-        {
-          type: 'question',
-          title: GREEK.text,
-          body: GREEK.text,
-          payload: { addressees: [me], blocking: false },
-        },
-        201,
-      );
+      // Прежний вопрос дела задачи: новый REST отвергает (TRK-671), а лента их показывает.
+      const question = fileLegacyQuestion({
+        key,
+        title: GREEK.text,
+        body: GREEK.text,
+        author: me,
+        addressees: [me],
+      });
       await api(
         request,
         'post',

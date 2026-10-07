@@ -696,7 +696,7 @@ async def test_a_waiting_child_keeps_the_parent_from_closing(
     child = await make(db_session, task_actor, project, "ребёнок")
     await service.add_link(db_session, parent, child, actor=task_actor, kind=LinkKind.PARENT)
     await move(db_session, child, task_actor, TaskStatus.OPEN)
-    await case_service.ask(
+    await case_service.file_legacy_task_question(
         db_session,
         child,
         actor=task_actor,

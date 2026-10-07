@@ -33,7 +33,7 @@ from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.pagination import Page
-from app.db.repositories import DiscussionRepository
+from app.db.repositories import DiscussionRepository, EntryRepository
 from app.db.repositories.discussions import DiscussionRow
 from app.domain.case import EntryContext, EntryType, build_entry, format_entry_ref
 from app.domain.discussions import (
@@ -70,6 +70,25 @@ class DiscussionDetail:
     turn: DiscussionTurn | None
     open_questions: int
     attachments: list[DiscussionTask]
+    conclusion: Entry | None
+
+
+@dataclass(frozen=True, slots=True)
+class DiscussionOpening:
+    """Заведённое обсуждение и его первая запись — вопрос или записка."""
+
+    discussion: Discussion
+    entry: Entry
+
+
+@dataclass(frozen=True, slots=True)
+class TaskDiscussion:
+    """Обсуждение в пакете преемника задачи (`TRK#51`, п. 5): карточка, чей ход, открытые
+    вопросы целиком и последний итог целиком."""
+
+    discussion: Discussion
+    turn: DiscussionTurn | None
+    open_questions: list[Entry]
     conclusion: Entry | None
 
 
@@ -139,6 +158,40 @@ async def list_discussions(
     )
 
 
+async def task_discussions(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    open_questions: Sequence[tuple[Entry, str]],
+) -> list[TaskDiscussion]:
+    """Обсуждения, к которым задача привязана, для её пакета преемника — по адресу.
+
+    Открытые и закрытые: итог закрытого тоже задаёт работу (`TRK#51`, п. 5). Открытые
+    вопросы приходят уже прочитанными — пары «вопрос и адрес обсуждения» из
+    `case.open_discussion_questions`, тем же списком, из которого пакет считает признаки:
+    второй раз их не читать и разойтись с признаками им негде. Запросов два на любое число
+    обсуждений: строки с признаками и последние итоги.
+    """
+    rows = await DiscussionRepository(session).of_task(task.id)
+    if not rows:
+        return []
+    entries = EntryRepository(session)
+    questions: dict[str, list[Entry]] = {}
+    for question, address in open_questions:
+        questions.setdefault(address, []).append(question)
+    conclusions = await entries.last_conclusions([row.discussion.id for row in rows])
+    return [
+        TaskDiscussion(
+            discussion=row.discussion,
+            turn=row.turn,
+            open_questions=questions.get(row.discussion.address, []),
+            conclusion=conclusions.get(row.discussion.id),
+        )
+        for row in rows
+    ]
+
+
 async def count_waiting_on_humans(session: AsyncSession) -> int:
     """Сколько незакрытых обсуждений ждут человека — число для значка входящей."""
     return await DiscussionRepository(session).count_waiting_on_humans()
@@ -160,7 +213,65 @@ async def create_discussion(
     tasks: Sequence[Task] = (),
 ) -> Discussion:
     """Заводит обсуждение первой записью — запиской или вопросом — и привязывает задачи
-    тем же действием (`TRK#51`, пункты 1, 3 и 6).
+    тем же действием (`TRK#51`, пункты 1, 3 и 6). Ответ — само обсуждение; кому нужна и
+    первая запись, зовёт `open_discussion`."""
+    opened = await open_discussion(
+        session,
+        actor=actor,
+        project=project,
+        title=title,
+        opening=opening,
+        body=body,
+        refs=refs,
+        addressees=addressees,
+        tasks=tasks,
+    )
+    return opened.discussion
+
+
+async def ask_about_task(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    addressees: Any,
+    title: Any,
+    body: Any = "",
+    refs: Any = (),
+) -> DiscussionOpening:
+    """Вопрос по задаче: заводит обсуждение этим вопросом в проекте задачи и привязывает к
+    нему задачу — одним действием (`TRK#51`, п. 6), как `create_task(parent)` рождает связь.
+
+    Название обсуждения — заголовок вопроса. Каждый вызов заводит новое обсуждение:
+    вопрос в уже идущем задают по его адресу (`case.ask_in_discussion`).
+    """
+    return await open_discussion(
+        session,
+        actor=actor,
+        project=task.project,
+        title=title,
+        opening=EntryType.QUESTION,
+        body=body,
+        refs=refs,
+        addressees=addressees,
+        tasks=[task],
+    )
+
+
+async def open_discussion(
+    session: AsyncSession,
+    *,
+    actor: Actor,
+    project: Project,
+    title: Any,
+    opening: Any,
+    body: Any = "",
+    refs: Any = (),
+    addressees: Any = None,
+    tasks: Sequence[Task] = (),
+) -> DiscussionOpening:
+    """Заводит обсуждение первой записью — запиской или вопросом — и привязывает задачи
+    тем же действием (`TRK#51`, пункты 1, 3 и 6); ответ несёт и первую запись.
 
     Название обсуждения и заголовок первой записи — одна строка: обсуждение и есть узкий
     вопрос, и у вопроса, которым его завели, другого названия нет. Отсюда и проверка
@@ -218,7 +329,7 @@ async def create_discussion(
     await case_service.record_discussion_created(
         session, discussion, actor=actor, action_id=action_id
     )
-    await case_service.append_discussion_entry(
+    first = await case_service.append_discussion_entry(
         session,
         discussion,
         actor=actor,
@@ -231,7 +342,7 @@ async def create_discussion(
     )
     for task in attached:
         await _attach(session, discussion, task, actor=actor, action_id=action_id)
-    return discussion
+    return DiscussionOpening(discussion=discussion, entry=first)
 
 
 # --- Привязка ---------------------------------------------------------------------------

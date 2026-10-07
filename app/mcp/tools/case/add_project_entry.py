@@ -1,5 +1,5 @@
 """Инструмент `add_project_entry`: запись в дело проекта или области — решение,
-находка, артефакт, заметка.
+находка, артефакт, заметка — и заметка в дело обсуждения по его адресу.
 """
 
 from typing import Annotated, Literal
@@ -7,13 +7,15 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 from app.domain.case import EntryType
-from app.mcp.arguments import CaseOwnerKeyArg, IdempotencyKeyArg
+from app.domain.discussions import is_discussion_address
+from app.mcp.arguments import CaseAddressArg, IdempotencyKeyArg
 from app.mcp.idempotency import Once
 from app.mcp.tools.case.arguments import EntryBodyArg, EntryRefsArg
 from app.mcp.tools.case.views import AppendedProjectEntryView, appended_project_entry
 from app.mcp.toolset import FILING, Toolset
 from app.services import areas as areas_service
 from app.services import case as case_service
+from app.services import discussions as discussions_service
 from app.services.case import owner_name
 
 # Набор типов объявлен `Literal` прямо в аннотации, как у `add_entry`: агент видит его в
@@ -28,8 +30,10 @@ ProjectEntryTypeArg = Annotated[
             "reason, that outlives a task and that other tasks are to follow;\n"
             "- `finding` — an established fact with its source;\n"
             "- `artifact` — a pointer to a result;\n"
-            "- `note` — an entry that fits none of the types above.\n"
-            "Summaries, questions, attempts, verdicts and remarks exist only in task cases"
+            "- `note` — an entry that fits none of the types above; the only type a "
+            "discussion's case takes here.\n"
+            "Summaries, attempts, verdicts and remarks exist only in task cases, questions "
+            "only in discussions (`ask`)"
         )
     ),
 ]
@@ -65,7 +69,7 @@ def register(tools: Toolset) -> None:
 
     @tools.tool(title="Add project entry", annotations=FILING, creating=True)
     async def add_project_entry(
-        key: CaseOwnerKeyArg,
+        key: CaseAddressArg,
         type: ProjectEntryTypeArg,
         title: ProjectEntryTitleArg,
         body: EntryBodyArg = "",
@@ -74,11 +78,12 @@ def register(tools: Toolset) -> None:
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedProjectEntryView:
         """Files an entry in the case of a project or of an area: a decision, finding,
-        artifact or note that concerns it rather than one of its tasks.
+        artifact or note that concerns it rather than one of its tasks. A discussion
+        address files a note in the discussion's case.
 
-        The entry number counts inside the project or area, and `TRK#7` or
-        `TRK/promotion#3` addresses the entry from `refs` of any case. Like a task entry
-        filed by `add_entry`, such an entry stays as filed.
+        The entry number counts inside the project, area or discussion, and `TRK#7`,
+        `TRK/promotion#3` or `TRK~7#3` addresses the entry from `refs` of any case. Like a
+        task entry filed by `add_entry`, such an entry stays as filed.
 
         A decision or finding of a project's case is in force until a later entry of the
         same type names it in `supersedes`; no entry changes, and the status is computed
@@ -89,6 +94,34 @@ def register(tools: Toolset) -> None:
         `entry_fields_invalid` naming the offending fields.
         """
         async with runtime.call() as (session, actor):
+            if is_discussion_address(key):
+                discussion = await discussions_service.get_discussion(session, key)
+
+                async def note() -> AppendedProjectEntryView:
+                    entry = await case_service.add_discussion_entry(
+                        session,
+                        discussion,
+                        actor=actor,
+                        type=type,
+                        title=title,
+                        body=body,
+                        refs=refs or (),
+                        supersedes=supersedes,
+                    )
+                    return appended_project_entry(entry, project_key=discussion.address)
+
+                return await Once.of(add_project_entry, session, actor, idempotency_key).run(
+                    result=AppendedProjectEntryView,
+                    request={
+                        "discussion": discussion.address,
+                        "type": type,
+                        "title": title,
+                        "body": body,
+                        "refs": refs,
+                        "supersedes": supersedes,
+                    },
+                    build=note,
+                )
             owner = await areas_service.get_owner(session, key)
 
             async def append() -> AppendedProjectEntryView:

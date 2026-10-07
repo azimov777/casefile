@@ -50,7 +50,10 @@ RULES = {
     "3.7 текст мимо контракта — finding и ответ": "`finding`",
     "5.5 сводка после каждого значимого шага": "summary follows every significant step",
     "9.1 ход за задачей — blocked_by и open": "`blocked_by`",
-    "10.1 ход не за агентом — носитель, вопрос blocking (TRK-573)": "a `blocking` question",
+    "10.1 ход не за агентом — носитель, вопрос в обсуждении (TRK-573, TRK-671)": (
+        "a question in a discussion"
+    ),
+    "3.1 работу задают и обсуждения задачи (TRK#51, п. 5)": "a remark on it and its discussions",
     "10.2 сводка, затем open и причина": "then a summary and `open` with a reason",
     "10.7 in_progress только пока ход за агентом": "only while the next move is the agent's",
     "12.10 распавшееся не вести одним делом": "its own case rather than one shared case",
@@ -114,6 +117,13 @@ async def served(mcp_session: Connect, task_secret: str) -> str:
         result = await session.initialize()
     assert result.instructions, "сервер перестал отдавать `instructions`"
     return result.instructions
+
+
+async def test_questions_live_in_discussions_and_blocking_is_gone(served: str) -> None:
+    """TRK-671 (решение TRK#51, п. 6): вопрос человеку — в обсуждении, признака `blocking`
+    у нового вопроса нет, и в договоре его больше не называют."""
+    assert "blocking" not in served
+    assert "discussion" in served
 
 
 async def test_the_instructions_fit_the_client_limit(served: str) -> None:

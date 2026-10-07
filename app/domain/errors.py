@@ -503,6 +503,21 @@ class EntryFieldsInvalidError(ValidationError):
     message = "Case entry fields are invalid"
 
 
+class QuestionNotATaskEntryError(ValidationError):
+    """Вопрос в деле задачи: вопросы задают в обсуждениях (решение `TRK#51`, п. 6).
+
+    Разговор с человеком живёт в обсуждении — узкая тема со своим итогом, к которой
+    задача привязана, — и новый вопрос в деле задачи трекер не принимает ни из REST, ни из
+    MCP. Прежние вопросы остаются в делах и читаются как есть, ответ на них (`answer`)
+    по-прежнему подшивается. Отдельный код, а не `entry_fields_invalid` с `not_allowed`:
+    клиенту, который задавал вопрос по задаче, нужна причина, а не список типов. Ключ
+    задачи — в `details.key`.
+    """
+
+    code = "question_not_a_task_entry"
+    message = "Questions are asked in discussions, not in a task's case"
+
+
 class DecisionNotInForceError(ConflictError):
     """Решение проекта уже заменено другим, а его называют как действующее.
 

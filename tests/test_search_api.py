@@ -85,7 +85,7 @@ async def board(db_session: AsyncSession, task_actor: Actor, project: Project) -
             db_session, asking, actor=task_actor, to=TaskStatus.OPEN
         )
     ).task
-    await case_service.ask(
+    await case_service.file_legacy_task_question(
         db_session,
         asking,
         actor=task_actor,

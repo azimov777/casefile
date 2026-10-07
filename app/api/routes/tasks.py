@@ -25,6 +25,7 @@ from app.api.deps import (
 from app.api.idempotency import OnceDep
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.decisions import CitedDecisionRead, DecisionRefRead
+from app.api.schemas.discussions import task_discussion_read
 from app.api.schemas.entries import (
     EntryCreate,
     EntryHeadingRead,
@@ -297,6 +298,7 @@ async def read_task(
                 task_question_read(question, task_key=key) for question in package.questions
             ],
             remarks=[entry_read(remark, task_key=key) for remark in package.remarks],
+            discussions=[task_discussion_read(item) for item in package.discussions],
             transitions=list(package.transitions),
             index=[EntryHeadingRead.model_validate(heading) for heading in package.index],
         )

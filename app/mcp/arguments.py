@@ -87,6 +87,31 @@ CaseOwnerKeyArg = Annotated[
     ),
 ]
 
+# Обсуждение — сущность проекта без своих инструментов чтения и записи (решение `TRK#51`;
+# образец — область, TRK-555): его дело читает `read_project_entries`, заметку подшивает
+# `add_project_entry` по адресу. Отдельной аннотацией: остальные инструменты проекта
+# адреса обсуждения не принимают — карточки, атрибутов и архива у него нет.
+CaseAddressArg = Annotated[
+    str,
+    Field(
+        description=(
+            "Project key, area address `PROJECT/key` or discussion address `PROJECT~N`, "
+            "case-insensitive"
+        ),
+        examples=["TRK"],
+    ),
+]
+
+DiscussionAddressArg = Annotated[
+    str,
+    Field(
+        description=(
+            "Discussion address `PROJECT~N`, case-insensitive. An unknown one is refused "
+            "with `discussion_not_found`"
+        )
+    ),
+]
+
 # --- Страницы -------------------------------------------------------------------------
 
 LimitArg = Annotated[

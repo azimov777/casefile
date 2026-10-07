@@ -17,6 +17,9 @@ class LinkFilingView(BaseModel):
 
     key: str
     entry: int = Field(
-        description="Number of the `link_added` or `link_removed` entry in the case of `key`"
+        description=(
+            "Number of the `link_added`, `link_removed`, `attached` or `detached` entry in "
+            "the case of `key`"
+        )
     )
     other_entry: int = Field(description="Number of the same entry in the case of `other`")

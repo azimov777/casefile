@@ -471,21 +471,64 @@ def appended_entry(value: Entry, *, task_key: str) -> AppendedEntryView:
     )
 
 
+# Ответ `ask`, `answer` и `add_conclusion`: адрес записи в деле обсуждения, а у ответа на
+# прежний вопрос дела задачи — в деле задачи (решение `TRK#51`, п. 6). Поля владельца
+# необязательны и с умолчанием: ответ `answer` до обсуждений сохранён в ключах
+# идемпотентности без `discussion`, и повтор вчерашнего вызова обязан подняться этой же
+# моделью (`docs/notes/mcp.md`, «Сузить форму ответа создающего инструмента можно,
+# расширить — нельзя»).
+class AppendedDiscussionEntryView(BaseModel):
+    """A filed question, answer or conclusion, by its address rather than its content;
+    the entry in full is returned by `read_project_entries` for a discussion and by
+    `read_entries` for a task.
+    """
+
+    no: int = Field(description="Entry number in the case of `discussion` or `task_key`")
+    seq: int = Field(description="Journal sequence number, usable as `after` of `wait_journal`")
+    discussion: str | None = None
+    task_key: str | None = None
+    author: AuthorView
+    title: str | None = Field(description="Title built by the tracker; `null` when sent")
+    created_at: datetime
+
+
+def appended_discussion_entry(
+    value: Entry, *, discussion: str | None = None, task_key: str | None = None
+) -> AppendedDiscussionEntryView:
+    """Ответ подшивки в дело обсуждения — или в дело задачи у ответа на прежний вопрос.
+    Владелец — ровно один, как у `entry`."""
+    assert (discussion is None) != (task_key is None), "entry owner is exactly one key"
+    return AppendedDiscussionEntryView(
+        no=value.no,
+        seq=value.seq,
+        discussion=discussion,
+        task_key=task_key,
+        author=author(value.author),
+        title=None if value.type in TITLED_ENTRY_TYPES else value.title,
+        created_at=value.created_at,
+    )
+
+
 # Ответ `add_project_entry`: то же, что у записи задачи, но адрес — ключ проекта или адрес
 # области (`CONCEPT.md`, 3.7), и заголовка нет вовсе: у всех типов записи проекта его
 # присылает сам агент (`app/domain/case.py`, `PROJECT_ENTRY_TYPES`), и поле всегда было бы
 # `null`. Поле адреса осталось `project_key` — форма ответа создающего инструмента живёт
 # сутки в ключах идемпотентности, и переименование уронило бы повтор вчерашнего вызова.
 class AppendedProjectEntryView(BaseModel):
-    """A filed project or area case entry, by its address rather than its content;
+    """A filed project, area or discussion case entry, by its address rather than its content;
     the entry in full is returned by `read_project_entries`.
     """
 
     no: int = Field(
-        description="Entry number in the case; with the key it forms `TRK#7` or `TRK/promotion#3`"
+        description=(
+            "Entry number in the case; with the key it forms `TRK#7`, `TRK/promotion#3` "
+            "or `TRK~7#3`"
+        )
     )
     seq: int = Field(description="Journal sequence number, usable as `after` of `wait_journal`")
-    project_key: str = Field(description="Project key or area address of the case")
+    project_key: str = Field(
+        description="Project key, area address or discussion address of the case"
+    )
     author: AuthorView
     created_at: datetime
 

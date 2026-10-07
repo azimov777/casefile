@@ -408,6 +408,7 @@ export function taskState(overrides: Partial<TaskState> = {}): TaskState {
     children: {},
     children_unclosed: [],
     decisions_after_card: [],
+    discussions_after_card: [],
     ...overrides,
   };
 }
@@ -440,6 +441,7 @@ export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): 
     summary: summaryEntry(7, key),
     questions: [],
     remarks: [],
+    discussions: [],
     transitions: ['done', 'open', 'cancelled'],
     index: [
       heading(1, { type: 'created' }, 'Task created'),

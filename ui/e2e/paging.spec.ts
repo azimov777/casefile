@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { outsideArchive, readE2eToken, silenceJournal } from './contour';
+import { fileLegacyQuestion, outsideArchive, readE2eToken, silenceJournal } from './contour';
 
 const token = readE2eToken();
 
@@ -222,17 +222,13 @@ test('запись с последней страницы дела дочиты�
 test('ссылка на ответ ведёт внутрь вопроса и помечает сам ответ', async ({ page, request }) => {
   await silenceJournal(page);
 
-  const asked = await request.post('/api/v1/tasks/DEMO-3/entries', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: {
-      type: 'question',
-      title: 'Вопрос ради проверки ссылки на ответ',
-      body: 'Ответ на него показывается внутри этого вопроса.',
-      payload: { addressees: ['owner'], blocking: false },
-    },
+  // Прежний вопрос дела задачи: новый REST отвергает (TRK-671), а ответ на него — нет.
+  const { no: questionNo } = fileLegacyQuestion({
+    key: 'DEMO-3',
+    title: 'Вопрос ради проверки ссылки на ответ',
+    body: 'Ответ на него показывается внутри этого вопроса.',
+    author: 'owner',
   });
-  expect(asked.status()).toBe(201);
-  const questionNo = ((await asked.json()) as { data: { no: number } }).data.no;
 
   const answered = await request.post('/api/v1/tasks/DEMO-3/entries', {
     headers: { Authorization: `Bearer ${token}` },

@@ -6,7 +6,7 @@
 """
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, c
 from sqlalchemy.pool import NullPool
 
 from app.core.config import Settings, get_settings
+from app.db.models.entry import Entry
 from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.models.task import Task
@@ -42,6 +43,7 @@ from app.main import create_app
 from app.mcp.runtime import Runtime, SessionFactory
 from app.mcp.server import create_server
 from app.services import areas as areas_service
+from app.services import case as case_service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
@@ -428,6 +430,35 @@ async def make_task(
         area = await make_area(session, actor, project.key)
     return await tasks_service.create_task(
         session, actor=actor, project=project, area=area, **fields
+    )
+
+
+async def legacy_question(
+    session: AsyncSession,
+    key: str,
+    *,
+    title: str,
+    body: str = "",
+    blocking: bool = False,
+    addressees: Sequence[str] = ("owner",),
+    actor: Actor | None = None,
+) -> Entry:
+    """Вопрос в деле задачи `key` в прежней форме — так их подшивали до обсуждений.
+
+    Новый вопрос в деле задачи трекер отвергает (`question_not_a_task_entry`, TRK-671), а
+    прежние лежат в делах установок: их читают карточка, признаки, выдача вопросов, ответ.
+    Тесты этих механик заводят вопрос так же, как демо, — `file_legacy_task_question`.
+    Автор по умолчанию — автор задачи.
+    """
+    task = await tasks_service.get_task(session, key)
+    return await case_service.file_legacy_task_question(
+        session,
+        task,
+        actor=actor or Actor(author=task.created_by, participant=None),
+        addressees=list(addressees),
+        title=title,
+        body=body,
+        blocking=blocking,
     )
 
 

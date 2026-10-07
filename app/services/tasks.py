@@ -103,6 +103,7 @@ from app.domain.tasks import (
 from app.services import areas as areas_service
 from app.services import case as case_service
 from app.services import decisions as decisions_service
+from app.services import discussions as discussions_service
 from app.services import freeze
 from app.services import links as links_service
 from app.services import projects as projects_service
@@ -249,6 +250,10 @@ class TaskPackage:
     #: Замечания без резолюции целиком: «вышло не то» обязано попасться на глаза
     #: читателю с любым контекстом, а не лежать строкой описи (`CONCEPT.md`, 3.4).
     remarks: list[Entry]
+    #: Обсуждения, к которым задача привязана, — открытые и закрытые, с чьим ходом,
+    #: открытыми вопросами и последним итогом (решение `TRK#51`, п. 5): работу задают и
+    #: они, а вопрос обсуждения держит вход в работу.
+    discussions: list[discussions_service.TaskDiscussion]
     transitions: tuple[TaskStatus, ...]
     index: list[EntryHeading]
 
@@ -296,6 +301,9 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     decisions = await decisions_service.cited_decisions(session, task.decisions, actor=actor)
     last_change = await case_service.last_status_change(session, task, actor=actor)
     deferred = await TaskRepository(session).is_deferred(task.not_before)
+    discussions = await discussions_service.task_discussions(
+        session, task, actor=actor, open_questions=discussion_questions
+    )
     return TaskPackage(
         task=task,
         state=_task_state(
@@ -304,9 +312,13 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
             last_change=last_change,
             summary=summary,
             questions=questions,
+            discussion_questions=discussion_questions,
             remarks=remarks,
             links=links,
             children=hierarchy.children,
+            discussions_after_card=await case_service.discussion_entries_after_card(
+                session, task, actor=actor
+            ),
         ),
         parent=hierarchy.parent,
         children=hierarchy.children,
@@ -324,6 +336,7 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
         summary=summary,
         questions=questions,
         remarks=remarks,
+        discussions=discussions,
         transitions=allowed_transitions(task.status),
         index=index,
     )
@@ -336,11 +349,17 @@ def _task_state(
     last_change: Entry | None,
     summary: Entry | None,
     questions: Sequence[Entry],
+    discussion_questions: Sequence[tuple[Entry, str]],
     remarks: Sequence[Entry],
     links: Sequence[links_service.TaskLink],
     children: Sequence[links_service.TaskLink],
+    discussions_after_card: Sequence[str],
 ) -> state_domain.TaskState:
-    """Блок `state` из прочитанного пакетом: записи и связи переводятся во входы домена."""
+    """Блок `state` из прочитанного пакетом: записи и связи переводятся во входы домена.
+
+    Вопросы — сначала прежние вопросы дела задачи, потом вопросы её незакрытых обсуждений
+    с адресом обсуждения: те же, что считает признак `open_blocking_questions` и что
+    называет отказ входа в работу."""
     return state_domain.build_state(
         status=task.status,
         index=index,
@@ -373,6 +392,16 @@ def _task_state(
                 title=question.title,
             )
             for question in questions
+        ]
+        + [
+            state_domain.OpenQuestion(
+                no=question.no,
+                addressees=list(question.payload.get("addressees") or []),
+                blocking=is_blocking_question(question.payload),
+                title=question.title,
+                discussion=address,
+            )
+            for question, address in discussion_questions
         ],
         remarks=[
             state_domain.OpenRemark(no=remark.no, author=remark.author, title=remark.title)
@@ -387,6 +416,7 @@ def _task_state(
             state_domain.ChildStatus(key=link.other.key, status=link.other.status)
             for link in children
         ],
+        discussions_after_card=discussions_after_card,
     )
 
 

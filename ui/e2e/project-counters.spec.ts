@@ -1,6 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { fontsReady, readAgentKey, readE2eToken, silenceJournal } from './contour';
+import {
+  fileLegacyQuestion,
+  fontsReady,
+  readAgentKey,
+  readE2eToken,
+  silenceJournal,
+} from './contour';
 
 /*
  * Счётчики задач в шапке экрана проекта и страницы области (TRK-619, TRK#46):
@@ -103,18 +109,15 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
   await move(await create('Открыта, в области', ADDRESS), ['open']);
 
   const waiting = await create('Ждёт ответа, в другой области', `${KEY}/rest`);
-  const asked = await api(
-    request,
-    'post',
-    `/api/v1/tasks/${waiting}/entries`,
-    {
-      type: 'question',
-      title: 'Вопрос, на который ждут ответа',
-      body: 'Вопрос сквозного теста счётчиков.',
-      payload: { addressees: ['owner'], blocking: true },
-    },
-    agent,
-  );
+  // Прежний вопрос дела задачи от агента (TRK-671: новые — в обсуждениях): счётчик
+  // «Ждёт ответа» считается из признака, который несёт и он.
+  const asked = fileLegacyQuestion({
+    key: waiting,
+    title: 'Вопрос, на который ждут ответа',
+    body: 'Вопрос сквозного теста счётчиков.',
+    blocking: true,
+    author: 'demo_agent',
+  });
 
   const gaps = await create('Закрыта не целиком, в области', ADDRESS);
   await move(gaps, ['open', 'in_progress']);
@@ -134,7 +137,7 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
     },
     agent,
   );
-  return { waiting, question: asked.no as number, gaps };
+  return { waiting, question: asked.no, gaps };
 }
 
 /** Число счётчика строки: хвост его текста. */

@@ -91,12 +91,17 @@ class SummaryParts:
 
 @dataclass(frozen=True, slots=True)
 class OpenQuestion:
-    """Вопрос без ответа: номер, адресаты, признак `blocking` и заголовок."""
+    """Вопрос без ответа: номер, адресаты, признак `blocking`, заголовок и обсуждение.
+
+    `discussion` — адрес обсуждения, в чьём деле вопрос (`TRK~7`), и тогда `no` — номер
+    в его деле; `None` — прежний вопрос дела самой задачи.
+    """
 
     no: int
     addressees: Sequence[str]
     blocking: bool
     title: str
+    discussion: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +153,7 @@ class StateQuestion:
     to: list[str]
     blocking: bool
     title: str
+    discussion: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +188,9 @@ class TaskState:
     #: Ключи детей не в `done` и не в `cancelled`.
     children_unclosed: list[str]
     decisions_after_card: list[int]
+    #: Итоги и записи человека в обсуждениях задачи после последней правки разделов —
+    #: ссылками `TRK~7#5` (решение `TRK#51`, п. 5): работу задают и они.
+    discussions_after_card: list[str]
 
 
 def status_change(
@@ -253,9 +262,11 @@ def build_state(
     remarks: Sequence[OpenRemark],
     open_blockers: Sequence[str],
     children: Sequence[ChildStatus],
+    discussions_after_card: Sequence[str],
 ) -> TaskState:
     """Собирает блок `state` из уже прочитанного: опись, последний переход, сводка,
-    вопросы, замечания, блокеры и дети.
+    вопросы (дела задачи и её обсуждений), замечания, блокеры, дети и записи обсуждений
+    после правки разделов.
     """
     counts: dict[str, int] = {}
     for child in children:
@@ -294,6 +305,7 @@ def build_state(
                 to=list(question.addressees),
                 blocking=question.blocking,
                 title=clip(question.title, TITLE_LIMIT),
+                discussion=question.discussion,
             )
             for question in questions
         ],
@@ -312,4 +324,5 @@ def build_state(
         children=counts,
         children_unclosed=[child.key for child in children if child.status not in CLOSED_STATUSES],
         decisions_after_card=decisions_after_card(index),
+        discussions_after_card=list(discussions_after_card),
     )

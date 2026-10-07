@@ -79,7 +79,7 @@ async def test_bootstrap_counts_only_open_questions_addressed_to_the_participant
     Проверяются оба перехода сразу: вопрос без ответа считается, отвеченный — нет.
     Иначе счётчик, который просто считает все вопросы задачи, прошёл бы половину теста.
     """
-    question = await case_service.ask(
+    question = await case_service.file_legacy_task_question(
         db_session,
         task,
         actor=task_actor,
@@ -114,7 +114,7 @@ async def test_bootstrap_of_a_shared_token_has_no_participant(
     определению. Проекты при этом отдаются те же самые: они не зависят от того, кто
     спрашивает.
     """
-    await case_service.ask(
+    await case_service.file_legacy_task_question(
         db_session,
         task,
         actor=task_actor,

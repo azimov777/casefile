@@ -58,7 +58,15 @@ from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, Actor
-from conftest import Connect, call, make_task, refuse, tool_text, without_empty_standing
+from conftest import (
+    Connect,
+    call,
+    legacy_question,
+    make_task,
+    refuse,
+    tool_text,
+    without_empty_standing,
+)
 
 #: Инструменты рабочего цикла — ровно те, что перечислены в `CONCEPT.md`, 5.2.
 TASK_TOOLS = {
@@ -77,6 +85,8 @@ TASK_TOOLS = {
     "resolve",
     "read_project_entries",
     "add_project_entry",
+    "add_conclusion",
+    "close_discussion",
     "link",
     "unlink",
     "get_project",
@@ -224,6 +234,8 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     "add_summary": (False, False, False),
     "ask": (False, False, False),
     "answer": (False, False, False),
+    "add_conclusion": (False, False, False),
+    "close_discussion": (False, False, False),
     "resolve": (False, False, False),
     "add_verdict": (False, False, False),
     "link": (False, False, False),
@@ -512,25 +524,30 @@ async def test_transition_refuses_waiting_by_the_value_check(
     assert package["task"]["status"] == "open"
 
 
-async def test_transition_refuses_work_over_an_open_blocking_question(
+async def test_transition_refuses_work_over_an_open_question_of_its_discussion(
     mcp_session: Connect, task_secret: str, open_task: Task
 ) -> None:
-    """Обзорная проверка 4 TRK-573 через MCP: отказ называет код и номер вопроса.
+    """Обзорная проверка 4 TRK-573 через MCP, с TRK-671 — вопросом в обсуждении: отказ
+    называет код и адрес вопроса `TRK~1#2`, ответ по адресу обсуждения открывает вход.
 
     Тот же сценарий, что у REST: инструмент зовёт ту же функцию сервиса, и отказ доходит
     до агента кодом и `details`, а не пересказом.
     """
     key = open_task.key
     async with mcp_session(task_secret) as session:
-        question = await call(
-            session, "ask", key=key, addressees=["owner"], title="Блокирует", blocking=True
-        )
+        question = await call(session, "ask", key=key, addressees=["owner"], title="Держит")
         refused = await refuse(session, "transition", key=key, to="in_progress")
-        await call(session, "answer", key=key, question_no=question["no"], body="Решено")
+        await call(
+            session,
+            "answer",
+            key=question["discussion"],
+            question_no=question["no"],
+            body="Решено",
+        )
         moved = await call(session, "transition", key=key, to="in_progress")
 
     assert "task_has_open_blocking_questions" in refused
-    assert f'"questions": ["{key}#{question["no"]}"]' in refused
+    assert f'"questions": ["{question["discussion"]}#{question["no"]}"]' in refused
     assert moved["status"] == "in_progress"
 
 
@@ -1384,15 +1401,19 @@ async def test_the_short_answer_carries_the_next_move(
             key=task.key,
             addressees=["owner"],
             title="Какой ключ канонический?",
-            blocking=False,
         )
+        address = question["discussion"]
         answered = await call(
-            session, "answer", key=task.key, question_no=question["no"], body="Верхний"
+            session, "answer", key=address, question_no=question["no"], body="Верхний"
         )
-        tail = await call(session, "wait_journal", after=question["seq"], task=task.key)
+        # Лента по задаче несёт и записи её обсуждений: ждущий ответа агент видит его.
+        # После вопроса в ленте ещё и привязка задачи того же вызова — отбор по типу.
+        tail = await call(
+            session, "wait_journal", after=question["seq"], task=task.key, types=["answer"]
+        )
 
     assert question["title"] is None, "заголовок вопроса прислал агент"
-    assert answered["title"] == f"Answer to {task.key}#{question['no']}"
+    assert answered["title"] == f"Answer to {address}#{question['no']}"
     assert [item["no"] for item in tail["items"]] == [answered["no"]]
     assert tail["items"][0]["body"] == "Верхний"
 
@@ -1453,19 +1474,29 @@ async def test_a_question_is_open_until_it_is_answered(
             key=task.key,
             addressees=["owner"],
             title="Какой ключ канонический?",
-            blocking=True,
             body="Верхний или нижний регистр",
         )
         asked = await call(session, "get_task", key=task.key)
-        await call(session, "answer", key=task.key, question_no=question["no"], body="Верхний")
+        await call(
+            session,
+            "answer",
+            key=question["discussion"],
+            question_no=question["no"],
+            body="Верхний",
+        )
         answered = await call(session, "get_task", key=task.key)
 
     assert [item["name"] for item in participants["items"]] == ["owner"]
     assert asked["features"]["open_blocking_questions"] == 1
-    assert [item["no"] for item in asked["questions"]] == [question["no"]]
+    # Вопрос не в деле задачи, а в её обсуждении (TRK-671): `questions` — прежние вопросы.
+    assert asked["questions"] == []
+    (discussion,) = asked["discussions"]
+    assert [item["no"] for item in discussion["open_questions"]] == [question["no"]]
+    assert discussion["turn"] == "human"
     assert answered["features"]["open_questions"] == 0
     assert answered["features"]["open_blocking_questions"] == 0
-    assert answered["questions"] == []
+    assert answered["discussions"][0]["open_questions"] == []
+    assert answered["discussions"][0]["turn"] == "agent"
 
 
 async def test_answer_declares_the_outcome_and_the_replacing_question(
@@ -1485,22 +1516,25 @@ async def test_answer_declares_the_outcome_and_the_replacing_question(
 async def test_a_withdrawn_question_leaves_the_package_and_stays_in_the_case(
     mcp_session: Connect, task_secret: str, task: Task
 ) -> None:
-    """Проверка 2 TRK-552 настоящим вызовом: снятие и замена, пакет, дело и опись."""
+    """Проверка 2 TRK-552 настоящим вызовом, с TRK-671 — в деле обсуждения: снятие и
+    замена, пакет задачи и дело обсуждения по адресу."""
     key = task.key
 
-    async def ask(session: Any, title: str, *, blocking: bool) -> dict[str, Any]:
-        return await call(
-            session, "ask", key=key, addressees=["owner"], title=title, blocking=blocking
-        )
-
     async with mcp_session(task_secret) as session:
-        dropped = await ask(session, "Нужен ли старый эндпоинт?", blocking=True)
-        stale = await ask(session, "Какой ключ канонический?", blocking=True)
-        fresh = await ask(session, "Верхний регистр годится?", blocking=False)
+        dropped = await call(
+            session, "ask", key=key, addressees=["owner"], title="Нужен ли старый эндпоинт?"
+        )
+        address = dropped["discussion"]
+
+        async def ask(title: str) -> dict[str, Any]:
+            return await call(session, "ask", key=address, addressees=["owner"], title=title)
+
+        stale = await ask("Какой ключ канонический?")
+        fresh = await ask("Верхний регистр годится?")
         withdrawn = await call(
             session,
             "answer",
-            key=key,
+            key=address,
             question_no=dropped["no"],
             outcome="withdrawn",
             body="Эндпоинт удалён в соседней задаче",
@@ -1508,7 +1542,7 @@ async def test_a_withdrawn_question_leaves_the_package_and_stays_in_the_case(
         replaced = await call(
             session,
             "answer",
-            key=key,
+            key=address,
             question_no=stale["no"],
             outcome="replaced",
             replaced_by=fresh["no"],
@@ -1516,39 +1550,39 @@ async def test_a_withdrawn_question_leaves_the_package_and_stays_in_the_case(
         )
         package = await call(session, "get_task", key=key)
         case = await call(
-            session, "read_entries", key=key, nos=[dropped["no"], withdrawn["no"], replaced["no"]]
+            session,
+            "read_project_entries",
+            key=address,
+            nos=[dropped["no"], withdrawn["no"], replaced["no"]],
         )
         twice = await refuse(
-            session, "answer", key=key, question_no=stale["no"], outcome="withdrawn", body="Ещё"
+            session,
+            "answer",
+            key=address,
+            question_no=stale["no"],
+            outcome="withdrawn",
+            body="Ещё",
         )
 
-    assert withdrawn["title"] == f"Answer to {key}#{dropped['no']}: withdrawn"
-    assert replaced["title"] == f"Answer to {key}#{stale['no']}: replaced by {key}#{fresh['no']}"
-    assert [item["no"] for item in package["questions"]] == [fresh["no"]]
+    assert withdrawn["title"] == f"Answer to {address}#{dropped['no']}: withdrawn"
+    assert (
+        replaced["title"]
+        == f"Answer to {address}#{stale['no']}: replaced by {address}#{fresh['no']}"
+    )
+    (discussion,) = package["discussions"]
+    assert [item["no"] for item in discussion["open_questions"]] == [fresh["no"]]
     assert package["features"]["open_questions"] == 1
-    assert package["features"]["open_blocking_questions"] == 0
+    assert package["features"]["open_blocking_questions"] == 1
     assert [(item["no"], item["type"]) for item in case["items"]] == [
         (dropped["no"], "question"),
         (withdrawn["no"], "answer"),
         (replaced["no"], "answer"),
     ]
+    assert {item["discussion"] for item in case["items"]} == {address}
     assert [item["payload"] for item in case["items"][1:]] == [
         {"question_no": dropped["no"], "outcome": "withdrawn", "replaced_by": None},
         {"question_no": stale["no"], "outcome": "replaced", "replaced_by": fresh["no"]},
     ]
-    facts = {item["no"]: item["facts"] for item in package["index"]}
-    assert facts[withdrawn["no"]] == {
-        "type": "answer",
-        "question_no": dropped["no"],
-        "outcome": "withdrawn",
-        "replaced_by": None,
-    }
-    assert facts[replaced["no"]] == {
-        "type": "answer",
-        "question_no": stale["no"],
-        "outcome": "replaced",
-        "replaced_by": fresh["no"],
-    }
     assert "entry_fields_invalid" in twice
     assert "already_answered" in twice
 
@@ -1567,13 +1601,10 @@ async def test_an_answer_filed_before_outcomes_reads_the_same_through_mcp_and_re
     охватывала оба поколения нагрузки, а не только прежнее.
     """
     key, task_id, created_by = task.key, task.id, created_by_columns(task.created_by)
-    async with mcp_session(task_secret) as session:
-        old_question = await call(
-            session, "ask", key=key, addressees=["owner"], title="Какой ключ?", blocking=True
-        )
-        new_question = await call(
-            session, "ask", key=key, addressees=["owner"], title="Верхний регистр?", blocking=True
-        )
+    # Вопросы — прежние, из дела задачи: новых там нет с TRK-671, а ответы на прежние
+    # инструмент `answer` по ключу задачи по-прежнему подшивает.
+    old_question = {"no": (await legacy_question(db_session, key, title="Какой ключ?")).no}
+    new_question = {"no": (await legacy_question(db_session, key, title="Верхний регистр?")).no}
 
     repository = EntryRepository(db_session)
     old_no = await repository.allocate_no(task_id)
@@ -1725,7 +1756,6 @@ async def test_asking_an_unknown_participant_is_refused(
             key=task.key,
             addressees=["nobody"],
             title="Кому это?",
-            blocking=False,
         )
 
     assert "unknown_participant" in failure

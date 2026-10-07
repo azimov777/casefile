@@ -6533,10 +6533,13 @@ export interface components {
         };
         /**
          * StateQuestionRead
-         * @description Открытый вопрос: кого спросили и мешает ли он работе.
+         * @description Открытый вопрос: кого спросили, мешает ли он работе и в каком обсуждении.
          */
         StateQuestionRead: {
-            /** No */
+            /**
+             * No
+             * @description Number in the case of the discussion, or of the task if none
+             */
             no: number;
             /**
              * To
@@ -6547,6 +6550,12 @@ export interface components {
             blocking: boolean;
             /** Title */
             title: string;
+            /**
+             * Discussion
+             * @description Address of the discussion the question is in; `null` for an earlier question of the task's own case
+             * @example TRK~7
+             */
+            discussion: string | null;
         };
         /**
          * StateSummaryRead
@@ -7196,6 +7205,39 @@ export interface components {
             decisions?: string[];
         };
         /**
+         * TaskDiscussionRead
+         * @description Обсуждение в пакете преемника задачи (решение `TRK#51`, п. 5): карточка без
+         *     служебных полей, чей ход, открытые вопросы и последний итог целиком.
+         */
+        TaskDiscussionRead: {
+            /**
+             * Address
+             * @description Address of the discussion: the project key and its number, `TRK~7`. References to its case entries are `TRK~7#3`
+             * @example TRK~7
+             */
+            address: string;
+            /**
+             * Title
+             * @description The narrow question itself
+             * @example Обсуждение — своя сущность или ярлык над записями задач?
+             */
+            title: string;
+            /** @example open */
+            status: components["schemas"]["DiscussionStatus"];
+            /**
+             * @description Whose move it is, computed on read: `human` — a question has no answer yet; `agent` — no open questions, but an answer or a person's entry came after the latest conclusion; `null` — neither, and always on a closed discussion
+             * @example human
+             */
+            turn: components["schemas"]["DiscussionTurn"] | null;
+            /**
+             * Open Questions
+             * @description Questions of the discussion with no answer yet, in full; each one keeps the task out of `in_progress` until it is answered
+             */
+            open_questions: components["schemas"]["QuestionEntryRead"][];
+            /** @description The latest conclusion in full — decided, superseded, still open; it sets the work of the task together with its sections. `null` until the first one */
+            conclusion: components["schemas"]["ConclusionEntryRead"] | null;
+        };
+        /**
          * TaskFeaturesRead
          * @description Вычисляемые признаки задачи (`CONCEPT.md`, 4.3).
          *
@@ -7350,6 +7392,11 @@ export interface components {
              * @description Every remark with no resolution yet, in full
              */
             remarks: components["schemas"]["RemarkEntryRead"][];
+            /**
+             * Discussions
+             * @description Discussions the task is attached to, open and closed, by address: whose move it is, open questions and the latest conclusion in full
+             */
+            discussions: components["schemas"]["TaskDiscussionRead"][];
             /**
              * Transitions
              * @description Targets allowed by the transition table from the current status. Transition validations (sections, summary, verdicts, blockers) are checked on the move
@@ -7745,6 +7792,14 @@ export interface components {
              * @description Numbers of `decision` entries filed after the last edit of the sections: the statement may not account for them
              */
             decisions_after_card: number[];
+            /**
+             * Discussions After Card
+             * @description Conclusions and entries of people in the task's discussions filed after the last edit of the sections, as references `TRK~7#5`: they set the work too, and the statement may not account for them
+             * @example [
+             *       "TRK~7#5"
+             *     ]
+             */
+            discussions_after_card: string[];
         };
         /**
          * TaskStatus

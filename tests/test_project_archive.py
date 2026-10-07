@@ -28,6 +28,7 @@ from app.domain.errors import (
 from app.domain.tasks import TaskStatus
 from app.services import attributes as attributes_service
 from app.services import case as case_service
+from app.services import discussions as discussions_service
 from app.services import journal as journal_service
 from app.services import links as links_service
 from app.services import projects as projects_service
@@ -183,8 +184,9 @@ async def _add_summary(s: AsyncSession, x: Scene, a: Actor) -> Any:
 
 
 async def _ask(s: AsyncSession, x: Scene, a: Actor) -> Any:
-    return await case_service.ask(
-        s, x.task, actor=a, addressees=["owner"], title="Вопрос?", blocking=False
+    """Вопрос по задаче заводит обсуждение в её проекте и привязывает задачу (TRK-671)."""
+    return await discussions_service.ask_about_task(
+        s, x.task, actor=a, addressees=["owner"], title="Вопрос?"
     )
 
 

@@ -17,6 +17,7 @@ from app.db.repositories import EntryRepository
 from app.domain.case import SERVICE_ENTRY_TYPES, EntryType
 from app.domain.tasks import TaskStatus
 from app.services import tasks as tasks_service
+from conftest import legacy_question
 
 READY = {
     "project": "trk",
@@ -153,24 +154,25 @@ async def test_a_summary_of_the_previous_stint_does_not_count(
 # --- Вопросы, ответы, вердикты --------------------------------------------------------
 
 
-async def test_a_question_to_someone_outside_the_registry_is_refused(
+async def test_a_question_in_a_task_case_is_refused_with_its_own_code(
     auth_client: AsyncClient, project: Project
 ) -> None:
-    """Обзорная проверка 4: имя несуществующего адресата — в подробностях."""
+    """TRK-671: вопрос человеку задают в обсуждении (TRK#51, п. 6) — REST отвечает
+    `question_not_a_task_entry` с ключом задачи, и в деле ничего не появляется."""
     await create(auth_client)
+    before = (await package(auth_client, "TRK-1"))["index"]
 
     error = await refuse(
         auth_client,
         "TRK-1",
         type="question",
         title="Чей вердикт нужен?",
-        payload={"addressees": ["owner", "ghost"], "blocking": False},
+        payload={"addressees": ["owner"], "blocking": False},
     )
 
-    assert error["code"] == "entry_fields_invalid"
-    assert error["details"]["fields"] == [
-        {"field": "addressees", "reason": "unknown_participant", "name": "ghost"}
-    ]
+    assert error["code"] == "question_not_a_task_entry"
+    assert error["details"] == {"key": "TRK-1"}
+    assert (await package(auth_client, "TRK-1"))["index"] == before
 
 
 async def test_an_answer_to_something_that_is_not_a_question_is_refused(
@@ -275,29 +277,16 @@ async def test_closing_via_rest_rejects_a_missing_or_blank_unmeasured_by_the_sch
 
 
 async def test_the_package_shows_the_summary_and_questions_in_full_and_the_rest_as_headings(
-    auth_client: AsyncClient, project: Project
+    auth_client: AsyncClient, db_session: AsyncSession, project: Project
 ) -> None:
-    """Обзорная проверка 8."""
+    """Обзорная проверка 8. Вопросы — прежние, из дела задачи (`legacy_question`)."""
     await create(auth_client)
     await append(auth_client, "TRK-1", type="decision", title="Решил так", body="Длинное тело")
     await append(auth_client, "TRK-1", type="summary", payload=SUMMARY)
-    answered = await append(
-        auth_client,
-        "TRK-1",
-        type="question",
-        title="Первый вопрос",
-        payload={"addressees": ["owner"], "blocking": True},
-    )
+    answered = await legacy_question(db_session, "TRK-1", title="Первый вопрос", blocking=True)
+    await legacy_question(db_session, "TRK-1", title="Второй вопрос", body="Подробности")
     await append(
-        auth_client,
-        "TRK-1",
-        type="question",
-        title="Второй вопрос",
-        body="Подробности",
-        payload={"addressees": ["owner"], "blocking": False},
-    )
-    await append(
-        auth_client, "TRK-1", type="answer", body="Да", payload={"question_no": answered["no"]}
+        auth_client, "TRK-1", type="answer", body="Да", payload={"question_no": answered.no}
     )
 
     data = await package(auth_client, "TRK-1")
@@ -477,13 +466,8 @@ async def test_an_answer_filed_before_outcomes_reads_as_answered(
     """TRK-552: ответ без ключа `outcome` в нагрузке — подшитый до исходов — читается как
     `answered` и в записи, и в описи, а его вопрос по-прежнему считается отвеченным."""
     await create(auth_client)
-    question = await append(
-        auth_client,
-        "TRK-1",
-        type="question",
-        title="Какой ключ?",
-        payload={"addressees": ["owner"], "blocking": True},
-    )
+    asked = await legacy_question(db_session, "TRK-1", title="Какой ключ?", blocking=True)
+    question = {"no": asked.no}
     task = await tasks_service.get_task(db_session, "TRK-1")
     no = await EntryRepository(db_session).allocate_no(task.id)
     await EntryRepository(db_session).add(

@@ -101,6 +101,7 @@ from app.domain.case import (
     CLOSING_WITHOUT_ANSWER,
     INCOMPLETE_OUTCOMES,
     REPLACEABLE_ENTRY_TYPES,
+    SUPERSEDES_FIELD,
     AreaEntryRef,
     DiscussionEntryRef,
     DiscussionRef,
@@ -309,6 +310,14 @@ async def open_blocking_question_refs(session: AsyncSession, task: Task) -> list
         for question, address in await repository.open_discussion_questions_of_task(task.id)
     ]
     return in_task + in_discussions
+
+
+async def discussion_entries_after_card(
+    session: AsyncSession, task: Task, *, actor: Actor
+) -> list[str]:
+    """Итоги и записи человека в обсуждениях задачи после последней правки её разделов —
+    ссылками `TRK~7#5`, для блока `state` (решение `TRK#51`, п. 5)."""
+    return await EntryRepository(session).discussion_entries_after_card(task.id)
 
 
 async def open_remarks(session: AsyncSession, task: Task, *, actor: Actor) -> list[Entry]:
@@ -567,8 +576,8 @@ async def append_entry(
 ) -> Entry:
     """Подшивает запись агента: форма проверяется доменом, существование — здесь.
 
-    Единственная точка входа для всех типов записей агента. Обёртки ниже (`add_summary`,
-    `ask`, `answer`, `add_verdict`, `add_entry`) существуют ради инструментов MCP,
+    Единственная точка входа для всех типов записей агента в деле задачи. Обёртки ниже
+    (`add_summary`, `answer`, `add_verdict`, `add_entry`) существуют ради инструментов MCP,
     у которых один инструмент — один вид действия; своей логики в них нет.
 
     `closing` доезжает до домена как часть контекста: от него зависит состав частей
@@ -656,29 +665,33 @@ async def add_summary(
     )
 
 
-async def ask(
+async def file_legacy_task_question(
     session: AsyncSession,
     task: Task,
     *,
     actor: Actor,
-    addressees: Any,
-    title: Any,
-    body: Any = "",
-    blocking: Any = None,
-    refs: Any = (),
-    action_id: uuid.UUID | None = None,
+    addressees: Sequence[str],
+    title: str,
+    body: str = "",
+    blocking: bool,
 ) -> Entry:
-    """Вопрос участникам реестра. `blocking` обязателен и значения по умолчанию не имеет."""
-    return await append_entry(
+    """Вопрос в деле задачи в прежней форме — так его подшивали до обсуждений.
+
+    Новый вопрос в деле задачи трекер не принимает (`question_not_a_task_entry`, решение
+    `TRK#51`, п. 6), а прежние остаются в делах установок: их читают карточка, признаки,
+    выдача вопросов и ответ на них. Эта функция воспроизводит такое дело и нужна только
+    демо-данным и тестам; ни маршрут REST, ни инструмент MCP её не зовут. Проверок формы
+    нет намеренно: вызывающий — код, а не клиент, и значения у него заведомо законные.
+    """
+    await lock_changes(session)
+    return await _append(
         session,
         task,
         actor=actor,
         type=EntryType.QUESTION,
         title=title,
         body=body,
-        refs=refs,
-        payload={"addressees": addressees, "blocking": blocking},
-        action_id=action_id,
+        payload={"addressees": list(addressees), "blocking": blocking},
     )
 
 
@@ -695,6 +708,10 @@ async def answer(
     action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Ответ на вопрос той же задачи. Ответить может кто угодно, ответов может быть много.
+
+    Новых вопросов в деле задачи нет (`TRK#51`, п. 6), а прежние ответ принимают: так их
+    закрывает и миграция выпуска с обсуждениями — исходом `withdrawn`. Ответ в обсуждении
+    — `answer_in_discussion`.
 
     Исход по умолчанию — ответ по существу. `withdrawn` и `replaced` закрывают вопрос
     без ответа: снятый или заменённый вопрос уходит из открытых так же, как отвеченный,
@@ -1181,6 +1198,93 @@ async def add_conclusion(
     )
 
 
+async def ask_in_discussion(
+    session: AsyncSession,
+    discussion: Discussion,
+    *,
+    actor: Actor,
+    addressees: Any,
+    title: Any,
+    body: Any = "",
+    refs: Any = (),
+) -> Entry:
+    """Вопрос участникам в существующем обсуждении (`TRK#51`, п. 6).
+
+    Признака `blocking` нет: любой вопрос обсуждения держит привязанные задачи, и в
+    нагрузку его кладёт домен. Первый вопрос по задаче заводит обсуждение сам —
+    `discussions.ask_about_task`.
+    """
+    return await append_discussion_entry(
+        session,
+        discussion,
+        actor=actor,
+        type=EntryType.QUESTION,
+        title=title,
+        body=body,
+        payload={"addressees": addressees},
+        refs=refs,
+    )
+
+
+async def answer_in_discussion(
+    session: AsyncSession,
+    discussion: Discussion,
+    *,
+    actor: Actor,
+    question_no: Any,
+    body: Any = "",
+    outcome: Any = None,
+    replaced_by: Any = None,
+    refs: Any = (),
+) -> Entry:
+    """Ответ на вопрос **этого** обсуждения, его снятие или замена — правила те же, что у
+    ответа в деле задачи (`answer`), номер вопроса ищется в деле обсуждения."""
+    return await append_discussion_entry(
+        session,
+        discussion,
+        actor=actor,
+        type=EntryType.ANSWER,
+        body=body,
+        payload={"question_no": question_no, "outcome": outcome, "replaced_by": replaced_by},
+        refs=refs,
+    )
+
+
+async def add_discussion_entry(
+    session: AsyncSession,
+    discussion: Discussion,
+    *,
+    actor: Actor,
+    type: Any,
+    title: Any,
+    body: Any = "",
+    refs: Any = (),
+    supersedes: Any = None,
+) -> Entry:
+    """Запись без нагрузки в дело обсуждения по его адресу — путь `add_project_entry`.
+
+    Из типов дела проекта у обсуждения есть только `note`: остальные домен отвергает
+    списком допустимых (`entry_fields_invalid`, `not_allowed`). Непустой `supersedes`
+    отвергается тем же кодом и той же причиной, что у области: механики замены у
+    обсуждения нет.
+    """
+    if supersedes:
+        problems = FieldProblems()
+        problems.add(SUPERSEDES_FIELD, "not_allowed", allowed_in="project_case")
+        problems.raise_as(EntryFieldsInvalidError, key=discussion.address)
+    return await append_discussion_entry(
+        session, discussion, actor=actor, type=type, title=title, body=body, refs=refs
+    )
+
+
+async def latest_discussion_entry_no(session: AsyncSession, discussion: Discussion) -> int:
+    """Номер последней записи дела обсуждения — двойник `latest_entry_no` у задачи: годится
+    сразу после подшивки, в той же транзакции под очередью изменений."""
+    no = await EntryRepository(session).latest_discussion_no(discussion.id)
+    assert no is not None  # у любого обсуждения есть хотя бы `created`
+    return no
+
+
 async def list_discussion_entries(
     session: AsyncSession,
     discussion: Discussion,
@@ -1188,13 +1292,27 @@ async def list_discussion_entries(
     actor: Actor,
     nos: Sequence[int] | None = None,
     types: Sequence[EntryType] | None = None,
+    attribute: str | None = None,
+    text: str | None = None,
+    in_force: bool | None = None,
     after_no: int | None = None,
     limit: int | None = None,
     cursor: str | None = None,
 ) -> Page[Entry]:
-    """Записи дела обсуждения страницами в порядке `no` — те же фильтры, что у задачи."""
+    """Записи дела обсуждения страницами в порядке `no` — те же фильтры, что у дела
+    области: `text` ищет подстроку, а `attribute` и `in_force` у обсуждения не находят
+    ничего — атрибутов и записей со статусом в его деле нет."""
+    if in_force is not None:
+        return Page(items=[], next_cursor=None)
     return await EntryRepository(session).list_discussion_page(
-        discussion.id, nos=nos, types=types, after_no=after_no, limit=limit, cursor=cursor
+        discussion.id,
+        nos=nos,
+        types=types,
+        attribute=attribute,
+        text=text,
+        after_no=after_no,
+        limit=limit,
+        cursor=cursor,
     )
 
 

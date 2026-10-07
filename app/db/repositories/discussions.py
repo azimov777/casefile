@@ -192,6 +192,31 @@ class DiscussionRepository:
             open_questions=int(found.open_questions),
         )
 
+    async def of_task(self, task_id: uuid.UUID) -> list[DiscussionRow]:
+        """Обсуждения, к которым задача привязана сейчас, открытые и закрытые, с признаками
+        — по адресу. Для пакета преемника, поэтому без страниц и без отбора по архиву:
+        у задачи их единицы, и задача архивного проекта читается со своими обсуждениями
+        так же, как со своими связями."""
+        statement = (
+            select(
+                Discussion,
+                turn_of(Discussion).label("turn"),
+                open_question_count_of(Discussion).label("open_questions"),
+            )
+            .join(DiscussionTask, DiscussionTask.discussion_id == Discussion.id)
+            .join(Project, Project.id == Discussion.project_id)
+            .where(DiscussionTask.task_id == task_id)
+            .order_by(Project.key, Discussion.number)
+        )
+        return [
+            DiscussionRow(
+                discussion=item.Discussion,
+                turn=_turn(item.turn),
+                open_questions=int(item.open_questions),
+            )
+            for item in await self._session.execute(statement)
+        ]
+
     async def page(
         self,
         *,
@@ -352,6 +377,8 @@ def turn_of(discussion: Any) -> ColumnElement[str | None]:
         .correlate(discussion)
         .exists()
     )
+    # Сам итог ответом не считается, даже подписанный человеком (токен владельца в MCP):
+    # иначе итог оказывался бы «записью человека после последнего итога» — самого себя.
     human_or_answer_since_conclusion = (
         select(1)
         .where(
@@ -359,7 +386,7 @@ def turn_of(discussion: Any) -> ColumnElement[str | None]:
             (reply.type == EntryType.ANSWER)
             | (
                 (reply.created_by_kind == AuthorKind.HUMAN)
-                & reply.type.in_(sorted(AGENT_ENTRY_TYPES))
+                & reply.type.in_(sorted(AGENT_ENTRY_TYPES - {EntryType.CONCLUSION}))
             ),
             ~select(1)
             .where(

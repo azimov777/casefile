@@ -19019,7 +19019,8 @@
         "properties": {
           "no": {
             "type": "integer",
-            "title": "No"
+            "title": "No",
+            "description": "Number in the case of the discussion, or of the task if none"
           },
           "to": {
             "items": {
@@ -19036,6 +19037,21 @@
           "title": {
             "type": "string",
             "title": "Title"
+          },
+          "discussion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discussion",
+            "description": "Address of the discussion the question is in; `null` for an earlier question of the task's own case",
+            "examples": [
+              "TRK~7"
+            ]
           }
         },
         "type": "object",
@@ -19043,10 +19059,11 @@
           "no",
           "to",
           "blocking",
-          "title"
+          "title",
+          "discussion"
         ],
         "title": "StateQuestionRead",
-        "description": "Открытый вопрос: кого спросили и мешает ли он работе."
+        "description": "Открытый вопрос: кого спросили, мешает ли он работе и в каком обсуждении."
       },
       "StateSummaryRead": {
         "properties": {
@@ -20155,6 +20172,76 @@
         "title": "TaskCreate",
         "description": "Создание задачи. Статуса нет: новая задача рождается в `backlog`.\n\nКлюча тоже нет — его выдаёт счётчик проекта. Разделы можно оставить пустыми и\nдописать в `backlog`; перед `open` они обязаны быть заполнены."
       },
+      "TaskDiscussionRead": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the discussion: the project key and its number, `TRK~7`. References to its case entries are `TRK~7#3`",
+            "examples": [
+              "TRK~7"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "The narrow question itself",
+            "examples": [
+              "Обсуждение — своя сущность или ярлык над записями задач?"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/DiscussionStatus",
+            "examples": [
+              "open"
+            ]
+          },
+          "turn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscussionTurn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whose move it is, computed on read: `human` — a question has no answer yet; `agent` — no open questions, but an answer or a person's entry came after the latest conclusion; `null` — neither, and always on a closed discussion",
+            "examples": [
+              "human"
+            ]
+          },
+          "open_questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionEntryRead"
+            },
+            "type": "array",
+            "title": "Open Questions",
+            "description": "Questions of the discussion with no answer yet, in full; each one keeps the task out of `in_progress` until it is answered"
+          },
+          "conclusion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConclusionEntryRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The latest conclusion in full — decided, superseded, still open; it sets the work of the task together with its sections. `null` until the first one"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "title",
+          "status",
+          "turn",
+          "open_questions",
+          "conclusion"
+        ],
+        "title": "TaskDiscussionRead",
+        "description": "Обсуждение в пакете преемника задачи (решение `TRK#51`, п. 5): карточка без\nслужебных полей, чей ход, открытые вопросы и последний итог целиком."
+      },
       "TaskFeaturesRead": {
         "properties": {
           "blocked": {
@@ -20430,6 +20517,14 @@
             "title": "Remarks",
             "description": "Every remark with no resolution yet, in full"
           },
+          "discussions": {
+            "items": {
+              "$ref": "#/components/schemas/TaskDiscussionRead"
+            },
+            "type": "array",
+            "title": "Discussions",
+            "description": "Discussions the task is attached to, open and closed, by address: whose move it is, open questions and the latest conclusion in full"
+          },
           "transitions": {
             "items": {
               "$ref": "#/components/schemas/TaskStatus"
@@ -20463,6 +20558,7 @@
           "features",
           "questions",
           "remarks",
+          "discussions",
           "transitions",
           "index"
         ],
@@ -21262,6 +21358,19 @@
             "type": "array",
             "title": "Decisions After Card",
             "description": "Numbers of `decision` entries filed after the last edit of the sections: the statement may not account for them"
+          },
+          "discussions_after_card": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Discussions After Card",
+            "description": "Conclusions and entries of people in the task's discussions filed after the last edit of the sections, as references `TRK~7#5`: they set the work too, and the statement may not account for them",
+            "examples": [
+              [
+                "TRK~7#5"
+              ]
+            ]
           }
         },
         "type": "object",
@@ -21278,7 +21387,8 @@
           "blockers",
           "children",
           "children_unclosed",
-          "decisions_after_card"
+          "decisions_after_card",
+          "discussions_after_card"
         ],
         "title": "TaskStateRead",
         "description": "Состояние задачи на момент чтения (`CONCEPT.md`, 4.2; TRK-579).\n\nНикто не пишет и ничего не хранится: блок считается из дела и связей при каждом\nчтении, поэтому не устаревает. Он так же информативен, как то, что агенты уже пишут:\nпричина перехода, `next_step`, заголовки записей."

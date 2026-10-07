@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { fontsReady, readE2eToken, silenceJournal } from './contour';
+import { fileLegacyQuestion, fontsReady, readE2eToken, silenceJournal } from './contour';
 
 /**
  * Ключ задачи и ссылка на запись не рвутся переносом по дефису (UI-151, аудит UI-149):
@@ -227,17 +227,14 @@ test('ключ задачи вне markdown несёт `white-space: nowrap` —
      * с этой фразой — заголовок вопроса, — а не заголовок ответа, и следующий локатор
      * ждал вложенный `code.font-mono`, которого там нет, до тайм-аута теста).
      */
-    const questionResponse = await request.post(`/api/v1/tasks/${key}/entries`, {
-      headers: { ...auth(), 'X-Actor-Label': 'ui151_probe' },
-      data: {
-        type: 'question',
-        title: 'Проверка заголовка описи для записи-ответа',
-        body: 'Нужен ответ.',
-        payload: { addressees: ['owner'], blocking: false },
-      },
+    // Прежний вопрос дела задачи: новый REST отвергает (TRK-671), а ответ на прежний
+    // и его заголовок «Ответ на KEY#N» в описи остаются.
+    const { no: questionNo } = fileLegacyQuestion({
+      key,
+      title: 'Проверка заголовка описи для записи-ответа',
+      body: 'Нужен ответ.',
+      author: 'ui151_probe',
     });
-    expect(questionResponse.status()).toBe(201);
-    const questionNo = ((await questionResponse.json()) as { data: { no: number } }).data.no;
 
     const answerResponse = await request.post(`/api/v1/tasks/${key}/entries`, {
       headers: { ...auth(), 'X-Actor-Label': 'ui151_probe' },
