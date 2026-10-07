@@ -211,6 +211,7 @@ describe('список задач', () => {
           task('DEMO-9', {
             features: {
               blocked: true,
+              deferred: false,
               open_questions: 2,
               open_blocking_questions: 0,
               open_remarks: 3,
@@ -261,6 +262,7 @@ describe('список задач', () => {
   it('строка с открытым вопросом blocking несёт пометку «ждёт ответа», без него — нет (TRK-571)', async () => {
     const features = (blocking: number) => ({
       blocked: false,
+      deferred: false,
       open_questions: blocking,
       open_blocking_questions: blocking,
       open_remarks: 0,
@@ -293,6 +295,7 @@ describe('список задач', () => {
             status: 'open',
             features: {
               blocked: false,
+              deferred: false,
               open_questions: 1,
               open_blocking_questions: 1,
               open_remarks: 0,
@@ -347,6 +350,7 @@ describe('список задач', () => {
             assignee: 'demo_agent',
             features: {
               blocked: false,
+              deferred: false,
               open_questions: 1,
               open_blocking_questions: 1,
               open_remarks: 0,
@@ -360,6 +364,7 @@ describe('список задач', () => {
             priority: 'high',
             features: {
               blocked: true,
+              deferred: false,
               open_questions: 0,
               open_blocking_questions: 0,
               open_remarks: 0,

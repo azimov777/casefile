@@ -609,6 +609,7 @@ describe('входящая: требуют внимания (TRK-561)', () => {
             status: 'done',
             features: {
               blocked: false,
+              deferred: false,
               open_questions: 0,
               open_blocking_questions: 0,
               open_remarks: 0,

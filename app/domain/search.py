@@ -277,6 +277,7 @@ class SearchField(StrEnum):
     ASSIGNEE = "assignee"
     PRIORITY = "priority"
     BLOCKED = "blocked"
+    DEFERRED = "deferred"
     OPEN_QUESTIONS = "open_questions"
     OPEN_BLOCKING_QUESTIONS = "open_blocking_questions"
     OPEN_REMARKS = "open_remarks"
@@ -369,6 +370,10 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
         # `priority: >= high` опирается именно на этот порядок, а не на алфавит.
         SearchFieldSpec(SearchField.PRIORITY, SearchValueKind.PRIORITY, ORDERED_OPERATORS),
         SearchFieldSpec(SearchField.BLOCKED, SearchValueKind.FLAG, EXACT_OPERATORS),
+        # Отложена ли задача: её `not_before` ещё впереди по часам базы (решение проекта
+        # `TRK#47`). Флаг, а не сравнение `not_before: > now()`: языку функция времени не
+        # нужна, и отбор считается тем же выражением, что проверка входа в `in_progress`.
+        SearchFieldSpec(SearchField.DEFERRED, SearchValueKind.FLAG, EXACT_OPERATORS),
         SearchFieldSpec(SearchField.OPEN_QUESTIONS, SearchValueKind.COUNT, ORDERED_OPERATORS),
         SearchFieldSpec(
             SearchField.OPEN_BLOCKING_QUESTIONS, SearchValueKind.COUNT, ORDERED_OPERATORS
@@ -494,6 +499,7 @@ SELECTABLE_FIELDS: tuple[str, ...] = (
     "status",
     "assignee",
     "priority",
+    "not_before",
     "version",
     "created_by",
     "created_at",

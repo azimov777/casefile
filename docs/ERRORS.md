@@ -98,6 +98,7 @@
 | `task_blocked` | Task has an open blocker | Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`. |
 | `task_checks_frozen` | Checks cannot be changed after the task has entered in_progress | Проверки задачи, уже входившей в `in_progress`, не правятся. |
 | `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля не меняются, и связи, влияющие на переходы, тоже. |
+| `task_deferred` | Task is deferred until its not_before moment | Вход в `in_progress` до момента `not_before` по часам базы: момент в `details.not_before`. |
 | `task_field_locked` | Field cannot be changed in the current status | Поле не редактируется в этом статусе: содержание задачи меняется только в `backlog`. |
 | `task_has_open_blocking_questions` | Task has open blocking questions | Вход в `in_progress` при открытом вопросе `blocking`: номера вопросов в `details.questions`. |
 | `task_has_parent` | Task already has a parent | У задачи уже есть родитель: второй не ставится, нынешний назван в `details.parent`. |

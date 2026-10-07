@@ -32,6 +32,7 @@ function tasksForEveryStatus() {
           status: 'open',
           features: {
             blocked: false,
+            deferred: false,
             open_questions: 1,
             open_blocking_questions: 1,
             open_remarks: 0,
@@ -128,6 +129,7 @@ describe('доска', () => {
         status: status as never,
         features: {
           blocked: false,
+          deferred: false,
           open_questions: blocking,
           open_blocking_questions: blocking,
           open_remarks: 0,

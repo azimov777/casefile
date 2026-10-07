@@ -99,6 +99,12 @@ class TaskView(BaseModel):
     status: TaskStatusSchema
     assignee: str | None
     priority: TaskPrioritySchema
+    not_before: datetime | None = Field(
+        description=(
+            "Moment before which the task cannot enter `in_progress`, in UTC; `null` for "
+            "none. The `deferred` feature tells whether it is still ahead"
+        )
+    )
     version: int
     created_by: AuthorView
     created_at: datetime
@@ -123,6 +129,7 @@ def task(item: Task) -> TaskView:
         status=item.status,
         assignee=item.assignee,
         priority=item.priority,
+        not_before=item.not_before,
         version=item.version,
         created_by=author(item.created_by),
         created_at=item.created_at,
@@ -184,6 +191,12 @@ class FeaturesView(BaseModel):
     """Computed task features."""
 
     blocked: bool
+    deferred: bool = Field(
+        description=(
+            "`true` while `not_before` is ahead by the database clock; entry into "
+            "`in_progress` is then refused with `task_deferred`"
+        )
+    )
     open_questions: int
     open_blocking_questions: int
     open_remarks: int
@@ -196,6 +209,7 @@ def features(value: TaskFeatures) -> FeaturesView:
     """Вычисляемые признаки задачи (`CONCEPT.md`, 4.3)."""
     return FeaturesView(
         blocked=value.blocked,
+        deferred=value.deferred,
         open_questions=value.open_questions,
         open_blocking_questions=value.open_blocking_questions,
         open_remarks=value.open_remarks,

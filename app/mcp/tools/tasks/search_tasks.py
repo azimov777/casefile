@@ -197,6 +197,16 @@ BlockedArg = Annotated[
     ),
 ]
 
+DeferredArg = Annotated[
+    bool | None,
+    Field(
+        description=(
+            "Whether the task's `not_before` is still ahead by the database clock; such a "
+            "task is refused `in_progress` with `task_deferred`"
+        )
+    ),
+]
+
 OpenQuestionsArg = Annotated[
     int | None,
     Field(description="Exact number of unanswered questions; ranges go in `query`"),
@@ -290,6 +300,7 @@ class FoundTaskView(BaseModel):
     status: TaskStatusSchema | None = None
     assignee: str | None = None
     priority: TaskPrioritySchema | None = None
+    not_before: datetime | None = None
     version: int | None = None
     created_by: AuthorView | None = None
     created_at: datetime | None = None
@@ -393,6 +404,7 @@ def register(tools: Toolset) -> None:
         assignee: AssigneesArg = None,
         priority: PrioritiesArg = None,
         blocked: BlockedArg = None,
+        deferred: DeferredArg = None,
         open_questions: OpenQuestionsArg = None,
         open_blocking_questions: OpenBlockingQuestionsArg = None,
         open_remarks: OpenRemarksArg = None,
@@ -435,6 +447,7 @@ def register(tools: Toolset) -> None:
                     assignee=assignee,
                     priority=priority,
                     blocked=blocked,
+                    deferred=deferred,
                     open_questions=open_questions,
                     open_blocking_questions=open_blocking_questions,
                     open_remarks=open_remarks,
@@ -472,6 +485,7 @@ def _terms(
     assignee: Sequence[str] | None,
     priority: Sequence[TaskPriority] | None,
     blocked: bool | None,
+    deferred: bool | None,
     open_questions: int | None,
     open_blocking_questions: int | None,
     open_remarks: int | None,
@@ -509,6 +523,7 @@ def _terms(
         StructuredTerm(name=name, values=[value])
         for name, value in (
             ("blocked", blocked),
+            ("deferred", deferred),
             ("open_questions", open_questions),
             ("open_blocking_questions", open_blocking_questions),
             ("open_remarks", open_remarks),

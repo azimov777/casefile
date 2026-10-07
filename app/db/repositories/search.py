@@ -18,7 +18,8 @@
 руками.
 
 **Вычисляемый признак не переписывается.** `blocked` — это `EXISTS` над запросом
-`open_blockers_of` из `app/db/repositories/links.py`, счётчики вопросов — скалярный
+`open_blockers_of` из `app/db/repositories/links.py`, `deferred` — условие
+`deferred_now` из `app/db/repositories/tasks.py`, счётчики вопросов — скалярный
 подзапрос `open_question_count`, время последней сводки — `latest_summary`, оба из
 `app/db/repositories/entries.py`. Все запросы написаны один раз и там же, где ими
 пользуется карточка: второе написание того же условия развело бы поиск с карточкой
@@ -65,6 +66,7 @@ from app.db.repositories.entries import (
 )
 from app.db.repositories.links import descendants_of, open_blockers_of, parent_of
 from app.db.repositories.projects import in_active_project
+from app.db.repositories.tasks import deferred_now
 from app.db.sql import ilike_contains
 from app.domain.links import LinkKind
 from app.domain.search import (
@@ -223,8 +225,9 @@ def feature_columns() -> tuple[ColumnElement[Any], ...]:
     """Вычисляемые признаки колонками выдачи — теми же запросами, что и отбор по ним.
 
     Ни одного нового условия: `blocked` — тот же `open_blockers_of`, что у проверки
-    перехода и у фильтра, счётчики — тот же `open_question_count`, время сводки — тот же
-    `latest_summary`, которым карточка читает саму запись. Третье написание любого из них
+    перехода и у фильтра, `deferred` — тот же `deferred_now`, счётчики — тот же
+    `open_question_count`, время сводки — тот же `latest_summary`, которым карточка читает
+    саму запись. Третье написание любого из них
     развело бы список с карточкой молча (`CONCEPT.md`, 4.3).
 
     Метки обязательны: строка читается по именам (`_features_of`), а не по номерам
@@ -233,6 +236,7 @@ def feature_columns() -> tuple[ColumnElement[Any], ...]:
     """
     return (
         open_blockers_of(Task.id).correlate(Task).exists().label("blocked"),
+        deferred_now(Task.not_before).label("deferred"),
         open_question_count(Task.id).correlate(Task).scalar_subquery().label("open_questions"),
         open_question_count(Task.id, blocking=True)
         .correlate(Task)
@@ -266,6 +270,7 @@ def _features_of(row: Any) -> TaskFeatures:
     """Признаки из строки выдачи. Тот же тип, что у карточки: представление одно."""
     return TaskFeatures(
         blocked=row.blocked,
+        deferred=row.deferred,
         open_questions=row.open_questions,
         open_blocking_questions=row.open_blocking_questions,
         open_remarks=row.open_remarks,
@@ -346,7 +351,7 @@ def _body(term: SearchTerm) -> ColumnElement[bool]:
         case SearchValueKind.PRIORITY:
             return _priority(term.operator, term.values)
         case SearchValueKind.FLAG:
-            return _blocked(term.operator, term.values)
+            return _flag(term)
         case SearchValueKind.COUNT:
             return _counter(term, term.operator, term.values)
         case SearchValueKind.TIMESTAMP:
@@ -473,15 +478,25 @@ def _priority(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
     return _order_condition(_priority_rank(), operator, PRIORITY_RANK[values[0]])
 
 
-def _blocked(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:
-    """Признак `blocked` по тому же запросу, что и список блокеров у перехода.
+def _flag(term: SearchTerm) -> ColumnElement[bool]:
+    """Признак-флаг по тому же условию, что и проверка входа в `in_progress`.
 
-    `EXISTS`, а не соединение: у задачи блокеров может быть несколько, и соединение
-    размножило бы её по их числу, сломав и страницу, и порядок.
+    `blocked` — `EXISTS` по блокерам, а не соединение: у задачи блокеров может быть
+    несколько, и соединение размножило бы её по их числу, сломав и страницу, и порядок.
+    `deferred` — `deferred_now` по часам базы. Вид значения у обоих один, условие выбирает
+    поле, как у ключа задачи (`_task_key`).
     """
-    is_blocked = open_blockers_of(Task.id).correlate(Task).exists()
-    matching = or_(*(is_blocked if value else not_(is_blocked) for value in values))
-    return not_(matching) if operator in NEGATIVE_OPERATORS else matching
+    match term.field:
+        case SearchField.BLOCKED:
+            flag = open_blockers_of(Task.id).correlate(Task).exists()
+        case SearchField.DEFERRED:
+            flag = deferred_now(Task.not_before)
+        case _:
+            # Недостижимо: вид `flag` носят только эти поля. Явная ошибка вместо тихого
+            # условия — чтобы новый флаг, забытый здесь, назвал себя, а не отбирал не то.
+            raise ValueError(f"Search field {term.field.value!r} has no flag condition")
+    matching = or_(*(flag if value else not_(flag) for value in term.values))
+    return not_(matching) if term.operator in NEGATIVE_OPERATORS else matching
 
 
 def _counter(

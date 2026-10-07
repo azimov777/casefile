@@ -314,6 +314,7 @@ async def test_the_package_shows_the_summary_and_questions_in_full_and_the_rest_
     ][-1]
     assert data["features"] == {
         "blocked": False,
+        "deferred": False,
         "open_questions": 1,
         "open_blocking_questions": 0,
         "open_remarks": 0,

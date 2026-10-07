@@ -1,7 +1,8 @@
-"""Аргументы, общие для нескольких инструментов задач: решения проекта у задачи.
+"""Аргументы, общие для нескольких инструментов задач: решения, направление и момент.
 
-Поле `decisions` ставит `create_task` и меняет `update_task` (`CONCEPT.md`, 3.3), и правило
-у него одно на оба инструмента: какая ссылка — решение проекта и какой ответит отказ.
+Поля `decisions`, `direction` и `not_before` ставит `create_task` и меняет `update_task`
+(`CONCEPT.md`, 3.3; решение проекта `TRK#47`), и правило у каждого одно на оба инструмента:
+какое значение принимается и какой ответит отказ.
 """
 
 from typing import Annotated
@@ -28,6 +29,20 @@ DECISIONS_RULE = (
 DIRECTION_RULE = "Direction address `PROJECT/key`"
 
 DirectionArg = Annotated[str | None, Field(description=DIRECTION_RULE)]
+
+#: Момент «не раньше» (решение проекта `TRK#47`): поле, признак и отказ входа названы в
+#: одном месте, потому что агент ставит момент там же, где узнаёт, что он держит. Примера
+#: значения в схеме нет: примеры метадаты — только форматы ключей (`tests/test_mcp_metadata.py`).
+NOT_BEFORE_RULE = (
+    "Moment before which the task cannot enter `in_progress`: ISO 8601 date and time with "
+    "a UTC offset, by the clock of the device of whoever sets it. A time without an offset "
+    "or a date without a time is refused with `task_fields_invalid`. Until the database "
+    "clock reaches the moment the `deferred` feature is true and entry into `in_progress` "
+    "is refused with `task_deferred`; the moment arrives with no entry, no status change "
+    "and no wake-up"
+)
+
+NotBeforeArg = Annotated[str | None, Field(description=NOT_BEFORE_RULE)]
 
 DecisionsArg = Annotated[
     list[str] | None,

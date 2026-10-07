@@ -13,9 +13,19 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any, ClassVar
 
-from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Index, String, Text, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -177,6 +187,14 @@ class Task(BaseModel, CreatedByMixin):
     # задачи колонку обнуляет.
     direction_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("directions.id"), default=None, nullable=True
+    )
+
+    # Момент «не раньше» (решение проекта `TRK#47`): до него вход в `in_progress`
+    # отклоняется. Хранится момент, а не «отложена ли»: признак `deferred` считается при
+    # чтении по часам базы (`app/db/repositories/tasks.py`, `deferred_now`), и колонка под
+    # него разошлась бы с часами ровно в момент наступления.
+    not_before: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None, nullable=True
     )
 
     # Версия для оптимистичной блокировки. Ведёт её SQLAlchemy (`version_id_col`):

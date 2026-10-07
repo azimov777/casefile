@@ -278,6 +278,7 @@ def features(
     index: Sequence[EntryHeading],
     *,
     blocked: bool,
+    deferred: bool,
     remarks: Sequence[Entry] = (),
 ) -> TaskFeatures:
     """Вычисляемые признаки из уже прочитанного, без новых запросов.
@@ -287,7 +288,9 @@ def features(
 
     `blocked` приезжает готовым и **без значения по умолчанию**: считается он из связей,
     которых дело не знает, а умолчание `False` сделало бы забытый аргумент признаком,
-    который врёт. Кто его считает — `app/services/links.py`, `blocked`.
+    который врёт. Кто его считает — `app/services/links.py`, `blocked`. `deferred` — по
+    тому же правилу: его считает база по своим часам (`app/db/repositories/tasks.py`,
+    `deferred_now`).
 
     Признак «вопрос блокирующий» берётся из домена (`is_blocking_question`), а не
     проверяется здесь по месту: тот же признак поиск считает запросом, и третьей формы
@@ -296,6 +299,7 @@ def features(
     """
     return TaskFeatures(
         blocked=blocked,
+        deferred=deferred,
         open_questions=len(questions),
         open_blocking_questions=sum(
             1 for question in questions if is_blocking_question(question.payload)
@@ -1090,7 +1094,8 @@ async def record_field_changed(
 ) -> Entry:
     """Правка обвязки задачи: то, что меняется в любом незакрытом статусе.
 
-    Сегодня это `priority` и `decisions`; у `decisions` «было» и «стало» — списки ссылок
+    Сегодня это `priority`, `direction`, `not_before` и `decisions`; у `not_before` «было» и
+    «стало» — моменты строкой в UTC, у `decisions` — списки ссылок
     (`CONCEPT.md`, 3.4). Отдельно от `section_changed` не ради симметрии:
     тот про задание — договор с агентом, неизменяемый от `open` и дальше, — а это
     обвязка, которую перекладывают когда угодно. Один тип на оба означал бы «section»

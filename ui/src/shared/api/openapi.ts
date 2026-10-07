@@ -994,11 +994,13 @@ export interface paths {
          * @description Меняет только переданные поля.
          *
          *     Название, описание и пять разделов — только в `backlog` (иначе `409
-         *     task_field_locked`); исполнитель, приоритет, направление и решения проекта — в любом
-         *     незакрытом статусе; в `done` и `cancelled` не меняется ничего (`409 task_closed`). Каждое
-         *     изменение подшивает запись: раздел — `section_changed`, исполнитель —
-         *     `assignee_changed`, приоритет, направление и решения — `field_changed`. Направление —
-         *     адрес направления своего проекта или `null`: другой проект — `422
+         *     task_field_locked`); исполнитель, приоритет, направление, момент `not_before` и решения
+         *     проекта — в любом незакрытом статусе; в `done` и `cancelled` не меняется ничего (`409
+         *     task_closed`). Каждое изменение подшивает запись: раздел — `section_changed`,
+         *     исполнитель — `assignee_changed`, приоритет, направление, момент и решения —
+         *     `field_changed` с автором запроса. Момент `not_before` — строка ISO 8601 со смещением
+         *     пояса или `null`; время без смещения и дата без времени — `422 task_fields_invalid`.
+         *     Направление — адрес направления своего проекта или `null`: другой проект — `422
          *     direction_project_mismatch`, нет такого — `404 direction_not_found`, архивное — `409
          *     direction_archived` (снять направление можно всегда). Новая ссылка на заменённое
          *     решение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не
@@ -1040,7 +1042,9 @@ export interface paths {
          *     `in_progress` отклоняется и при открытом блокере (`409 task_blocked`, их ключи в
          *     `details.blockers`), и при вопросе с `blocking` без ответа (`409
          *     task_has_open_blocking_questions`, номера вопросов в `details.questions`; ни вопрос,
-         *     ни ответ статус не меняют), закрытие — и `done`, и `cancelled` — при детях не в `done` и
+         *     ни ответ статус не меняют), и раньше момента `not_before` по часам базы (`409
+         *     task_deferred`, момент в `details.not_before`; наступление момента ничего не подшивает),
+         *     закрытие — и `done`, и `cancelled` — при детях не в `done` и
          *     не в `cancelled` (`409 task_has_unclosed_children`, ключи в `details.children`).
          *     Переход подшивает `status_changed` с `from`, `to` и `reason`.
          *
@@ -5889,6 +5893,13 @@ export interface components {
              */
             direction?: string | null;
             /**
+             * Not Before
+             * Format: date-time
+             * @description Moment before which the task cannot enter `in_progress` (`task_deferred`): ISO 8601 date and time with a UTC offset, by the clock of the device that sets it; null for none. A time without an offset or a date without a time answers `task_fields_invalid`. The moment arrives with no entry and no status change: the `deferred` feature is computed on read by the database clock. Set in any status but `done` and `cancelled`; every change files `field_changed`
+             * @example 2026-10-08T09:00:00+02:00
+             */
+            not_before?: string | null;
+            /**
              * Decisions
              * @description Project decisions the task relies on: references `PROJECT#N` to `decision` entries of a project's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor
              * @example [
@@ -5963,6 +5974,12 @@ export interface components {
              */
             blocked: boolean;
             /**
+             * Deferred
+             * @description Whether the task's `not_before` is still ahead by the database clock; false without one. Entering `in_progress` is refused with `task_deferred` while it is true; it turns false by itself when the moment arrives
+             * @example false
+             */
+            deferred: boolean;
+            /**
              * Open Questions
              * @description Questions with no answer
              * @example 2
@@ -6005,7 +6022,7 @@ export interface components {
          *     `payload.field` записи `section_changed`, и читающий видит то же имя, что в схеме.
          * @enum {string}
          */
-        TaskField: "title" | "description" | "goal" | "context" | "constraints" | "output" | "checks" | "status" | "assignee" | "priority" | "direction" | "decisions";
+        TaskField: "title" | "description" | "goal" | "context" | "constraints" | "output" | "checks" | "status" | "assignee" | "priority" | "direction" | "not_before" | "decisions";
         /**
          * TaskLinkRead
          * @description Связь со стороны одной задачи.
@@ -6345,6 +6362,12 @@ export interface components {
             /** @example normal */
             priority: components["schemas"]["TaskPriority"];
             /**
+             * Not Before
+             * @description Moment before which the task cannot enter `in_progress`, in UTC; `null` for none. Whether it is still ahead by the database clock is the `deferred` feature
+             * @example 2026-10-08T07:00:00Z
+             */
+            not_before: string | null;
+            /**
              * Version
              * @description Grows with every actual change; send it back to detect a lost update
              * @example 3
@@ -6402,6 +6425,11 @@ export interface components {
             /** Assignee */
             assignee?: string | null;
             priority?: components["schemas"]["TaskPriority"] | null;
+            /**
+             * Not Before
+             * @description Moment before which the task cannot enter `in_progress`; `null` for none
+             */
+            not_before?: string | null;
             /** Version */
             version?: number | null;
             created_by?: components["schemas"]["AuthorRead"] | null;
@@ -6572,6 +6600,13 @@ export interface components {
              * @example TRK/promotion
              */
             direction?: string | null;
+            /**
+             * Not Before
+             * Format: date-time
+             * @description Moment before which the task cannot enter `in_progress` (`task_deferred`): ISO 8601 date and time with a UTC offset, by the clock of the device that sets it; null for none. A time without an offset or a date without a time answers `task_fields_invalid`. The moment arrives with no entry and no status change: the `deferred` feature is computed on read by the database clock. Set in any status but `done` and `cancelled`; every change files `field_changed`. Pass null to clear the moment
+             * @example 2026-10-08T09:00:00+02:00
+             */
+            not_before?: string | null;
             /**
              * Decisions
              * @description Project decisions the task relies on: references `PROJECT#N` to `decision` entries of a project's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor. Replaces the whole list in any status but `done` and `cancelled`; a reference already in it stays after its decision is superseded
@@ -10511,11 +10546,11 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `direction`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
+                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `deferred`, `direction`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by project and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
-                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `direction`, `features`, `goal`, `id`, `key`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `direction` brings the direction of the task, address and title, or `null` */
+                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `direction`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `direction` brings the direction of the task, address and title, or `null` */
                 fields?: string[] | null;
                 /** @description Page size */
                 limit?: number;
@@ -10543,6 +10578,8 @@ export interface operations {
                 priority?: components["schemas"]["TaskPriority"][] | null;
                 /** @description Whether the task has a `blocked_by` link to a task that is neither `done` nor `cancelled`. Computed from links, not stored */
                 blocked?: boolean | null;
+                /** @description Whether the task's `not_before` is still ahead by the database clock. Computed on read, not stored: it turns false by itself when the moment arrives */
+                deferred?: boolean | null;
                 /** @description Exact number of questions with no answer. Use the query language for ranges: `open_questions: > 0` */
                 open_questions?: number | null;
                 /** @description Of those, the ones marked `blocking`; `0` means nothing is in the way */

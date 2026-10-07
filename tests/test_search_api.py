@@ -437,6 +437,7 @@ async def test_every_row_carries_the_features_of_its_own_card(
     for key, features in rows.items():
         assert set(features) == {
             "blocked",
+            "deferred",
             "open_questions",
             "open_blocking_questions",
             "open_remarks",
@@ -472,6 +473,7 @@ async def test_the_features_are_picked_as_a_whole_and_a_single_one_is_refused(
             "title": task.title,
             "features": {
                 "blocked": False,
+                "deferred": False,
                 "open_questions": 0,
                 "open_blocking_questions": 0,
                 "open_remarks": 0,

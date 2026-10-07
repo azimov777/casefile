@@ -197,6 +197,7 @@ describe('карточка задачи', () => {
         questions: [questionEntry(5, 'DEMO-4')],
         features: {
           blocked: false,
+          deferred: false,
           open_questions: 1,
           open_blocking_questions: 1,
           last_summary_at: null,
@@ -587,6 +588,7 @@ describe('пустые состояния сводки, вопросов и за
         questions: [questionEntry(5, 'DEMO-4')],
         features: {
           blocked: false,
+          deferred: false,
           open_questions: 1,
           open_blocking_questions: 1,
           last_summary_at: null,
@@ -780,6 +782,7 @@ describe('замечание к задаче', () => {
             remarks: filed ? [remarkEntry(8, 'DEMO-6'), remarkEntry(9, 'DEMO-6', 'Ещё одно')] : [],
             features: {
               blocked: false,
+              deferred: false,
               open_questions: 0,
               open_blocking_questions: 0,
               open_remarks: filed ? 2 : 0,
@@ -1026,6 +1029,7 @@ describe('вопрос на карточке: отмена ответа (UI-156)
         questions: [questionEntry(4, 'DEMO-4')],
         features: {
           blocked: false,
+          deferred: false,
           open_questions: 1,
           open_blocking_questions: 1,
           last_summary_at: null,
@@ -1231,6 +1235,7 @@ describe('смысл признака в шапке достижим без на
       packageOf('DEMO-4', {
         features: {
           blocked: true,
+          deferred: false,
           open_questions: 2,
           open_blocking_questions: 1,
           open_remarks: 0,
@@ -1279,6 +1284,7 @@ describe('задача архивного проекта (UI-176)', () => {
     questions: [questionEntry(5, 'DEMO-4')],
     features: {
       blocked: false,
+      deferred: false,
       open_questions: 1,
       open_blocking_questions: 1,
       last_summary_at: null,
@@ -1353,6 +1359,7 @@ describe('предупреждение закрытия не целиком (TRK
             }),
             features: {
               blocked: false,
+              deferred: false,
               open_questions: 0,
               open_blocking_questions: 0,
               open_remarks: 0,

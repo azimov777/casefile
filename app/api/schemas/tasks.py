@@ -64,6 +64,15 @@ _DIRECTION_DESCRIPTION = (
     "it is always allowed). Not inherited from the parent; set in any status but `done` "
     "and `cancelled`"
 )
+_NOT_BEFORE_EXAMPLE = "2026-10-08T09:00:00+02:00"
+_NOT_BEFORE_DESCRIPTION = (
+    "Moment before which the task cannot enter `in_progress` (`task_deferred`): ISO 8601 "
+    "date and time with a UTC offset, by the clock of the device that sets it; null for "
+    "none. A time without an offset or a date without a time answers `task_fields_invalid`. "
+    "The moment arrives with no entry and no status change: the `deferred` feature is "
+    "computed on read by the database clock. Set in any status but `done` and `cancelled`; "
+    "every change files `field_changed`"
+)
 _DECISIONS_DESCRIPTION = (
     "Project decisions the task relies on: references `PROJECT#N` to `decision` entries of "
     f"a project's case, up to {MAX_DECISIONS}, in the order set. A task entry (`TRK-42#7`) "
@@ -178,6 +187,13 @@ class TaskRead(BaseModel):
     status: TaskStatus = Field(examples=[TaskStatus.BACKLOG])
     assignee: str | None = Field(examples=["release_bot"], description=_ASSIGNEE_DESCRIPTION)
     priority: TaskPriority = Field(examples=[TaskPriority.NORMAL])
+    not_before: datetime | None = Field(
+        examples=["2026-10-08T07:00:00Z"],
+        description=(
+            "Moment before which the task cannot enter `in_progress`, in UTC; `null` for "
+            "none. Whether it is still ahead by the database clock is the `deferred` feature"
+        ),
+    )
     version: int = Field(
         examples=[3],
         description="Grows with every actual change; send it back to detect a lost update",
@@ -199,6 +215,14 @@ class TaskFeaturesRead(BaseModel):
         description=(
             "Whether the task has a `blocked_by` link to a task that is neither `done` "
             "nor `cancelled`. Entering `in_progress` is refused while it is true"
+        ),
+    )
+    deferred: bool = Field(
+        examples=[False],
+        description=(
+            "Whether the task's `not_before` is still ahead by the database clock; false "
+            "without one. Entering `in_progress` is refused with `task_deferred` while it is "
+            "true; it turns false by itself when the moment arrives"
         ),
     )
     open_questions: int = Field(examples=[2], description="Questions with no answer")
@@ -482,6 +506,14 @@ class TaskCreate(BaseModel):
         examples=["TRK/promotion"],
         description=_DIRECTION_DESCRIPTION,
     )
+    # Строка, а не `datetime`: форму момента разбирает домен, как и у MCP, и отказ на
+    # время без пояса один на оба канала — `task_fields_invalid`, а не `validation_error`.
+    not_before: str | None = Field(
+        default=None,
+        examples=[_NOT_BEFORE_EXAMPLE],
+        description=_NOT_BEFORE_DESCRIPTION,
+        json_schema_extra={"format": "date-time"},
+    )
     decisions: list[str] = Field(
         default_factory=list,
         max_length=MAX_DECISIONS,
@@ -561,6 +593,11 @@ class TaskUpdate(BaseModel):
     direction: str | None = unset_field(
         examples=["TRK/promotion"],
         description=f"{_DIRECTION_DESCRIPTION}. Pass null to take the task out of its direction",
+    )
+    not_before: str | None = unset_field(
+        examples=[_NOT_BEFORE_EXAMPLE],
+        description=f"{_NOT_BEFORE_DESCRIPTION}. Pass null to clear the moment",
+        json_schema_extra={"format": "date-time"},
     )
     decisions: list[str] = unset_field(
         max_length=MAX_DECISIONS,

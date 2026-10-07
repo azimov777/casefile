@@ -202,6 +202,7 @@ export function task(key: string, overrides: Partial<Task> = {}): Task {
     updated_at: '2026-09-01T10:00:00Z',
     features: {
       blocked: false,
+      deferred: false,
       open_questions: 0,
       open_blocking_questions: 0,
       open_remarks: 0,
@@ -242,6 +243,7 @@ export function taskDetails(key: string, overrides: Partial<TaskDetails> = {}): 
     status: 'in_progress',
     assignee: 'nightly_agent',
     priority: 'normal',
+    not_before: null,
     version: 4,
     created_by: AGENT,
     ...STAMPS,
@@ -424,6 +426,7 @@ export function taskPackage(key: string, overrides: Partial<TaskPackage> = {}): 
     ],
     features: {
       blocked: true,
+      deferred: false,
       open_questions: 0,
       open_blocking_questions: 0,
       open_remarks: 0,
