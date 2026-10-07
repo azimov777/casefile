@@ -8,13 +8,13 @@
   B действующей, отбор `in_force` убирает A; то же в REST;
 - 3: `supersedes` у заметки на решение и у решения на заметку — `entry_fields_invalid`,
   повторная замена заменённой заметки — `finding_not_in_force` с преемником;
-- 4: `supersedes` в деле направления — по-прежнему `entry_fields_invalid`.
+- 4: `supersedes` в деле области — по-прежнему `entry_fields_invalid`.
 
 TRK-657 (решение TRK#48, раздел 3), в конце файла:
 
 - 2: опись `get_project` проекта без решений и заметок, действующие — списками ссылкой и
-  заголовком, число всех по типам — `index_omitted`; у направления опись прежняя;
-- 3: отбор `text` у `read_project_entries` и REST чтения дела проекта и направления.
+  заголовком, число всех по типам — `index_omitted`; у области опись прежняя;
+- 3: отбор `text` у `read_project_entries` и REST чтения дела проекта и области.
 
 Решения проекта, их ссылки из задач и чтение проекта — `tests/test_project_decisions.py`.
 """
@@ -30,8 +30,8 @@ from app.db.models.task import Task
 from app.domain.case import EntryType, build_project_entry, read_payload
 from app.domain.decisions import successors
 from app.domain.errors import EntryFieldsInvalidError, FindingNotInForceError
+from app.services import areas as areas_service
 from app.services import case as case_service
-from app.services import directions as directions_service
 from app.services.auth import Actor
 from conftest import Connect, call, refuse, without_empty_standing
 
@@ -295,10 +295,10 @@ async def test_supersedes_on_an_artifact_names_both_replaceable_types(
     assert (problem["reason"], problem["allowed_for"]) == ("not_allowed", ["decision", "finding"])
 
 
-# --- Проверка 4: дело направления и дело задачи без статуса -------------------------------
+# --- Проверка 4: дело области и дело задачи без статуса -------------------------------
 
 
-async def test_a_direction_case_keeps_refusing_supersedes_and_has_no_status(
+async def test_an_area_case_keeps_refusing_supersedes_and_has_no_status(
     mcp_session: Connect,
     auth_client: AsyncClient,
     db_session: AsyncSession,
@@ -306,11 +306,9 @@ async def test_a_direction_case_keeps_refusing_supersedes_and_has_no_status(
     project: Project,
     main_actor: Actor,
 ) -> None:
-    """Проверка 4: `supersedes` у заметки направления — `entry_fields_invalid`; записи
-    направления читаются без статуса, и отбор `in_force` их не отдаёт."""
-    await directions_service.create_direction(
-        db_session, actor=main_actor, address="TRK/x", title="X"
-    )
+    """Проверка 4: `supersedes` у заметки области — `entry_fields_invalid`; записи
+    области читаются без статуса, и отбор `in_force` их не отдаёт."""
+    await areas_service.create_area(db_session, actor=main_actor, address="TRK/x", title="X")
     async with mcp_session(task_secret) as session:
         fact = await call(session, "add_project_entry", key="TRK/x", type="finding", title="Ф")
         refused = await refuse(
@@ -330,7 +328,7 @@ async def test_a_direction_case_keeps_refusing_supersedes_and_has_no_status(
         (None, None)
     }
     assert in_force["items"] == []
-    rest = await auth_client.get(f"/api/v1/projects/TRK/directions/x/entries/{fact['no']}")
+    rest = await auth_client.get(f"/api/v1/projects/TRK/areas/x/entries/{fact['no']}")
     assert rest.status_code == 200, rest.text
     assert (rest.json()["data"]["status"], rest.json()["data"]["payload"]) == (
         None,
@@ -418,10 +416,10 @@ async def test_get_project_lists_knowledge_in_force_and_leaves_it_out_of_the_ind
     assert card["index_omitted"] == {"decision": 1, "finding": 2}
 
 
-async def test_a_direction_index_keeps_its_decisions_and_findings(
+async def test_an_area_index_keeps_its_decisions_and_findings(
     mcp_session: Connect, task_secret: str, project: Project
 ) -> None:
-    """У дела направления статуса нет (`CONCEPT.md`, 3.7), списков действующих тоже: его
+    """У дела области статуса нет (`CONCEPT.md`, 3.7), списков действующих тоже: её
     решения и заметки остаются в описи, `index_omitted` пуст."""
     async with mcp_session(task_secret) as session:
         await call(session, "create_project", key="TRK/x", title="X")
@@ -450,7 +448,7 @@ async def test_text_finds_a_substring_of_the_title_or_the_body_ignoring_case(
 ) -> None:
     """TRK-657, проверка 3: `read_project_entries(text=…)` находит запись по слову тела и по
     слову заголовка в другом регистре, складывается с `types` и работает по адресу
-    направления; то же в REST `GET …/entries?text=…` проекта и направления."""
+    области; то же в REST `GET …/entries?text=…` проекта и области."""
     async with mcp_session(task_secret) as session:
         titled = await call(
             session,
@@ -496,7 +494,7 @@ async def test_text_finds_a_substring_of_the_title_or_the_body_ignoring_case(
         everywhere = await found("TRK", text="Индекс")
         narrowed = await found("TRK", text="индекс", types=["decision"])
         nowhere = await found("TRK", text="100%")
-        in_direction = await found("TRK/x", text="glama")
+        in_area = await found("TRK/x", text="glama")
         from_mcp = await call(session, "read_project_entries", key="TRK", text="индекс")
         empty = await refuse(session, "read_project_entries", key="TRK", text="")
 
@@ -506,7 +504,7 @@ async def test_text_finds_a_substring_of_the_title_or_the_body_ignoring_case(
     assert narrowed == [ruled["no"]]
     # `%` и `_` — буквы подстроки, а не шаблон `LIKE`: «100%» не находит всего подряд.
     assert nowhere == []
-    assert in_direction == [catalogued["no"]]
+    assert in_area == [catalogued["no"]]
     assert "text" in empty
 
     entries = "/api/v1/projects/TRK/entries"
@@ -514,8 +512,8 @@ async def test_text_finds_a_substring_of_the_title_or_the_body_ignoring_case(
     assert await _numbers(auth_client, entries, text="ПОСЛЕДОВАТЕЛЬНОЕ") == by_body
     assert await _numbers(auth_client, entries, text="индекс", types="decision") == narrowed
     assert await _numbers(auth_client, entries, text="100%") == []
-    directed = "/api/v1/projects/TRK/directions/x/entries"
-    assert await _numbers(auth_client, directed, text="GLAMA") == in_direction
+    directed = "/api/v1/projects/TRK/areas/x/entries"
+    assert await _numbers(auth_client, directed, text="GLAMA") == in_area
     rest = await auth_client.get(entries, params={"text": "индекс"})
     assert from_mcp["items"] == without_empty_standing(rest.json()["data"])
     refused = await auth_client.get(entries, params={"text": ""})

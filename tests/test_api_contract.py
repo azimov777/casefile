@@ -47,7 +47,7 @@ from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.repositories import AccountRepository
 from app.domain.idempotency import IDEMPOTENCY_KEY_HEADER
-from app.services import directions as directions_service
+from app.services import areas as areas_service
 from app.services.auth import Actor
 
 #: Значение-затычка для развёртки без токена: до параметров дело не доходит, потому что
@@ -305,16 +305,16 @@ async def sample(
     """
     account = await AccountRepository(db_session).get_by_participant(owner.id)
     assert account is not None  # фикстура владельца заводит ему учётную запись
-    direction = await directions_service.create_direction(
-        db_session, actor=main_actor, address=f"{project.key}/sample", title="Направление"
+    area = await areas_service.create_area(
+        db_session, actor=main_actor, address=f"{project.key}/sample", title="Область"
     )
     return {
         "participant_name": owner.name,
         "account_id": str(account.id),
         "project_key": project.key,
-        # У только что заведённого направления в деле тоже одна запись `created` — номер 1
-        # годится и записи дела направления (`entry_no` ниже).
-        "direction_key": direction.key,
+        # У только что заведённой области в деле тоже одна запись `created` — номер 1
+        # годится и записи дела области (`entry_no` ниже).
+        "area_key": area.key,
         "task_key": task.key,
         # У только что заведённой задачи в деле одна запись — `created` с номером 1.
         "entry_no": "1",
