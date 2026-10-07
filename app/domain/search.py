@@ -413,6 +413,24 @@ def search_field_spec(name: str) -> SearchFieldSpec | None:
     return SEARCH_FIELDS[field]
 
 
+def operators_by_field() -> list[tuple[list[Operator], list[str]]]:
+    """Поля отбора, сгруппированные по набору операторов: от самой большой группы.
+
+    Описание `query` собирается отсюда, а не пишется словами: какой оператор к какому
+    полю применим, решает `SEARCH_FIELDS`, и текст не может разойтись с отказом
+    `search_operator_not_supported` (TRK-676). Внутри набора операторы идут в порядке
+    объявления `Operator`, поля — по алфавиту.
+    """
+    groups: dict[frozenset[Operator], list[str]] = {}
+    for spec in SEARCH_FIELDS.values():
+        groups.setdefault(spec.operators, []).append(spec.field.value)
+    order = list(Operator)
+    return [
+        (sorted(operators, key=order.index), sorted(names))
+        for operators, names in sorted(groups.items(), key=lambda item: -len(item[1]))
+    ]
+
+
 def searchable_names() -> list[str]:
     """Допустимые имена полей отбора — то, что уезжает в `details.allowed` при отказе."""
     return sorted(field.value for field in SEARCH_FIELDS)
