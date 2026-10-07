@@ -153,6 +153,16 @@ case "$*" in
     echo "PID COMMAND"
     echo "1 sh"
     if [ "$n" -gt 0 ]; then echo $((n - 1)) >"$SCENE/busy"; echo "7 docker"; fi ;;
+  "compose ps -aq db") cat "$SCENE/db" 2>/dev/null ;;
+  "compose exec -T db sh -c psql "*) cat "$SCENE/revision" 2>/dev/null ;;
+  "compose config") cat "$SCENE/config" 2>/dev/null ;;
+  "run --rm --pull never "*) cat "$SCENE/head" 2>/dev/null ;;
+  "compose exec -T db sh -c pg_dump "*)
+    [ "$(cat "$SCENE/dump" 2>/dev/null || echo ok)" = ok ] || exit 1
+    echo dump-bytes ;;
+  "compose run --rm --no-deps -T --entrypoint sh updater "*)
+    cat >"$SCENE/snapshot"
+    exit "$(cat "$SCENE/store" 2>/dev/null || echo 0)" ;;
   "compose up "*) exit "$(cat "$SCENE/up" 2>/dev/null || echo 0)" ;;
   "compose run "*agent-token*) echo agent-token-secret ;;
   "compose run "*) echo http://localhost:8100/mcp ;;
@@ -2223,3 +2233,100 @@ def test_both_installers_and_the_guide_name_the_same_extension_file_and_steps() 
     assert 'skill_run open "$MCPB_FILE"' in sh_text
     assert "Start-Process -FilePath $script:McpbFile" in ps1_text
     assert "LocalCache\\Roaming\\Claude" in ps1_text and "Get-DesktopDirs" in ps1_text
+
+
+# --- Снимок базы перед `up` (TRK-654) -----------------------------------------------------
+
+#: Что отвечает подставной `compose config`: образ `api`, как его читает установщик.
+SNAPSHOT_CONFIG = (
+    "services:\n  api:\n    image: ghcr.io/x/casefile:1\n  ui:\n    image: ghcr.io/x/ui:1\n"
+)
+
+
+def _snapshot_scene(**over: str) -> dict[str, str]:
+    """Существующая установка: контейнер базы есть, база на `rev1`, образ несёт `rev2`."""
+    scene = {
+        "db": "container-db\n",
+        "revision": "rev1\n",
+        "config": SNAPSHOT_CONFIG,
+        "head": "rev2 (head)\n",
+    }
+    scene.update(over)
+    return scene
+
+
+def _install_in(
+    root: Path, name: str, **scene: str
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    (root / name).mkdir()
+    return _install(root / name, **scene)
+
+
+def _snapshot_index(calls: list[str]) -> int:
+    return next(i for i, c in enumerate(calls) if "pg_dump" in c)
+
+
+def test_an_existing_database_with_another_head_gets_a_snapshot_before_up(tmp_path: Path) -> None:
+    """Образ несёт другую ревизию, чем база: снимок в том же томе и под тем же именем, до `up`."""
+    done, calls = _install(tmp_path, **_snapshot_scene())
+
+    assert done.returncode == 0, done.stderr
+    assert "-Fc" in calls[_snapshot_index(calls)]
+    store = next(c for c in calls if "--entrypoint sh updater" in c)
+    assert "/snapshot/before-update.dump" in store
+    assert calls.index(store) > _snapshot_index(calls)
+    assert calls.index(store) < calls.index("compose up -d --remove-orphans")
+    assert (tmp_path / "scene" / "snapshot").read_text() == "dump-bytes\n"
+    assert "rev1 -> rev2" in done.stdout
+
+
+def test_an_existing_database_with_the_same_head_gets_no_snapshot(tmp_path: Path) -> None:
+    done, calls = _install(tmp_path, **_snapshot_scene(head="rev1 (head)\n"))
+
+    assert done.returncode == 0, done.stderr
+    assert not [c for c in calls if "pg_dump" in c or "--entrypoint sh updater" in c]
+    assert "compose up -d --remove-orphans" in calls
+
+
+def test_a_first_install_and_an_empty_database_get_no_snapshot(tmp_path: Path) -> None:
+    for name, scene in (("first", {}), ("empty", _snapshot_scene(revision="no-table\n"))):
+        done, calls = _install_in(tmp_path, name, **scene)
+        assert done.returncode == 0, done.stderr
+        assert not [c for c in calls if "pg_dump" in c], name
+
+
+def test_an_unreadable_revision_or_head_is_taken_as_a_change_and_gets_a_snapshot(
+    tmp_path: Path,
+) -> None:
+    for name, scene in (
+        ("db", _snapshot_scene(revision="")),
+        ("image", _snapshot_scene(head="")),
+    ):
+        done, calls = _install_in(tmp_path, name, **scene)
+        assert done.returncode == 0, done.stderr
+        assert [c for c in calls if "pg_dump" in c], name
+        assert "could not read the" in done.stdout, name
+
+
+def test_a_failed_snapshot_stops_the_installer_before_up(tmp_path: Path) -> None:
+    """Сбой `pg_dump` или записи в том — `up` не вызван, обновлятор поднят снова."""
+    for name, scene in (("dump", {"dump": "fail"}), ("store", {"store": "1"})):
+        done, calls = _install_in(
+            tmp_path, name, updater="container-updater\n", **_snapshot_scene(**scene)
+        )
+        assert done.returncode != 0, name
+        assert "could not take a snapshot of the database" in done.stderr, name
+        assert not [c for c in calls if c.startswith("compose up ")], name
+        assert calls[-1] == "start container-updater", name
+
+
+def test_install_ps1_takes_the_same_snapshot_before_up() -> None:
+    text = _read(INSTALL_PS1)
+    compose = _read(INSTALL_SH.parent / "docker-compose.prod.yml")
+    sql = re.search(r'SNAPSHOT_REVISION_SQL="(.*)"', _read(INSTALL_SH)).group(1)  # type: ignore[union-attr]
+
+    assert sql in text, "the revision query differs between the installers"
+    assert sql.replace("'", "'\"'\"'") in compose, "the revision query differs from the updater one"
+    assert "before-update.dump" in text and "updater-snapshot" in text
+    assert text.index("Invoke-Docker compose pull") < text.index("Invoke-SnapshotBeforeUp\n")
+    assert text.rindex("Invoke-SnapshotBeforeUp") < text.index("Invoke-Docker compose up")

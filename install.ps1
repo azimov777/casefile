@@ -904,9 +904,67 @@ function Stop-Updater {
 }
 $updater = Stop-Updater
 
+# Снимок базы перед `up` (TRK-654): то же, что `snapshot_before_up` в `install.sh` — тот же
+# запрос ревизии, что в службе `updater` (`docker-compose.prod.yml`, TRK-652), тот же
+# `pg_dump -Fc` в том же томе `updater-snapshot` под именем `before-update.dump`. `no-table` —
+# база пуста, снимка нет; ревизия — сравнить с головой образа; не прочлось — как «может
+# меняться»: снимок. Сбой снимка — остановка до `up`.
+# `Continue` внутри функции: stderr внешней команды при `Stop` в PowerShell 5.1 — исключение.
+$SnapshotRevisionSql = "SELECT CASE WHEN to_regclass('public.alembic_version') IS NULL THEN 'no-table' ELSE (xpath('/row/version_num/text()', query_to_xml('SELECT version_num FROM public.alembic_version', false, true, '')))[1]::text END"
+
+function Invoke-SnapshotBeforeUp {
+    $ErrorActionPreference = 'Continue'
+    $dbId = (& docker compose ps -aq db 2>$null | Out-String).Trim()
+    if (-not $dbId) { return }
+    $revision = (& docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$1"' sh $SnapshotRevisionSql 2>$null |
+        Select-Object -First 1 | Out-String).Trim()
+    if ($revision -eq 'no-table') { return }
+    $why = ''
+    if (-not $revision) {
+        $why = 'could not read the schema revision of the database'
+    } else {
+        $apiImage = ''
+        foreach ($line in (& docker compose config 2>$null)) {
+            if ($line -match '^  \S') { $current = $line.Trim() }
+            if ($current -eq 'api:' -and $line -match '^    image: (\S+)') { $apiImage = $Matches[1]; break }
+        }
+        $headRevision = ''
+        if ($apiImage) {
+            $headLine = & docker run --rm --pull never --network none --entrypoint alembic $apiImage heads 2>$null |
+                Select-Object -First 1
+            if ($headLine) { $headRevision = ("$headLine".Trim() -split '\s+')[0] }
+        }
+        if (-not $headRevision) {
+            $why = 'could not read the latest schema revision of the new image'
+        } elseif ($headRevision -ne $revision) {
+            $why = "the release changes the database ($revision -> $headRevision)"
+        }
+    }
+    if (-not $why) { return }
+
+    Write-Host "Taking a snapshot of the database before the update ($why)..." -ForegroundColor White
+    $dump = [System.IO.Path]::GetTempFileName()
+    try {
+        # Через `cmd /c`: PowerShell 5.1 переводит байты конвейера в текст и портит дамп.
+        & cmd /c "docker compose exec -T db sh -c ""pg_dump -U `$POSTGRES_USER -d `$POSTGRES_DB -Fc"" > ""$dump"" 2>nul"
+        $ok = ($LASTEXITCODE -eq 0) -and ((Get-Item $dump).Length -gt 0)
+        if ($ok) {
+            & cmd /c "docker compose run --rm --no-deps -T --entrypoint sh updater -c ""cat >/snapshot/before-update.dump.part && [ -s /snapshot/before-update.dump.part ] && mv -f /snapshot/before-update.dump.part /snapshot/before-update.dump"" < ""$dump"" >nul 2>nul"
+            $ok = $LASTEXITCODE -eq 0
+        }
+    } finally {
+        Remove-Item $dump -ErrorAction SilentlyContinue
+    }
+    if (-not $ok) {
+        Fail "could not take a snapshot of the database before the update ($why); nothing was changed. Check that the database is running (docker compose ps db) and try again."
+    }
+    Write-Host '  Snapshot kept in the volume updater-snapshot as before-update.dump (docs/backup-restore.md).'
+}
+
 try {
     Write-Host 'Starting Casefile (the first run downloads the images)...' -ForegroundColor White
     Invoke-Docker compose pull --quiet
+    Invoke-SnapshotBeforeUp
     Invoke-Docker compose up -d --remove-orphans
 } finally {
     if ($updater) { & docker start $updater *> $null; $global:LASTEXITCODE = 0 }
