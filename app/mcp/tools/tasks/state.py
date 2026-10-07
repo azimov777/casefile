@@ -85,6 +85,7 @@ class TaskStateView(BaseModel):
     children_unclosed: list[str]
     decisions_after_card: list[int]
     discussions_after_card: list[str]
+    project_decisions_after_card: list[str]
 
 
 def task_state(value: TaskState) -> TaskStateView:

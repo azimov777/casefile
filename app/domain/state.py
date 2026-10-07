@@ -11,7 +11,7 @@
 заголовки записей, которые агенты уже пишут.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -191,6 +191,9 @@ class TaskState:
     #: Итоги и записи человека в обсуждениях задачи после последней правки разделов —
     #: ссылками `TRK~7#5` (решение `TRK#51`, п. 5): работу задают и они.
     discussions_after_card: list[str]
+    #: Действующие решения проекта задачи, подшитые после последней правки разделов, —
+    #: ссылками `TRK#7` по возрастанию номера (CONCEPT 4.2): работу задают все они.
+    project_decisions_after_card: list[str]
 
 
 def status_change(
@@ -252,6 +255,27 @@ def decisions_after_card(index: Sequence[EntryHeading]) -> list[int]:
     ]
 
 
+def project_decisions_after_card(
+    project_key: str,
+    decisions: Sequence[tuple[int, int]],
+    *,
+    cut_seq: int,
+    superseded: Collection[int],
+) -> list[str]:
+    """Ссылки на действующие решения проекта, подшитые позже последней правки разделов.
+
+    `decisions` — пары «номер и `seq`» решений дела проекта, `cut_seq` — `seq` последней
+    записи `created` или `section_changed` задачи, `superseded` — номера заменённых
+    решений. Заменённые не входят: их место занимает преемник, если он подшит после
+    границы. Суждения «постановка устарела» блок не выносит.
+    """
+    return [
+        f"{project_key}#{no}"
+        for no, seq in sorted(decisions)
+        if seq > cut_seq and no not in superseded
+    ]
+
+
 def build_state(
     *,
     status: TaskStatus,
@@ -263,6 +287,7 @@ def build_state(
     open_blockers: Sequence[str],
     children: Sequence[ChildStatus],
     discussions_after_card: Sequence[str],
+    project_decisions_after_card: Sequence[str],
 ) -> TaskState:
     """Собирает блок `state` из уже прочитанного: опись, последний переход, сводка,
     вопросы (дела задачи и её обсуждений), замечания, блокеры, дети и записи обсуждений
@@ -325,4 +350,5 @@ def build_state(
         children_unclosed=[child.key for child in children if child.status not in CLOSED_STATUSES],
         decisions_after_card=decisions_after_card(index),
         discussions_after_card=list(discussions_after_card),
+        project_decisions_after_card=list(project_decisions_after_card),
     )

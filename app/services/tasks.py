@@ -319,6 +319,9 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
             discussions_after_card=await case_service.discussion_entries_after_card(
                 session, task, actor=actor
             ),
+            project_decisions_after_card=await decisions_service.project_decisions_after_card(
+                session, task, actor=actor
+            ),
         ),
         parent=hierarchy.parent,
         children=hierarchy.children,
@@ -354,6 +357,7 @@ def _task_state(
     links: Sequence[links_service.TaskLink],
     children: Sequence[links_service.TaskLink],
     discussions_after_card: Sequence[str],
+    project_decisions_after_card: Sequence[str],
 ) -> state_domain.TaskState:
     """Блок `state` из прочитанного пакетом: записи и связи переводятся во входы домена.
 
@@ -417,6 +421,7 @@ def _task_state(
             for link in children
         ],
         discussions_after_card=discussions_after_card,
+        project_decisions_after_card=project_decisions_after_card,
     )
 
 

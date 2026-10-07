@@ -383,6 +383,14 @@ class TaskStateRead(BaseModel):
             "and the statement may not account for them"
         ),
     )
+    project_decisions_after_card: list[str] = Field(
+        examples=[["TRK#7"]],
+        description=(
+            "Decisions in force of the task's project filed after the last edit of the "
+            "sections, as references `TRK#7`, ascending: they set the work too, and the "
+            "statement may not account for them. Superseded decisions are left out"
+        ),
+    )
 
 
 class TaskBriefCardRead(BaseModel):

@@ -409,6 +409,7 @@ export function taskState(overrides: Partial<TaskState> = {}): TaskState {
     children_unclosed: [],
     decisions_after_card: [],
     discussions_after_card: [],
+    project_decisions_after_card: [],
     ...overrides,
   };
 }
