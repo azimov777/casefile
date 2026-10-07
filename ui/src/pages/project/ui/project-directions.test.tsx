@@ -47,6 +47,8 @@ beforeEach(() => {
   writes = [];
   setToken('trk_test');
   server.use(
+    // Счётчики шапки (TRK-619) читают список задач; их числа здесь не проверяются.
+    http.get(`${API}/api/v1/tasks`, () => collection([], { total: 0 })),
     http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
     http.get(`${API}/api/v1/projects/DEMO`, () => data(projectDetail('DEMO'))),
     http.get(`${API}/api/v1/projects/DEMO/entries`, () => collection([])),

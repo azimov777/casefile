@@ -31,6 +31,8 @@ interface HolderScreenProps {
   links: ReactNode;
   /** Меню «⋯» (`ProjectMenu`, `DirectionMenu`) или ничего, если действий нет. */
   menu: ReactNode;
+  /** Строка счётчиков задач под ссылками, над вкладками (TRK-619, TRK#46). */
+  counters?: ReactNode;
   /** Плашка под шапкой: почему на экране нет правок (архив). */
   notice: ReactNode;
   /** Имя полосы вкладок для программы чтения с экрана. */
@@ -61,6 +63,7 @@ export function HolderScreen({
   noDescription,
   links,
   menu,
+  counters,
   notice,
   tabsLabel,
   tabs,
@@ -95,6 +98,7 @@ export function HolderScreen({
           </div>
         )}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">{links}</div>
+        {counters}
         {notice}
       </header>
 

@@ -21,5 +21,6 @@ export {
   type FilterCondition,
 } from './model/summary';
 export { useTaskFilters, type TaskFiltersControl } from './model/use-task-filters';
+export { TaskCounters } from './ui/task-counters';
 export { TaskFiltersForm } from './ui/task-filters';
 export { ViewSwitch } from './ui/view-switch';

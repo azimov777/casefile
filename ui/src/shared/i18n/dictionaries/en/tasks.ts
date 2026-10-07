@@ -148,4 +148,13 @@ export const tasks = {
       waiting: 'awaiting an answer',
     },
   },
+
+  /** Task counters: in progress, open, awaiting an answer, closed with gaps (TRK-619). */
+  counters: {
+    label: 'Task counts',
+    inProgress: 'In progress',
+    open: 'Open',
+    waiting: 'Awaiting an answer',
+    warnings: 'Closed with gaps',
+  },
 } as const;

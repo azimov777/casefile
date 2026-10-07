@@ -13,7 +13,7 @@ import {
   useProjectRights,
   type HolderTabLink,
 } from '@/features/manage-project';
-import { tasksHref } from '@/features/task-filters';
+import { TaskCounters, tasksHref } from '@/features/task-filters';
 import { ApiError } from '@/shared/api';
 import { useLanguage } from '@/shared/i18n';
 import { exactTime } from '@/shared/lib';
@@ -105,6 +105,7 @@ export function ProjectPage() {
       description={card.description}
       noDescription={t('noDescription')}
       links={<Link to={tasksHref('', { project: card.key })}>{t('tasks')}</Link>}
+      counters={<TaskCounters project={card.key} />}
       menu={rights.manage ? <ProjectMenu project={card} archived={frozen} /> : null}
       notice={
         // Архив сказан словами под шапкой, а не одним цветом: почему на экране нет ни
