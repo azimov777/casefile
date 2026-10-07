@@ -10,6 +10,12 @@
   повторная замена заменённой заметки — `finding_not_in_force` с преемником;
 - 4: `supersedes` в деле направления — по-прежнему `entry_fields_invalid`.
 
+TRK-657 (решение TRK#48, раздел 3), в конце файла:
+
+- 2: опись `get_project` проекта без решений и заметок, действующие — списками ссылкой и
+  заголовком, число всех по типам — `index_omitted`; у направления опись прежняя;
+- 3: отбор `text` у `read_project_entries` и REST чтения дела проекта и направления.
+
 Решения проекта, их ссылки из задач и чтение проекта — `tests/test_project_decisions.py`.
 """
 
@@ -379,3 +385,139 @@ async def test_an_entry_without_a_status_carries_neither_status_key_in_mcp(
             assert "superseded_by" not in item
     [decision] = kept["items"]
     assert (decision["status"], decision["superseded_by"]) == ("in_force", None)
+
+
+# --- TRK-657: чтение проекта без записей знания в описи и отбор `text` -----------------------
+
+
+async def test_get_project_lists_knowledge_in_force_and_leaves_it_out_of_the_index(
+    mcp_session: Connect, task_secret: str, project: Project
+) -> None:
+    """TRK-657, проверка 2: в проекте `note`, `decision`, заметка A и заметка B с
+    `supersedes=[A]`. Опись `get_project` несёт `note` и ни одного решения и заметки,
+    список заметок — B без A, список решений — действующее решение; `index_omitted`
+    считает все записи знания вне описи, заменённую тоже."""
+    async with mcp_session(task_secret) as session:
+        note = await call(session, "add_project_entry", key="TRK", type="note", title="Нота")
+        decision = await call(
+            session, "add_project_entry", key="TRK", type="decision", title="Решение"
+        )
+        a = await call(session, "add_project_entry", key="TRK", type="finding", title="A")
+        b = await call(
+            session, "add_project_entry", key="TRK", type="finding", title="B", supersedes=[a["no"]]
+        )
+        card = await call(session, "get_project", key="TRK")
+
+    assert [(line["no"], line["type"]) for line in card["index"]] == [
+        (1, "created"),
+        (note["no"], "note"),
+    ]
+    assert not {"decision", "finding"} & {line["type"] for line in card["index"]}
+    assert card["findings"] == [{"ref": f"TRK#{b['no']}", "title": "B"}]
+    assert card["decisions"] == [{"ref": f"TRK#{decision['no']}", "title": "Решение"}]
+    assert card["index_omitted"] == {"decision": 1, "finding": 2}
+
+
+async def test_a_direction_index_keeps_its_decisions_and_findings(
+    mcp_session: Connect, task_secret: str, project: Project
+) -> None:
+    """У дела направления статуса нет (`CONCEPT.md`, 3.7), списков действующих тоже: его
+    решения и заметки остаются в описи, `index_omitted` пуст."""
+    async with mcp_session(task_secret) as session:
+        await call(session, "create_project", key="TRK/x", title="X")
+        decision = await call(
+            session, "add_project_entry", key="TRK/x", type="decision", title="Решение"
+        )
+        fact = await call(session, "add_project_entry", key="TRK/x", type="finding", title="Ф")
+        card = await call(session, "get_project", key="TRK/x")
+
+    assert [(line["no"], line["type"]) for line in card["index"]] == [
+        (1, "created"),
+        (decision["no"], "decision"),
+        (fact["no"], "finding"),
+    ]
+    assert (card["decisions"], card["findings"], card["index_omitted"]) == ([], [], {})
+
+
+async def _numbers(client: AsyncClient, path: str, **params: Any) -> list[int]:
+    response = await client.get(path, params=params)
+    assert response.status_code == 200, response.text
+    return [item["no"] for item in response.json()["data"]]
+
+
+async def test_text_finds_a_substring_of_the_title_or_the_body_ignoring_case(
+    mcp_session: Connect, auth_client: AsyncClient, task_secret: str, project: Project
+) -> None:
+    """TRK-657, проверка 3: `read_project_entries(text=…)` находит запись по слову тела и по
+    слову заголовка в другом регистре, складывается с `types` и работает по адресу
+    направления; то же в REST `GET …/entries?text=…` проекта и направления."""
+    async with mcp_session(task_secret) as session:
+        titled = await call(
+            session,
+            "add_project_entry",
+            key="TRK",
+            type="finding",
+            title="Триграммный индекс",
+            body="Короткие запросы",
+        )
+        bodied = await call(
+            session,
+            "add_project_entry",
+            key="TRK",
+            type="note",
+            title="Нота",
+            body="План вырождается в последовательное чтение",
+        )
+        ruled = await call(
+            session,
+            "add_project_entry",
+            key="TRK",
+            type="decision",
+            title="Решение",
+            body="Отбор обходится без индекса",
+        )
+        await call(session, "create_project", key="TRK/x", title="Популяризация")
+        catalogued = await call(
+            session,
+            "add_project_entry",
+            key="TRK/x",
+            type="note",
+            title="Каталоги",
+            body="Подача в Glama",
+        )
+        await call(session, "add_project_entry", key="TRK/x", type="note", title="Reddit")
+
+        async def found(key: str, **filters: Any) -> list[int]:
+            page = await call(session, "read_project_entries", key=key, **filters)
+            return [item["no"] for item in page["items"]]
+
+        by_title = await found("TRK", text="ТРИГРАММН")
+        by_body = await found("TRK", text="ПОСЛЕДОВАТЕЛЬНОЕ")
+        everywhere = await found("TRK", text="Индекс")
+        narrowed = await found("TRK", text="индекс", types=["decision"])
+        nowhere = await found("TRK", text="100%")
+        in_direction = await found("TRK/x", text="glama")
+        from_mcp = await call(session, "read_project_entries", key="TRK", text="индекс")
+        empty = await refuse(session, "read_project_entries", key="TRK", text="")
+
+    assert by_title == [titled["no"]]
+    assert by_body == [bodied["no"]]
+    assert everywhere == [titled["no"], ruled["no"]]
+    assert narrowed == [ruled["no"]]
+    # `%` и `_` — буквы подстроки, а не шаблон `LIKE`: «100%» не находит всего подряд.
+    assert nowhere == []
+    assert in_direction == [catalogued["no"]]
+    assert "text" in empty
+
+    entries = "/api/v1/projects/TRK/entries"
+    assert await _numbers(auth_client, entries, text="ТРИГРАММН") == by_title
+    assert await _numbers(auth_client, entries, text="ПОСЛЕДОВАТЕЛЬНОЕ") == by_body
+    assert await _numbers(auth_client, entries, text="индекс", types="decision") == narrowed
+    assert await _numbers(auth_client, entries, text="100%") == []
+    directed = "/api/v1/projects/TRK/directions/x/entries"
+    assert await _numbers(auth_client, directed, text="GLAMA") == in_direction
+    rest = await auth_client.get(entries, params={"text": "индекс"})
+    assert from_mcp["items"] == without_empty_standing(rest.json()["data"])
+    refused = await auth_client.get(entries, params={"text": ""})
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["error"]["code"] == "validation_error"

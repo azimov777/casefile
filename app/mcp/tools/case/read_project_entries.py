@@ -1,5 +1,5 @@
 """Инструмент `read_project_entries`: тела записей дела проекта или направления по номерам,
-типам, имени атрибута, статусу и «после»."""
+типам, имени атрибута, статусу, подстроке и «после»."""
 
 from typing import Annotated
 
@@ -25,6 +25,17 @@ InForceArg = Annotated[
     ),
 ]
 
+# `min_length` здесь, вопреки правилу `app/mcp/arguments.py` «границы — домену»: пустая
+# подстрока входит в любой текст, и отбор молча стал бы «всё дело». Тот же порог у `text`
+# поиска задач в REST (`app/api/schemas/search.py`) и у `text` чтения дела в REST.
+EntryTextArg = Annotated[
+    str | None,
+    Field(
+        min_length=1,
+        description="Only entries whose title or body contains this substring, ignoring case",
+    ),
+]
+
 
 def register(tools: Toolset) -> None:
     """Объявляет `read_project_entries`."""
@@ -37,6 +48,7 @@ def register(tools: Toolset) -> None:
         nos: EntryNosArg = None,
         types: EntryTypesArg = None,
         attribute: AttributeArg = None,
+        text: EntryTextArg = None,
         in_force: InForceArg = None,
         after_no: AfterNoArg = None,
         limit: LimitArg = None,
@@ -49,7 +61,9 @@ def register(tools: Toolset) -> None:
         the tracker's own entries about its card. Filters combine with
         `and`, as in `read_entries`. `attribute` gives one attribute's history:
         `attribute_created`, `attribute_changed`, `attribute_removed` entries with that
-        name. The case index, titles only, comes with `get_project`.
+        name; `text` finds a substring in titles and bodies. Titles come with
+        `get_project`: the case index, and for a project its decisions and findings in
+        force, which that index leaves out.
 
         Decisions and findings of a project's case carry `status` and `superseded_by` on
         every read, numbers included; `superseded_by` is the direct successor's number.
@@ -64,6 +78,7 @@ def register(tools: Toolset) -> None:
                 nos=nos,
                 types=types,
                 attribute=attribute,
+                text=text,
                 in_force=in_force,
                 after_no=after_no,
                 limit=limit or settings.mcp_page_size,

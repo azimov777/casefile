@@ -20,7 +20,7 @@ from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, case, distinct, func, or_, select, text
+from sqlalchemy import Select, and_, case, distinct, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
@@ -37,6 +37,7 @@ from app.db.pagination import (
     resolve_limit,
 )
 from app.db.repositories.projects import in_active_project
+from app.db.sql import ilike_contains
 from app.domain.authors import Author
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
@@ -246,6 +247,7 @@ class EntryRepository:
         nos: Sequence[int] | None = None,
         types: Sequence[EntryType] | None = None,
         attribute: str | None = None,
+        text: str | None = None,
         exclude_nos: Collection[int] = (),
         after_no: int | None = None,
         limit: int | None = None,
@@ -267,6 +269,7 @@ class EntryRepository:
             nos=nos,
             types=types,
             attribute=attribute,
+            text=text,
             exclude_nos=exclude_nos,
             after_no=after_no,
             limit=limit,
@@ -280,6 +283,7 @@ class EntryRepository:
         nos: Sequence[int] | None = None,
         types: Sequence[EntryType] | None = None,
         attribute: str | None = None,
+        text: str | None = None,
         after_no: int | None = None,
         limit: int | None = None,
         cursor: str | None = None,
@@ -290,6 +294,7 @@ class EntryRepository:
             nos=nos,
             types=types,
             attribute=attribute,
+            text=text,
             after_no=after_no,
             limit=limit,
             cursor=cursor,
@@ -305,11 +310,12 @@ class EntryRepository:
         limit: int | None,
         cursor: str | None,
         attribute: str | None = None,
+        text: str | None = None,
         exclude_nos: Collection[int] = (),
     ) -> Page[Entry]:
         size = resolve_limit(limit)
         statement = self._filtered(
-            select(Entry).where(owned), nos=nos, types=types, attribute=attribute
+            select(Entry).where(owned), nos=nos, types=types, attribute=attribute, text=text
         )
         if exclude_nos:
             statement = statement.where(Entry.no.not_in(list(exclude_nos)))
@@ -334,6 +340,7 @@ class EntryRepository:
         nos: Sequence[int] | None,
         types: Sequence[EntryType] | None,
         attribute: str | None = None,
+        text: str | None = None,
     ) -> Select[Any]:
         """Фильтры выборки записей. Пустой список — это «ничего», а не «всё».
 
@@ -345,6 +352,12 @@ class EntryRepository:
         `types`, переданный вместе с ним, продолжает действовать своим условием, и
         несовместимая пара (скажем, `types=["note"]` с `attribute=...`) даёт пустую
         страницу, а не отказ: то же правило, что у пустого `nos`.
+
+        `text` (дела проекта и направления, решение TRK#48, раздел 3) — подстрока заголовка
+        или тела без учёта регистра, общим `ilike_contains`. Своего индекса у неё нет: условие
+        на владельца уже сузило выборку до одного дела по индексу `(project_id, no)` или
+        `(direction_id, no)`, и подстрока проверяется только на его записях (замер на 646
+        заметках — `decision` в деле TRK-657).
         """
         if nos is not None:
             statement = statement.where(Entry.no.in_(list(nos)))
@@ -354,6 +367,10 @@ class EntryRepository:
             statement = statement.where(
                 Entry.type.in_(ATTRIBUTE_ENTRY_TYPES),
                 func.lower(Entry.payload["name"].astext) == attribute.lower(),
+            )
+        if text is not None:
+            statement = statement.where(
+                or_(ilike_contains(Entry.title, text), ilike_contains(Entry.body, text))
             )
         return statement
 
@@ -367,8 +384,16 @@ class EntryRepository:
         return await self._headings(Entry.task_id == task_id)
 
     async def project_headings(self, project_id: uuid.UUID) -> list[EntryHeading]:
-        """Опись дела проекта: те же строки, что у задачи, — для `get_project`."""
-        return await self._headings(Entry.project_id == project_id)
+        """Опись дела проекта для `get_project`: те же строки, что у задачи, но без решений и
+        заметок (решение TRK#48, раздел 3).
+
+        Записи знания приходят в чтении проекта своими списками — действующие ссылкой и
+        заголовком (`project_replaceables`), — и в описи стояли бы второй раз. Их сотни: с
+        646 заметками опись одна стоила ≈ 87 тыс. токенов (TRK-598#11).
+        """
+        return await self._headings(
+            and_(Entry.project_id == project_id, Entry.type.not_in(REPLACEABLE_ENTRY_TYPES))
+        )
 
     async def direction_headings(self, direction_id: uuid.UUID) -> list[EntryHeading]:
         """Опись дела направления: те же строки — для чтения направления."""
@@ -394,21 +419,23 @@ class EntryRepository:
 
     async def project_replaceables(
         self, project_id: uuid.UUID
-    ) -> list[tuple[int, EntryType, dict[str, Any]]]:
-        """Решения и заметки дела проекта — номер, тип и нагрузка, без тел.
+    ) -> list[tuple[int, EntryType, str, dict[str, Any]]]:
+        """Решения и заметки дела проекта — номер, тип, заголовок и нагрузка, без тел.
 
         Все сразу, как `project_decisions`: статус записи знания считается из
         `supersedes` всех более поздних записей её типа (`app/domain/decisions.py`).
         Тела не выбираются: этот запрос идёт перед каждой страницей чтения дела, где есть
-        решение или заметка, и перед каждой заменой, а заметок в деле — сотни.
+        решение или заметка, и перед каждой заменой, а заметок в деле — сотни. Заголовок
+        нужен чтению проекта: действующие решения и заметки стоят в нём ссылкой и
+        заголовком вместо строк описи (`project_headings`).
         """
         statement = (
-            select(Entry.no, Entry.type, Entry.payload)
+            select(Entry.no, Entry.type, Entry.title, Entry.payload)
             .where(Entry.project_id == project_id, Entry.type.in_(REPLACEABLE_ENTRY_TYPES))
             .order_by(Entry.no)
         )
         rows: list[Any] = list(await self._session.execute(statement))
-        return [(row.no, row.type, row.payload) for row in rows]
+        return [(row.no, row.type, row.title, row.payload) for row in rows]
 
     async def _headings(self, owned: ColumnElement[bool]) -> list[EntryHeading]:
         statement = (

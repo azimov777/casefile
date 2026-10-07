@@ -3795,7 +3795,7 @@
           "projects"
         ],
         "summary": "Read project case entries",
-        "description": "Записи дела проекта с телами и нагрузкой, в порядке `no`.\n\nФильтры те же, что у дела задачи, и складываются по «и»: `types` сужает по типу,\n`after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют\nоба, побеждает больший. `attribute` отдаёт историю одного атрибута: только\n`attribute_created`, `attribute_changed`, `attribute_removed` с этим именем, без учёта\nрегистра — без него история листается вперемешку с остальным делом проекта.\n\nУ решения и заметки — `status` и `superseded_by`, посчитанные при чтении (TRK#48):\nзапись действует, пока более поздняя запись её типа не назвала её в `supersedes`.\n`in_force=true` оставляет только действующие решения и заметки, `in_force=false` —\nтолько заменённые.",
+        "description": "Записи дела проекта с телами и нагрузкой, в порядке `no`.\n\nФильтры те же, что у дела задачи, и складываются по «и»: `types` сужает по типу,\n`after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют\nоба, побеждает больший. `attribute` отдаёт историю одного атрибута: только\n`attribute_created`, `attribute_changed`, `attribute_removed` с этим именем, без учёта\nрегистра — без него история листается вперемешку с остальным делом проекта. `text` —\nподстрока заголовка или тела без учёта регистра (TRK#48, раздел 3).\n\nУ решения и заметки — `status` и `superseded_by`, посчитанные при чтении (TRK#48):\nзапись действует, пока более поздняя запись её типа не назвала её в `supersedes`.\n`in_force=true` оставляет только действующие решения и заметки, `in_force=false` —\nтолько заменённые.",
         "operationId": "list_project_entries",
         "security": [
           {
@@ -3890,6 +3890,28 @@
               "title": "Attribute"
             },
             "description": "Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters"
+          },
+          {
+            "name": "text",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only entries whose title or body contains this substring, matched case-insensitively. Combines with `types` and the other filters",
+              "examples": [
+                "supersedes"
+              ],
+              "title": "Text"
+            },
+            "description": "Read only entries whose title or body contains this substring, matched case-insensitively. Combines with `types` and the other filters"
           },
           {
             "name": "in_force",
@@ -5641,7 +5663,7 @@
           "directions"
         ],
         "summary": "Read direction case entries",
-        "description": "Записи дела направления с телами и нагрузкой, в порядке `no` — те же фильтры, что у\nдела проекта, включая историю одного атрибута (`attribute`).",
+        "description": "Записи дела направления с телами и нагрузкой, в порядке `no` — те же фильтры, что у\nдела проекта, включая историю одного атрибута (`attribute`) и подстроку заголовка или\nтела (`text`).",
         "operationId": "list_direction_entries",
         "security": [
           {
@@ -5750,6 +5772,28 @@
               "title": "Attribute"
             },
             "description": "Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters"
+          },
+          {
+            "name": "text",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only entries whose title or body contains this substring, matched case-insensitively. Combines with `types` and the other filters",
+              "examples": [
+                "supersedes"
+              ],
+              "title": "Text"
+            },
+            "description": "Read only entries whose title or body contains this substring, matched case-insensitively. Combines with `types` and the other filters"
           },
           {
             "name": "after_no",

@@ -597,7 +597,8 @@ export interface paths {
          *     `after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют
          *     оба, побеждает больший. `attribute` отдаёт историю одного атрибута: только
          *     `attribute_created`, `attribute_changed`, `attribute_removed` с этим именем, без учёта
-         *     регистра — без него история листается вперемешку с остальным делом проекта.
+         *     регистра — без него история листается вперемешку с остальным делом проекта. `text` —
+         *     подстрока заголовка или тела без учёта регистра (TRK#48, раздел 3).
          *
          *     У решения и заметки — `status` и `superseded_by`, посчитанные при чтении (TRK#48):
          *     запись действует, пока более поздняя запись её типа не назвала её в `supersedes`.
@@ -809,7 +810,8 @@ export interface paths {
         /**
          * Read direction case entries
          * @description Записи дела направления с телами и нагрузкой, в порядке `no` — те же фильтры, что у
-         *     дела проекта, включая историю одного атрибута (`attribute`).
+         *     дела проекта, включая историю одного атрибута (`attribute`) и подстроку заголовка или
+         *     тела (`text`).
          */
         get: operations["list_direction_entries"];
         put?: never;
@@ -9682,6 +9684,8 @@ export interface operations {
                 types?: components["schemas"]["EntryType"][] | null;
                 /** @description Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters */
                 attribute?: string | null;
+                /** @description Read only entries whose title or body contains this substring, matched case-insensitively. Combines with `types` and the other filters */
+                text?: string | null;
                 /** @description `true` reads only the decisions and findings in force, `false` only the superseded ones; entries of other types have no status and match neither. Combines with `types` and the other filters */
                 in_force?: boolean | null;
                 /** @description Read only entries after this number — what happened since */
@@ -10638,6 +10642,8 @@ export interface operations {
                 types?: components["schemas"]["EntryType"][] | null;
                 /** @description Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters */
                 attribute?: string | null;
+                /** @description Read only entries whose title or body contains this substring, matched case-insensitively. Combines with `types` and the other filters */
+                text?: string | null;
                 /** @description Read only entries after this number — what happened since */
                 after_no?: number | null;
                 /** @description Page size */

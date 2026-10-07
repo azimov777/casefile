@@ -226,6 +226,18 @@ AttributeQuery = Annotated[
     ),
 ]
 
+EntryTextQuery = Annotated[
+    str | None,
+    Query(
+        min_length=1,
+        description=(
+            "Read only entries whose title or body contains this substring, matched "
+            "case-insensitively. Combines with `types` and the other filters"
+        ),
+        examples=["supersedes"],
+    ),
+]
+
 InForceQuery = Annotated[
     bool | None,
     Query(

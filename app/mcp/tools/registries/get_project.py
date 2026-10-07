@@ -1,10 +1,15 @@
-"""Инструмент `get_project`: проект с описанием, атрибутами, действующими решениями,
-направлениями и описью его дела — и по адресу направление в той же форме.
+"""Инструмент `get_project`: проект с описанием, атрибутами, действующими решениями и
+заметками, направлениями и описью его дела — и по адресу направление в той же форме.
 
 Отдельного чтения направления нет намеренно (`CONCEPT.md`, 3.7; замер — дело TRK-555):
 опись дела несёт в `outputSchema` всю форму фактов, и второй инструмент с описью повторил
-бы её целиком. Направление устроено как проект, и форма ответа у них одна; решения и
-направления у направления пусты.
+бы её целиком. Направление устроено как проект, и форма ответа у них одна; решения,
+заметки и направления у направления пусты.
+
+Решений и заметок в описи проекта нет (решение TRK#48, раздел 3; задача TRK-657): опись с
+646 заметками стоила ≈ 87 тыс. токенов на вызов (TRK-598#11). Действующие приходят
+списками «ссылка и заголовок», число всех по типам — в `index_omitted`, тела и заменённые —
+`read_project_entries`. Режима «опись целиком» рядом не оставлено (TRK#12).
 """
 
 from datetime import datetime
@@ -24,7 +29,7 @@ from app.services import case as case_service
 from app.services import decisions as decisions_service
 from app.services import directions as directions_service
 from app.services.case import CaseOwner, owner_name
-from app.services.decisions import ProjectDecision
+from app.services.decisions import CaseKnowledge
 
 IncludeArchivedDirectionsArg = Annotated[
     bool,
@@ -47,13 +52,10 @@ class DirectionRefView(BaseModel):
     archived_at: datetime | None
 
 
-class DecisionInForceView(BaseModel):
-    """Project decision in force: its address and the decision in one line."""
+class InForceView(BaseModel):
+    """Decision or finding in force: its address and title."""
 
-    ref: str = Field(
-        description="Address of the `decision` entry in the project's case",
-        examples=["TRK#15"],
-    )
+    ref: str = Field(description="Address of the entry in the project's case", examples=["TRK#15"])
     title: str
 
 
@@ -82,12 +84,18 @@ class ProjectView(BaseModel):
             "`attribute_removed` entries"
         )
     )
-    decisions: list[DecisionInForceView] = Field(
+    decisions: list[InForceView] = Field(
         description=(
             "Project decisions in force, in number order: `decision` entries of the "
             "project's case that no later decision names in `supersedes`. Bodies come from "
             "`read_project_entries`; the tasks citing a decision, from `search_tasks` with "
             "`decision`"
+        )
+    )
+    findings: list[InForceView] = Field(
+        description=(
+            "Project findings in force, in number order: `finding` entries of the project's "
+            "case that no later finding names in `supersedes`; empty for a direction"
         )
     )
     directions: list[DirectionRefView] = Field(
@@ -97,9 +105,20 @@ class ProjectView(BaseModel):
     )
     index: list[HeadingView] = Field(
         description=(
-            "Index of the project's case, titles only, in number order: decisions, "
-            "findings, artifacts and notes about the project and the tracker's entries "
-            "about its card. Entry bodies come from `read_project_entries`"
+            "Index of the case, titles only, in number order: artifacts and notes and the "
+            "tracker's entries about the card. A project's decisions and findings are left "
+            "out, in force or superseded; a direction's index holds every entry of its "
+            "case. Entry bodies come from `read_project_entries`"
+        )
+    )
+    # Словарь с ключами-строками, а не модель и не ключи-перечисление: `EntryTypeSchema`
+    # встраивает в `outputSchema` весь список типов записи ещё раз, модель — свой `$defs`.
+    index_omitted: dict[str, int] = Field(
+        description=(
+            "Number of entries left out of `index`, by type, `decision` and `finding`: all "
+            "of them in a project's case, the superseded ones included. "
+            "`read_project_entries` returns them by `types`, `in_force` and `text`. Empty "
+            "for a direction"
         )
     )
 
@@ -107,7 +126,7 @@ class ProjectView(BaseModel):
 def project(
     item: CaseOwner,
     attributes: list[Attribute],
-    decisions: list[ProjectDecision],
+    knowledge: CaseKnowledge | None,
     directions: list[Direction],
     index: list[EntryHeading],
 ) -> ProjectView:
@@ -116,7 +135,8 @@ def project(
 
     Короче ответа REST: `id`, счётчик номеров и времена правки интерфейсу нужны, а
     агенту — нет, и каждое лишнее поле здесь оплачено его контекстом. Опись — те же
-    строки, что у дела задачи в `get_task`: заголовки без тел.
+    строки, что у дела задачи в `get_task`: заголовки без тел. `knowledge` — `None` у
+    направления: записей знания со статусом в его деле нет, и списки пусты.
     """
     return ProjectView(
         key=owner_name(item),
@@ -124,12 +144,20 @@ def project(
         description=item.description,
         archived_at=item.archived_at,
         attributes=[AttributeView(name=a.name, value=a.value) for a in attributes],
-        decisions=[DecisionInForceView(ref=d.ref, title=d.entry.title) for d in decisions],
+        decisions=[]
+        if knowledge is None
+        else [InForceView(ref=d.ref, title=d.title) for d in knowledge.decisions],
+        findings=[]
+        if knowledge is None
+        else [InForceView(ref=f.ref, title=f.title) for f in knowledge.findings],
         directions=[
             DirectionRefView(address=d.address, title=d.title, archived_at=d.archived_at)
             for d in directions
         ],
         index=[heading(line) for line in index],
+        index_omitted={}
+        if knowledge is None
+        else {kind.value: count for kind, count in knowledge.totals.items()},
     )
 
 
@@ -142,8 +170,10 @@ def register(tools: Toolset) -> None:
         key: CaseOwnerKeyArg, include_archived_directions: IncludeArchivedDirectionsArg = False
     ) -> ProjectView:
         """Returns one project by its key: key, title, description, current attribute
-        values, the project decisions in force, its directions and the index of the
-        project's case. A direction address returns the direction in the same shape.
+        values, the project decisions and findings in force by address and title, its
+        directions and the index of the project's case. Decisions and findings stay out
+        of that index; `index_omitted` counts them by type. A direction address returns
+        the direction in the same shape, its index holding every entry of its case.
 
         The keys of the installation's projects are listed by `list_projects`.
         """
@@ -151,12 +181,12 @@ def register(tools: Toolset) -> None:
             found = await directions_service.get_owner(session, key)
             attributes = await attributes_service.list_attributes(session, found, actor=actor)
             if isinstance(found, Direction):
-                decisions: list[ProjectDecision] = []
+                knowledge: CaseKnowledge | None = None
                 directions: list[Direction] = []
             else:
-                decisions = await decisions_service.in_force(session, found, actor=actor)
+                knowledge = await decisions_service.case_knowledge(session, found, actor=actor)
                 directions = await directions_service.list_directions(
                     session, found, actor=actor, include_archived=include_archived_directions
                 )
             index = await case_service.project_case_index(session, found, actor=actor)
-            return project(found, attributes, decisions, directions, index)
+            return project(found, attributes, knowledge, directions, index)

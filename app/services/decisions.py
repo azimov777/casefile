@@ -14,7 +14,9 @@
 
 - пакет задачи (`get_task`): решения, на которые ссылается задача, со статусом и
   преемником — `cited_decisions`;
-- чтение проекта: все решения проекта со статусом — `project_decisions`;
+- чтение проекта в REST: все решения проекта со статусом — `project_decisions`;
+- чтение проекта в MCP: действующие решения и заметки ссылкой и заголовком и число записей
+  знания по типам — `case_knowledge`;
 - чтение дела проекта: статус и преемник у каждой записи знания и отбор `in_force` —
   `case_standings`;
 - проверки записи: новая ссылка задачи (`check_cited`) называет только действующее
@@ -100,6 +102,29 @@ class CitedDecision(DecisionRef):
 
 
 @dataclass(frozen=True, slots=True)
+class KnowledgeRef:
+    """Действующая запись знания в чтении проекта: адрес и заголовок, без тела."""
+
+    ref: str
+    title: str
+
+
+@dataclass(frozen=True, slots=True)
+class CaseKnowledge:
+    """Записи знания дела проекта для его чтения (решение TRK#48, раздел 3).
+
+    `decisions` и `findings` — действующие решения и заметки в порядке номеров. `totals` —
+    сколько в деле записей каждого из двух типов вместе с заменёнными: опись чтения проекта
+    их не несёт, и число говорит читателю, что они есть и сколько их. Оба типа в словаре
+    всегда, ноль тоже.
+    """
+
+    decisions: list[KnowledgeRef]
+    findings: list[KnowledgeRef]
+    totals: dict[EntryType, int]
+
+
+@dataclass(frozen=True, slots=True)
 class Standing:
     """Статус записи знания в чтении дела проекта и номер её прямого преемника.
 
@@ -162,23 +187,31 @@ async def project_decisions(
     return sorted(found.get(project.key, {}).values(), key=lambda item: item.entry.no)
 
 
-async def in_force(
-    session: AsyncSession, project: Project, *, actor: Actor
-) -> list[ProjectDecision]:
-    """Действующие решения проекта: то, что по договору задаёт работу (`CONCEPT.md`, 5.2)."""
-    return [
-        decision
-        for decision in await project_decisions(session, project, actor=actor)
-        if decision.superseded_by is None
-    ]
+async def case_knowledge(session: AsyncSession, project: Project, *, actor: Actor) -> CaseKnowledge:
+    """Действующие решения и заметки проекта ссылкой и заголовком и число записей знания по
+    типам — для чтения проекта (`get_project`), одним запросом без тел.
+
+    Действующие решения — то, что по договору задаёт работу (`CONCEPT.md`, 5.2); заметки
+    стоят рядом в той же форме. Статус — тем же `CaseStandings`, что у чтения дела.
+    """
+    rows = await EntryRepository(session).project_replaceables(project.id)
+    standings = _standings(rows)
+    listed: dict[EntryType, list[KnowledgeRef]] = {kind: [] for kind in _KNOWLEDGE_TYPES}
+    for no, entry_type, title, _ in rows:
+        if standings.of_number(no).superseded_by is None:
+            listed[entry_type].append(
+                KnowledgeRef(ref=format_entry_ref(project.key, no), title=title)
+            )
+    return CaseKnowledge(
+        decisions=listed[EntryType.DECISION],
+        findings=listed[EntryType.FINDING],
+        totals={kind: sum(1 for row in rows if row[1] is kind) for kind in _KNOWLEDGE_TYPES},
+    )
 
 
 async def case_standings(session: AsyncSession, project: Project) -> CaseStandings:
     """Статусы всех решений и заметок дела проекта: для чтения дела и отбора `in_force`."""
-    rows = await EntryRepository(session).project_replaceables(project.id)
-    return CaseStandings(
-        (no, entry_type, superseded_numbers(payload)) for no, entry_type, payload in rows
-    )
+    return _standings(await EntryRepository(session).project_replaceables(project.id))
 
 
 async def standing_of(session: AsyncSession, project: Project, entry: Entry) -> Standing | None:
@@ -342,6 +375,15 @@ async def check_superseded(
 
 
 # --- Внутреннее --------------------------------------------------------------------------
+
+#: Типы записей знания по имени — порядок ключей в `CaseKnowledge.totals`.
+_KNOWLEDGE_TYPES = tuple(sorted(REPLACEABLE_ENTRY_TYPES))
+
+
+def _standings(rows: Iterable[tuple[int, EntryType, str, dict[str, Any]]]) -> CaseStandings:
+    return CaseStandings(
+        (no, entry_type, superseded_numbers(payload)) for no, entry_type, _, payload in rows
+    )
 
 
 async def _decisions_of(

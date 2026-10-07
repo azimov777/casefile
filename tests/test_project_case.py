@@ -456,8 +456,8 @@ async def test_rest_journal_carries_the_owner_of_each_entry(
 async def test_a_task_token_files_and_reads_a_project_case(
     mcp_session: Connect, task_secret: str, project: Project
 ) -> None:
-    """Обзорная проверка 4: набор `task` подшивает, `get_project` отдаёт опись,
-    `read_project_entries` — тела."""
+    """Обзорная проверка 4: набор `task` подшивает, `get_project` отдаёт заметку списком
+    действующих (в описи её нет с TRK-657), `read_project_entries` — тела."""
     async with mcp_session(task_secret) as session:
         filed = await call(
             session,
@@ -473,9 +473,9 @@ async def test_a_task_token_files_and_reads_a_project_case(
 
     assert set(filed) == {"no", "seq", "project_key", "author", "created_at"}
     assert (filed["no"], filed["project_key"]) == (2, "TRK")
-    assert [(line["no"], line["type"]) for line in card["index"]] == [
-        (1, "created"),
-        (2, "finding"),
+    assert [(line["no"], line["type"]) for line in card["index"]] == [(1, "created")]
+    assert card["findings"] == [
+        {"ref": "TRK#2", "title": "Репозиторий — github.com/azimov777/casefile"}
     ]
     [entry] = bodies["items"]
     assert (entry["body"], entry["task_key"], entry["project_key"]) == (
