@@ -49,6 +49,8 @@ export const errors = {
   direction_reason_required: 'Archiving or restoring a direction requires a reason.',
   entry_fields_invalid: 'The entry did not pass validation.',
   entry_not_found: 'This task has no entry with that number.',
+  finding_not_in_force:
+    'This project finding has been superseded: supersede the one that replaced it.',
   human_token_not_allowed:
     'A key cannot be issued to a person: people sign in, keys are for agents.',
   http_error: 'The request failed.',

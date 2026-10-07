@@ -598,6 +598,11 @@ export interface paths {
          *     оба, побеждает больший. `attribute` отдаёт историю одного атрибута: только
          *     `attribute_created`, `attribute_changed`, `attribute_removed` с этим именем, без учёта
          *     регистра — без него история листается вперемешку с остальным делом проекта.
+         *
+         *     У решения и заметки — `status` и `superseded_by`, посчитанные при чтении (TRK#48):
+         *     запись действует, пока более поздняя запись её типа не назвала её в `supersedes`.
+         *     `in_force=true` оставляет только действующие решения и заметки, `in_force=false` —
+         *     только заменённые.
          */
         get: operations["list_project_entries"];
         put?: never;
@@ -629,7 +634,8 @@ export interface paths {
         };
         /**
          * Read one project case entry
-         * @description Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`.
+         * @description Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`; у решения и заметки —
+         *     со статусом и преемником, как в списке.
          *
          *     Номера, которого в деле проекта нет, — `404 entry_not_found`.
          */
@@ -1549,6 +1555,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -1824,6 +1842,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2007,6 +2037,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * Type
              * @constant
              */
@@ -2171,6 +2213,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2288,6 +2342,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2395,6 +2461,18 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2556,6 +2634,18 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2919,10 +3009,8 @@ export interface components {
          * DecisionEntryRead
          * @description Решение: в деле задачи — решение задачи, в деле проекта — решение проекта.
          *
-         *     Нагрузка одна на оба дела: `supersedes` — номера решений того же проекта, которые это
-         *     заменило (`CONCEPT.md`, 3.2). У решения задачи и у решения проекта, подшитого до
-         *     замены, список пуст. Статуса здесь нет: он меняется без записи в этом деле и
-         *     считается при чтении проекта и задачи (`ProjectDecisionRead`, `CitedDecisionRead`).
+         *     Число задач, которые на решение проекта ссылаются, — в чтении проекта
+         *     (`ProjectDecisionRead`), а не здесь.
          */
         DecisionEntryRead: {
             /**
@@ -2994,28 +3082,22 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * @description Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or a direction's case, in the journal and in the answer that files the entry
+             * @example in_force
+             */
+            status?: components["schemas"]["DecisionStatus"] | null;
+            /**
+             * Superseded By
+             * @description Number of the entry in the same case that superseded this one, the direct successor rather than the end of a chain; `null` while in force and wherever `status` is `null`
+             * @example null
+             */
+            superseded_by?: number | null;
+            payload?: components["schemas"]["SupersedesPayload"];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             type: "decision";
-            payload?: components["schemas"]["DecisionPayload"];
-        };
-        /**
-         * DecisionPayload
-         * @description Нагрузка решения: какие решения проекта оно заменило.
-         *
-         *     Список со значением по умолчанию: решения задач и решения проекта, подшитые до замены
-         *     (`TRK-554`), ключа не несут, а ответ несёт его всегда — форма записи одна.
-         */
-        DecisionPayload: {
-            /**
-             * Supersedes
-             * @description Numbers of the earlier decisions of the same project that this project decision superseded; empty for a task decision
-             * @example [
-             *       12
-             *     ]
-             */
-            supersedes?: number[];
         };
         /**
          * DecisionRefRead
@@ -3041,7 +3123,10 @@ export interface components {
         };
         /**
          * DecisionStatus
-         * @description Действует ли решение проекта. Хранимым значением не бывает: только при чтении.
+         * @description Действует ли запись знания — решение или заметка дела проекта.
+         *
+         *     Хранимым значением не бывает: только при чтении. Имя осталось от решений, первых
+         *     записей с заменой; у заметки те же два значения (TRK#48).
          * @enum {string}
          */
         DecisionStatus: "in_force" | "superseded";
@@ -3345,7 +3430,7 @@ export interface components {
             /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Which fields there are follows from `type`; entries whose title is written by their author have none */
             facts: components["schemas"]["EntryFactsRead"];
         };
-        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
+        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["FindingEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
         /**
          * EntryType
          * @description Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после.
@@ -3457,6 +3542,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -3506,6 +3603,97 @@ export interface components {
              * @description New value
              */
             after?: string | null;
+        };
+        /**
+         * FindingEntryRead
+         * @description Находка: в деле задачи — установленный факт, в деле проекта — заметка проекта.
+         */
+        FindingEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @description Key of the owning task; `null` for an entry of a project's or a direction's case
+             * @example TRK-42
+             */
+            task_key: string | null;
+            /**
+             * Project Key
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry
+             * @example null
+             */
+            project_key: string | null;
+            /**
+             * Direction
+             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * @example null
+             */
+            direction?: string | null;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * @description Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or a direction's case, in the journal and in the answer that files the entry
+             * @example in_force
+             */
+            status?: components["schemas"]["DecisionStatus"] | null;
+            /**
+             * Superseded By
+             * @description Number of the entry in the same case that superseded this one, the direct successor rather than the end of a chain; `null` while in force and wherever `status` is `null`
+             * @example null
+             */
+            superseded_by?: number | null;
+            payload?: components["schemas"]["SupersedesPayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "finding";
         };
         /**
          * HealthResponse
@@ -3690,6 +3878,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -3835,6 +4035,18 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4199,8 +4411,7 @@ export interface components {
         };
         /**
          * PlainEntryRead
-         * @description Запись без нагрузки: попытка, находка, артефакт, заметка, заведение задачи или
-         *     проекта.
+         * @description Запись без нагрузки: попытка, артефакт, заметка, заведение задачи или проекта.
          */
         PlainEntryRead: {
             /**
@@ -4272,10 +4483,22 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "artifact" | "attempt" | "created" | "finding" | "note";
+            type: "artifact" | "attempt" | "created" | "note";
             payload?: components["schemas"]["EmptyPayload"];
         };
         /**
@@ -4351,6 +4574,18 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4544,9 +4779,10 @@ export interface components {
          *     (`CONCEPT.md`, 3.4, «Дело проекта»), и схема показывает его клиенту до запроса, а не
          *     отказом `entry_fields_invalid` после.
          *
-         *     `supersedes` — только у решения: новое решение проекта заменяет названные
-         *     (`CONCEPT.md`, 3.2). Без значения по умолчанию в схеме (`default_factory`): иначе
-         *     клиент интерфейса требовал бы его у каждой заметки (`docs/notes/api.md`).
+         *     `supersedes` — только у решения и находки: новая запись заменяет названные записи
+         *     своего типа (`CONCEPT.md`, 3.2; TRK#48). Без значения по умолчанию в схеме
+         *     (`default_factory`): иначе клиент интерфейса требовал бы его у каждой заметки
+         *     (`docs/notes/api.md`).
          */
         ProjectEntryCreate: {
             /**
@@ -4574,7 +4810,7 @@ export interface components {
             type: "note" | "decision" | "finding" | "artifact";
             /**
              * Supersedes
-             * @description Numbers of earlier decisions of this project that the new decision supersedes; only with `decision`. A number outside the project's case or of another type answers `entry_fields_invalid`; a decision superseded already, `decision_not_in_force` with its successor
+             * @description Numbers of earlier entries of the same type in this project's case that the new entry supersedes; only with `decision` and `finding`. A number outside the project's case or of another type answers `entry_fields_invalid`; an entry superseded already, `decision_not_in_force` or `finding_not_in_force` with its successor
              * @example [
              *       12
              *     ]
@@ -4776,6 +5012,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -4964,6 +5212,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5098,6 +5358,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5224,6 +5496,18 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5477,6 +5761,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5625,6 +5921,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5708,6 +6016,25 @@ export interface components {
              * @example Прод-команда экрана не мерилась ни одной проверкой: гонял только дев-путь
              */
             unmeasured?: string | null;
+        };
+        /**
+         * SupersedesPayload
+         * @description Нагрузка решения и заметки: какие записи того же типа и того же дела проекта эта
+         *     заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2).
+         *
+         *     Список со значением по умолчанию: записи задач и направлений, решения проекта,
+         *     подшитые до замены (`TRK-554`), и заметки проекта до TRK-656 ключа не несут, а ответ
+         *     несёт его всегда — форма записи одна.
+         */
+        SupersedesPayload: {
+            /**
+             * Supersedes
+             * @description Numbers of the earlier entries of the same type in the same project's case that this decision or finding superseded; empty in a task's or a direction's case
+             * @example [
+             *       12
+             *     ]
+             */
+            supersedes?: number[];
         };
         /**
          * TaskAlreadyThereRead
@@ -6860,6 +7187,18 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -7016,6 +7355,18 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -9331,6 +9682,8 @@ export interface operations {
                 types?: components["schemas"]["EntryType"][] | null;
                 /** @description Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters */
                 attribute?: string | null;
+                /** @description `true` reads only the decisions and findings in force, `false` only the superseded ones; entries of other types have no status and match neither. Combines with `types` and the other filters */
+                in_force?: boolean | null;
                 /** @description Read only entries after this number — what happened since */
                 after_no?: number | null;
                 /** @description Page size */
@@ -11983,7 +12336,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
+                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["FindingEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
