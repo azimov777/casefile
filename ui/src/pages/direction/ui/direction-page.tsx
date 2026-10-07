@@ -13,7 +13,7 @@ import {
   useProjectRights,
   type HolderTabLink,
 } from '@/features/manage-project';
-import { tasksHref } from '@/features/task-filters';
+import { TaskCounters, tasksHref } from '@/features/task-filters';
 import { ApiError } from '@/shared/api';
 import { useLanguage } from '@/shared/i18n';
 import { exactTime, projectHref } from '@/shared/lib';
@@ -110,6 +110,7 @@ export function DirectionPage() {
           </Link>
         </>
       }
+      counters={<TaskCounters project={card.project_key} direction={card.address} />}
       menu={
         <DirectionMenu
           direction={card}
