@@ -110,7 +110,7 @@ test('длинное слово и код без пробелов не тяну�
     await silenceJournal(page);
     await page.setViewportSize({ width: 390, height: 844 });
 
-    for (const address of [`/tasks/${key}`, `/tasks/${key}/case`, '/questions']) {
+    for (const address of [`/tasks/${key}`, `/tasks/${key}/case`, '/questions?view=history']) {
       await page.goto(address);
       await expect(page.getByRole('main')).toBeVisible();
       // Ждём само содержимое записи, а не только оболочку: замер до его прихода
