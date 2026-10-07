@@ -36,7 +36,15 @@ async function api(
   return ((await response.json()) as { data: Record<string, unknown> }).data;
 }
 
-let ready: Promise<void> | null = null;
+interface Seeded {
+  /** Задача с открытым вопросом `blocking` и номер вопроса. */
+  waiting: string;
+  question: number;
+  /** Задача, закрытая не целиком. */
+  gaps: string;
+}
+
+let ready: Promise<Seeded> | null = null;
 
 /**
  * Проект с направлением `promo` и пятью задачами: в работе — две (одна в направлении),
@@ -46,12 +54,12 @@ let ready: Promise<void> | null = null;
  * Ждущая задача лежит в `backlog`: ждёт ответа и она (`HELD_STATUSES`), а открытых
  * ей не нужны разделы.
  */
-function seed(request: APIRequestContext): Promise<void> {
+function seed(request: APIRequestContext): Promise<Seeded> {
   ready ??= seedOnce(request);
   return ready;
 }
 
-async function seedOnce(request: APIRequestContext): Promise<void> {
+async function seedOnce(request: APIRequestContext): Promise<Seeded> {
   await api(request, 'post', '/api/v1/projects', { key: KEY, title: `Счётчики ${RUN}` });
   await api(request, 'post', `/api/v1/projects/${KEY}/directions`, {
     key: 'promo',
@@ -90,7 +98,7 @@ async function seedOnce(request: APIRequestContext): Promise<void> {
   await move(await create('Открыта, в направлении', ADDRESS), ['open']);
 
   const waiting = await create('Ждёт ответа, без направления', null);
-  await api(
+  const asked = await api(
     request,
     'post',
     `/api/v1/tasks/${waiting}/entries`,
@@ -121,6 +129,7 @@ async function seedOnce(request: APIRequestContext): Promise<void> {
     },
     agent,
   );
+  return { waiting, question: asked.no as number, gaps };
 }
 
 /** Число счётчика строки: хвост его текста. */
@@ -134,9 +143,10 @@ async function counterValue(page: Page, name: Counter): Promise<number> {
 
 /** Число в заголовке списка задач: последний знак его `h1`. */
 async function listTotal(page: Page): Promise<number> {
-  const heading = page.getByRole('heading', { level: 1 });
-  await expect(heading).toHaveText(/\d+$/);
-  return Number(((await heading.textContent()) ?? '').replace(/\D+/g, ''));
+  // Число — своим элементом: в самом заголовке могут быть цифры, но не в нём.
+  const total = page.getByRole('heading', { level: 1 }).locator('[aria-hidden="true"]');
+  await expect(total).toHaveText(/^\d+$/);
+  return Number(await total.textContent());
 }
 
 async function checkCounters(page: Page, path: string, expected: number[]): Promise<void> {
@@ -201,4 +211,19 @@ test('счётчики читают по четыре запроса с limit=1,
 
   const violations = (await new AxeBuilder({ page }).analyze()).violations;
   expect(violations.map((item) => item.id)).toEqual([]);
+});
+
+test('уборка: вопрос отвечен, предупреждение принято — «Входящие» остаются чистыми для соседей', async ({
+  request,
+}) => {
+  const { waiting, question, gaps } = await seed(request);
+  await api(request, 'post', `/api/v1/tasks/${waiting}/entries`, {
+    type: 'answer',
+    body: 'Ответ сквозного теста счётчиков.',
+    payload: { question_no: question },
+  });
+  await api(request, 'post', `/api/v1/tasks/${gaps}/entries`, {
+    type: 'acceptance',
+    title: 'Принято сквозным тестом счётчиков',
+  });
 });
