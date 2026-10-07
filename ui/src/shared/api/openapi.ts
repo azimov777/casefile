@@ -784,6 +784,10 @@ export interface paths {
          * @description Записи дела области с телами и нагрузкой, в порядке `no` — те же фильтры, что у
          *     дела проекта, включая историю одного атрибута (`attribute`) и подстроку заголовка или
          *     тела (`text`).
+         *
+         *     У решения и заметки — `status` и `superseded_by`, посчитанные при чтении, как в деле
+         *     проекта (решение TRK#57, раздел 5). Отбора `in_force` здесь нет: интерфейс его не
+         *     зовёт (решение TRK#53); у агента он есть в `read_project_entries`.
          */
         get: operations["list_area_entries"];
         put?: never;
@@ -792,9 +796,10 @@ export interface paths {
          * @description Подшивает запись в дело области: заметку, решение, находку или артефакт.
          *
          *     Номер `no` считается внутри области, ссылка на запись — `TRK/promotion#3`.
-         *     `supersedes` здесь нет: механика решений проекта на дело области не
-         *     распространяется. Замечания к форме и ссылкам — разом в `422 entry_fields_invalid`.
-         *     Архивная область — `409 area_archived`.
+         *     `supersedes` в теле нет: замену у дела области ведёт агент через MCP, а интерфейс
+         *     записей не заменяет, и поле без вызова в REST не держат (решение TRK#53). Замечания к
+         *     форме и ссылкам — разом в `422 entry_fields_invalid`. Архивная область — `409
+         *     area_archived`.
          */
         post: operations["create_area_entry"];
         delete?: never;
@@ -812,7 +817,8 @@ export interface paths {
         };
         /**
          * Read one area case entry
-         * @description Одна запись дела области по номеру — адрес из ссылки `TRK/promotion#3`.
+         * @description Одна запись дела области по номеру — адрес из ссылки `TRK/promotion#3`; у решения
+         *     и заметки — со статусом и преемником, как в списке.
          *
          *     Номера, которого в деле нет, — `404 entry_not_found`.
          */
@@ -1619,13 +1625,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -1913,13 +1919,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -2115,13 +2121,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -2325,8 +2331,9 @@ export interface components {
          * AreaEntryCreate
          * @description Запись агента или человека в деле области: заметка, решение, находка, артефакт.
          *
-         *     Те же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: механики
-         *     решений проекта у дела области нет, и лишнее поле схема отвергает до сценария.
+         *     Те же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: замену у
+         *     дела области ведёт агент через MCP, интерфейс записей не заменяет, и поля без вызова
+         *     REST не держит (решение TRK#53). Лишнее поле схема отвергает до сценария.
          */
         AreaEntryCreate: {
             /**
@@ -2525,13 +2532,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -2660,13 +2667,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -2799,13 +2806,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -2925,13 +2932,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -3104,13 +3111,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -3251,7 +3258,8 @@ export interface components {
         };
         /**
          * CitedDecisionRead
-         * @description Решение проекта, на которое ссылается задача, и его преемник (`CONCEPT.md`, 4.2).
+         * @description Решение проекта или области, на которое ссылается задача, и его преемник
+         *     (`CONCEPT.md`, 4.2).
          *
          *     Та же форма, что у `get_task` в MCP (`CitedDecisionView`): пакет задачи совпадает в
          *     обоих интерфейсах поле в поле.
@@ -3259,7 +3267,7 @@ export interface components {
         CitedDecisionRead: {
             /**
              * Ref
-             * @description Address of the `decision` entry in the project's case
+             * @description Address of the `decision` entry in its project's case (`TRK#15`) or area's case (`TRK/mcp#3`)
              * @example TRK#15
              */
             ref: string;
@@ -3269,7 +3277,7 @@ export interface components {
              */
             title: string;
             /**
-             * @description Computed on read: `superseded` once a later decision of the project names this one in `supersedes`, `in_force` until then
+             * @description Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then
              * @example in_force
              */
             status: components["schemas"]["DecisionStatus"];
@@ -3474,13 +3482,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -3628,7 +3636,8 @@ export interface components {
         };
         /**
          * DecisionEntryRead
-         * @description Решение: в деле задачи — решение задачи, в деле проекта — решение проекта.
+         * @description Решение: в деле задачи — решение задачи, в деле проекта — решение проекта, в деле
+         *     области — решение области.
          *
          *     Число задач, которые на решение проекта ссылаются, — в чтении проекта
          *     (`ProjectDecisionRead`), а не здесь.
@@ -3709,7 +3718,7 @@ export interface components {
              */
             action_id?: string | null;
             /**
-             * @description Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or an area's case, in the journal and in the answer that files the entry
+             * @description Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's case, in the journal and in the answer that files the entry
              * @example in_force
              */
             status?: components["schemas"]["DecisionStatus"] | null;
@@ -3728,12 +3737,12 @@ export interface components {
         };
         /**
          * DecisionRefRead
-         * @description Решение проекта, названное ссылкой: адрес, заголовок и статус.
+         * @description Решение проекта или области, названное ссылкой: адрес, заголовок и статус.
          */
         DecisionRefRead: {
             /**
              * Ref
-             * @description Address of the `decision` entry in the project's case
+             * @description Address of the `decision` entry in its project's case (`TRK#15`) or area's case (`TRK/mcp#3`)
              * @example TRK#15
              */
             ref: string;
@@ -3743,14 +3752,14 @@ export interface components {
              */
             title: string;
             /**
-             * @description Computed on read: `superseded` once a later decision of the project names this one in `supersedes`, `in_force` until then
+             * @description Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then
              * @example in_force
              */
             status: components["schemas"]["DecisionStatus"];
         };
         /**
          * DecisionStatus
-         * @description Действует ли запись знания — решение или заметка дела проекта.
+         * @description Действует ли запись знания — решение или заметка дела проекта или области.
          *
          *     Хранимым значением не бывает: только при чтении. Имя осталось от решений, первых
          *     записей с заменой; у заметки те же два значения (TRK#48).
@@ -3871,13 +3880,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -4325,13 +4334,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -4388,7 +4397,8 @@ export interface components {
         };
         /**
          * FindingEntryRead
-         * @description Находка: в деле задачи — установленный факт, в деле проекта — заметка проекта.
+         * @description Находка: в деле задачи — установленный факт, в деле проекта или области — его
+         *     заметка.
          */
         FindingEntryRead: {
             /**
@@ -4466,7 +4476,7 @@ export interface components {
              */
             action_id?: string | null;
             /**
-             * @description Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or an area's case, in the journal and in the answer that files the entry
+             * @description Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's case, in the journal and in the answer that files the entry
              * @example in_force
              */
             status?: components["schemas"]["DecisionStatus"] | null;
@@ -4673,13 +4683,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -4837,13 +4847,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -5271,13 +5281,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -5369,13 +5379,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -5455,7 +5465,7 @@ export interface components {
             no: number;
             /**
              * Ref
-             * @description Address of the `decision` entry in the project's case
+             * @description Address of the `decision` entry in its project's case (`TRK#15`) or area's case (`TRK/mcp#3`)
              * @example TRK#15
              */
             ref: string;
@@ -5471,7 +5481,7 @@ export interface components {
              */
             created_at: string;
             /**
-             * @description Computed on read: `superseded` once a later decision of the project names this one in `supersedes`, `in_force` until then
+             * @description Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then
              * @example in_force
              */
             status: components["schemas"]["DecisionStatus"];
@@ -5785,13 +5795,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -5913,13 +5923,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -6119,13 +6129,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -6271,13 +6281,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -6416,13 +6426,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -6695,13 +6705,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -6861,13 +6871,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -6958,17 +6968,17 @@ export interface components {
         };
         /**
          * SupersedesPayload
-         * @description Нагрузка решения и заметки: какие записи того же типа и того же дела проекта эта
-         *     заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2).
+         * @description Нагрузка решения и заметки: какие записи того же типа и того же дела проекта или
+         *     области эта заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2; TRK#57, раздел 5).
          *
-         *     Список со значением по умолчанию: записи задач и областей, решения проекта,
-         *     подшитые до замены (`TRK-554`), и заметки проекта до TRK-656 ключа не несут, а ответ
-         *     несёт его всегда — форма записи одна.
+         *     Список со значением по умолчанию: записи задач, решения проекта, подшитые до замены
+         *     (`TRK-554`), заметки проекта до TRK-656 и записи областей до TRK-658 ключа не несут,
+         *     а ответ несёт его всегда — форма записи одна.
          */
         SupersedesPayload: {
             /**
              * Supersedes
-             * @description Numbers of the earlier entries of the same type in the same project's case that this decision or finding superseded; empty in a task's or an area's case
+             * @description Numbers of the earlier entries of the same type in the same project's or area's case that this decision or finding superseded; empty in a task's case
              * @example [
              *       12
              *     ]
@@ -7197,7 +7207,7 @@ export interface components {
             not_before?: string | null;
             /**
              * Decisions
-             * @description Project decisions the task relies on: references `PROJECT#N` to `decision` entries of a project's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor
+             * @description Decisions the task relies on: references `PROJECT#N` or `PROJECT/area#N` to `decision` entries of a project's or an area's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project or area entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor
              * @example [
              *       "TRK#15"
              *     ]
@@ -7376,7 +7386,7 @@ export interface components {
             links: components["schemas"]["TaskLinkRead"][];
             /**
              * Decisions
-             * @description Project decisions the task relies on, in the order of its `decisions` field, each with its status computed on read and, once superseded, its successor. The project's other decisions are part of the project read
+             * @description Project and area decisions the task relies on, in the order of its `decisions` field, each with its status computed on read and, once superseded, its successor. The project's other decisions are part of the project read
              */
             decisions: components["schemas"]["CitedDecisionRead"][];
             features: components["schemas"]["TaskFeaturesRead"];
@@ -7553,13 +7563,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -7912,7 +7922,7 @@ export interface components {
             not_before?: string | null;
             /**
              * Decisions
-             * @description Project decisions the task relies on: references `PROJECT#N` to `decision` entries of a project's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor. Replaces the whole list in any status but `done` and `cancelled`; a reference already in it stays after its decision is superseded
+             * @description Decisions the task relies on: references `PROJECT#N` or `PROJECT/area#N` to `decision` entries of a project's or an area's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project or area entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor. Replaces the whole list in any status but `done` and `cancelled`; a reference already in it stays after its decision is superseded
              * @example [
              *       "TRK#15"
              *     ]
@@ -8170,13 +8180,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -8345,13 +8355,13 @@ export interface components {
             action_id?: string | null;
             /**
              * Status
-             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
              */
             status?: null;
             /**
              * Superseded By
-             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
              * @example null
              */
             superseded_by?: null;
@@ -11665,7 +11675,7 @@ export interface operations {
                 project?: string[] | null;
                 /** @description Parent task keys: the answer holds their direct children, one level deep. `empty()` finds tasks with no parent — the top level of a project. An unknown key answers 422 instead of an empty page: emptiness here reads as «no children» and would hide the typo */
                 parent?: string[] | null;
-                /** @description Project decisions `PROJECT#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's case answers 422 instead of an empty page */
+                /** @description Project decisions `PROJECT#N` and area decisions `PROJECT/area#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's or an area's case answers 422 instead of an empty page */
                 decision?: string[] | null;
                 /** @description Area addresses `PROJECT/key`: the tasks whose own `area` field names one of them, parents and subtrees not followed. `empty()` finds tasks with no area. An unknown address answers 422 instead of an empty page */
                 area?: string[] | null;
