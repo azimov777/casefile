@@ -196,12 +196,22 @@ function seed(request: APIRequestContext): Promise<Seeded> {
     }
 
     const detail = await api(request, 'get', `/api/v1/tasks/${key}`);
-    const task = detail.task as { project: { title: string }; assignee: string };
+    const task = detail.task as {
+      project: { title: string };
+      area: { title: string } | null;
+      assignee: string;
+    };
     /*
      * Аватар исполнителя в шапке карточки — две первые буквы его имени: это данные
-     * (имя участника), а не подпись, но набраны они не моноширинным.
+     * (имя участника), а не подпись, но набраны они не моноширинным. Название области
+     * в карточке — тоже данные (TRK-677: у задачи она теперь всегда есть).
      */
-    return { key, data: [task.project.title, task.assignee.slice(0, 2)] };
+    return {
+      key,
+      data: [task.project.title, task.area?.title ?? '', task.assignee.slice(0, 2)].filter(
+        (value) => value !== '',
+      ),
+    };
   })();
   return ready;
 }
