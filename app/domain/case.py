@@ -58,6 +58,16 @@
 `build_project_entry` теми же функциями полей, что и `build_entry`. Дело области
 устроено так же (`CONCEPT.md`, 3.7) и проверяется той же функцией, только без
 `supersedes`: механика решений проекта на него не распространяется.
+
+## Дело обсуждения
+
+Четвёртый владелец записи — обсуждение (решение `TRK#51`, п. 2). Его дело — переписка:
+вопрос, ответ, заметка и итог (`DISCUSSION_ENTRY_TYPES`). Форму проверяет тот же
+`build_entry` с контекстом обсуждения (`EntryContext.discussion`): ответ и заметка
+устроены как в деле задачи, признак `blocking` у вопроса не выбирают — держит любой
+вопрос, и в нагрузке он всегда `true`, — а итог из трёх непустых частей бывает только
+здесь. Ссылка на обсуждение — `TRK~7`, на
+его запись — `TRK~7#3`: тильды нет ни в ключе задачи, ни в адресе области.
 """
 
 import re
@@ -75,6 +85,13 @@ from app.domain.areas import (
     parse_area_address,
 )
 from app.domain.authors import Author
+from app.domain.discussions import (
+    CONCLUSION_PARTS,
+    DISCUSSION_SEPARATOR,
+    format_discussion_address,
+    is_discussion_address,
+    parse_discussion_address,
+)
 from app.domain.errors import EntryFieldsInvalidError, InvalidTaskKeyError
 from app.domain.fields import FieldProblem, FieldProblems
 from app.domain.links import LinkKind
@@ -104,6 +121,7 @@ class EntryType(StrEnum):
     REMARK = "remark"
     RESOLUTION = "resolution"
     ACCEPTANCE = "acceptance"
+    CONCLUSION = "conclusion"
     NOTE = "note"
     CREATED = "created"
     STATUS_CHANGED = "status_changed"
@@ -114,6 +132,9 @@ class EntryType(StrEnum):
     LINK_REMOVED = "link_removed"
     MOVED = "moved"
     WARNING = "warning"
+    ATTACHED = "attached"
+    DETACHED = "detached"
+    CLOSED = "closed"
     ATTRIBUTE_CREATED = "attribute_created"
     ATTRIBUTE_CHANGED = "attribute_changed"
     ATTRIBUTE_REMOVED = "attribute_removed"
@@ -236,6 +257,9 @@ SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
         EntryType.LINK_REMOVED,
         EntryType.MOVED,
         EntryType.WARNING,
+        EntryType.ATTACHED,
+        EntryType.DETACHED,
+        EntryType.CLOSED,
         EntryType.ATTRIBUTE_CREATED,
         EntryType.ATTRIBUTE_CHANGED,
         EntryType.ATTRIBUTE_REMOVED,
@@ -259,6 +283,25 @@ ARCHIVE_ENTRY_TYPES: frozenset[EntryType] = frozenset({EntryType.ARCHIVED, Entry
 
 #: Записи агента и человека — всё, что не служебное.
 AGENT_ENTRY_TYPES: frozenset[EntryType] = frozenset(EntryType) - SERVICE_ENTRY_TYPES
+
+#: Служебные записи о привязке задачи к обсуждению и её снятии (решение `TRK#51`, п. 3):
+#: подшиваются в дело задачи и в дело обсуждения одним действием, как `link_added`.
+ATTACHMENT_ENTRY_TYPES: frozenset[EntryType] = frozenset({EntryType.ATTACHED, EntryType.DETACHED})
+
+#: Записи агента и человека в деле обсуждения (решение `TRK#51`, п. 2): переписка и итог.
+#: Сводок, вердиктов, замечаний и решений здесь нет — у обсуждения нет ни хода работы, ни
+#: проверок; работу ведут привязанные задачи.
+DISCUSSION_ENTRY_TYPES: frozenset[EntryType] = frozenset(
+    {EntryType.QUESTION, EntryType.ANSWER, EntryType.NOTE, EntryType.CONCLUSION}
+)
+
+#: Записи, которые бывают только в деле обсуждения: итог и закрытие.
+DISCUSSION_ONLY_ENTRY_TYPES: frozenset[EntryType] = frozenset(
+    {EntryType.CONCLUSION, EntryType.CLOSED}
+)
+
+#: Записи агента и человека в деле задачи: всё агентское, кроме итога обсуждения.
+TASK_ENTRY_TYPES: frozenset[EntryType] = AGENT_ENTRY_TYPES - DISCUSSION_ONLY_ENTRY_TYPES
 
 #: Записи агента и человека в деле проекта (`CONCEPT.md`, 3.4, «Дело проекта») и в деле
 #: области (3.7). Сводок, вопросов, вердиктов, замечаний и попыток у них нет: нет ни
@@ -337,13 +380,14 @@ CLOSING_SUMMARY_PART = "unmeasured"
 #: измерили» идёт последним, после следующего шага, как приписка к подведённому итогу.
 CLOSING_SUMMARY_PARTS: tuple[str, ...] = (*SUMMARY_PARTS, CLOSING_SUMMARY_PART)
 
-#: Форма ссылки на запись в подробностях отказа: по ней агент чинит опечатку. Форм три —
-#: запись задачи, проекта и области; дефис есть только в ключе задачи, косая черта —
-#: только в адресе области.
+#: Форма ссылки на запись в подробностях отказа: по ней агент чинит опечатку. Форм
+#: четыре — запись задачи, проекта, области и обсуждения; дефис есть только в ключе
+#: задачи, косая черта — только в адресе области, тильда — только в адресе обсуждения.
 ENTRY_REF_SHAPE = (
     f"<PROJECT>-<task number>{ENTRY_REF_SEPARATOR}<entry number>, "
-    f"<PROJECT>{ENTRY_REF_SEPARATOR}<entry number> or "
-    f"<PROJECT>{ADDRESS_SEPARATOR}<area>{ENTRY_REF_SEPARATOR}<entry number>"
+    f"<PROJECT>{ENTRY_REF_SEPARATOR}<entry number>, "
+    f"<PROJECT>{ADDRESS_SEPARATOR}<area>{ENTRY_REF_SEPARATOR}<entry number> or "
+    f"<PROJECT>{DISCUSSION_SEPARATOR}<discussion number>{ENTRY_REF_SEPARATOR}<entry number>"
 )
 
 #: Голова ссылки на запись проекта: ключ проекта по его шаблону.
@@ -356,7 +400,8 @@ _URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]+:\S+$")
 
 #: Допустимые виды ссылки в подробностях отказа `not_a_reference`.
 REF_SHAPE = (
-    "TRK-42#12, TRK#7, TRK/promotion#3, TRK-7 or a URL with a scheme such as https://example.com"
+    "TRK-42#12, TRK#7, TRK/promotion#3, TRK~7#3, TRK-7, TRK~7 or a URL with a scheme such as "
+    "https://example.com"
 )
 
 #: Чем обрезается слишком длинный выведенный заголовок. Обрезка, а не отказ: у сводки
@@ -577,6 +622,20 @@ class WarningFacts:
     unverifiable: tuple[int, ...] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class AttachmentFacts:
+    """`attached` и `detached`: какая задача и какое обсуждение (решение `TRK#51`, п. 3).
+
+    Обе стороны названы в обоих делах — ключ задачи и адрес обсуждения коротки, — поэтому
+    строка описи читается одинаково и в деле задачи, и в деле обсуждения. Один вариант на
+    два типа, как у связей: форма одна, разметку несёт `type`.
+    """
+
+    type: Literal[EntryType.ATTACHED, EntryType.DETACHED]
+    task_key: str | None = None
+    discussion: str | None = None
+
+
 type EntryFacts = (
     NoFacts
     | StatusChangedFacts
@@ -591,6 +650,7 @@ type EntryFacts = (
     | AttributeFacts
     | MovedFacts
     | WarningFacts
+    | AttachmentFacts
 )
 """Факты записи: размеченное по `type` объединение всех форм."""
 
@@ -611,6 +671,8 @@ FACTS_BY_ENTRY_TYPE: Mapping[EntryType, type[EntryFacts]] = {
     EntryType.REMARK: NoFacts,
     EntryType.RESOLUTION: ResolutionFacts,
     EntryType.ACCEPTANCE: NoFacts,
+    # Части итога — свободный текст, заголовок выведен из «решено».
+    EntryType.CONCLUSION: NoFacts,
     EntryType.NOTE: NoFacts,
     EntryType.CREATED: NoFacts,
     EntryType.STATUS_CHANGED: StatusChangedFacts,
@@ -621,6 +683,10 @@ FACTS_BY_ENTRY_TYPE: Mapping[EntryType, type[EntryFacts]] = {
     EntryType.LINK_REMOVED: LinkFacts,
     EntryType.MOVED: MovedFacts,
     EntryType.WARNING: WarningFacts,
+    EntryType.ATTACHED: AttachmentFacts,
+    EntryType.DETACHED: AttachmentFacts,
+    # Номер итога, с которым закрыто, — в нагрузке; в описи он стоит строкой выше.
+    EntryType.CLOSED: NoFacts,
     EntryType.ATTRIBUTE_CREATED: AttributeFacts,
     EntryType.ATTRIBUTE_CHANGED: AttributeFacts,
     EntryType.ATTRIBUTE_REMOVED: AttributeFacts,
@@ -729,7 +795,36 @@ class AreaEntryRef:
         return format_area_address(self.project_key, self.area_key)
 
 
-type TrackerRef = TaskRef | EntryRef | ProjectEntryRef | AreaEntryRef
+@dataclass(frozen=True, slots=True)
+class DiscussionRef:
+    """Ссылка на обсуждение: `TRK~7`. Ключ проекта уже канонизирован."""
+
+    project_key: str
+    number: int
+
+    @property
+    def key(self) -> str:
+        """Адрес обсуждения."""
+        return format_discussion_address(self.project_key, self.number)
+
+
+@dataclass(frozen=True, slots=True)
+class DiscussionEntryRef:
+    """Ссылка на запись дела обсуждения: `TRK~7#3`. Ключ проекта уже канонизирован."""
+
+    project_key: str
+    number: int
+    no: int
+
+    @property
+    def key(self) -> str:
+        """Адрес обсуждения — та часть ссылки, что стоит перед номером записи."""
+        return format_discussion_address(self.project_key, self.number)
+
+
+type TrackerRef = (
+    TaskRef | EntryRef | ProjectEntryRef | AreaEntryRef | DiscussionRef | DiscussionEntryRef
+)
 """Ссылка внутрь трекера: её существование проверяет сценарий."""
 
 
@@ -749,6 +844,18 @@ def parse_ref(ref: str) -> TrackerRef | None:
     нужна надёжной.
     """
     head, separator, tail = ref.partition(ENTRY_REF_SEPARATOR)
+    if is_discussion_address(head):
+        # Обсуждение или его запись: голова — ключ проекта, тильда и номер. Строгая форма
+        # (`is_discussion_address`), поэтому адрес с тильдой в пути (`https://x/~user#3`)
+        # сюда не попадает и разбирается дальше как URL.
+        address = parse_discussion_address(head)
+        if not separator:
+            return DiscussionRef(project_key=address.project_key, number=address.number)
+        return DiscussionEntryRef(
+            project_key=address.project_key,
+            number=address.number,
+            no=_entry_ref_no(ref, tail),
+        )
     if separator and ADDRESS_SEPARATOR in head and tail.isascii() and tail.isdigit():
         # Запись области: голова — адрес с ключом проекта и ключом области по
         # шаблонам. Иначе это не ссылка трекера, и решает проверка на URL ниже.
@@ -807,18 +914,25 @@ class EntryDraft:
 
 @dataclass(frozen=True, slots=True)
 class EntryContext:
-    """Всё о задаче, что нужно проверкам формы записи: ключ, её проверки и повод.
+    """Всё о владельце, что нужно проверкам формы записи: ключ, проверки и повод.
 
     `closing` — не свойство задачи, а повод, по которому подшивают: та же сводка при
     закрытии обязана нести пятую часть, а посреди работы не смеет. Признак стоит здесь,
     а не в сценарии закрытия, потому что форма записи целиком живёт в домене: иначе у
     одного поля оказалось бы два разных отказа — `entry_fields_invalid` из `build_entry`
     для пустого значения и чужая ошибка сценария для отсутствующего (TRK-78).
+
+    `discussion` — владелец не задача, а обсуждение (решение `TRK#51`, п. 2): тогда
+    `task_key` держит его адрес (`TRK~7`), проверок нет, набор типов —
+    `DISCUSSION_ENTRY_TYPES`, а `blocking` у вопроса не выбирают. Ключ один на обоих
+    владельцев, потому что используется он одинаково: им названа запись в отказе и в
+    выведенном заголовке ответа (`Answer to TRK~7#3`).
     """
 
     task_key: str
     checks: Sequence[str]
     closing: bool = False
+    discussion: bool = False
 
 
 def build_entry(
@@ -841,7 +955,9 @@ def build_entry(
     подделать историю задачи.
     """
     problems = FieldProblems()
-    entry_type = _entry_type(type, problems)
+    entry_type = _entry_type(
+        type, problems, DISCUSSION_ENTRY_TYPES if context.discussion else TASK_ENTRY_TYPES
+    )
     body_text = _entry_body(body, problems)
     tracker_refs, ref_strings = _entry_refs(refs, problems)
 
@@ -1085,13 +1201,16 @@ def is_blocking_question(payload: Mapping[str, Any]) -> bool:
 # --- Внутреннее: форма полей --------------------------------------------------------
 
 
-def _entry_type(value: Any, problems: FieldProblems) -> EntryType | None:
-    """Тип записи агента. Служебные и неизвестные отвергаются с допустимым списком.
+def _entry_type(
+    value: Any, problems: FieldProblems, owned: frozenset[EntryType]
+) -> EntryType | None:
+    """Тип записи агента из набора владельца. Служебные, неизвестные и чужие владельцу
+    отвергаются с допустимым списком.
 
     `None` означает «тип не разобрался»: замечание уже записано, и остальные проверки
     идут без него, чтобы клиент получил все замечания разом, а не одно про тип.
     """
-    allowed = sorted(AGENT_ENTRY_TYPES)
+    allowed = sorted(owned)
     try:
         entry_type = EntryType(value)
     except ValueError:
@@ -1101,6 +1220,11 @@ def _entry_type(value: Any, problems: FieldProblems) -> EntryType | None:
         # Служебную запись подшивает сценарий, выводя тип из действия. Принять такой
         # тип снаружи значило бы позволить подделать историю задачи.
         problems.add("type", "service_type", allowed=allowed, got=entry_type.value)
+        return None
+    if entry_type not in owned:
+        # Тип агента, но не этого дела: итог — только в обсуждении, сводка и вердикт —
+        # только в задаче.
+        problems.add("type", "not_allowed", allowed=allowed, got=entry_type.value)
         return None
     return entry_type
 
@@ -1178,7 +1302,7 @@ def _entry_refs(
 
 
 def _format_ref(target: TrackerRef) -> str:
-    if isinstance(target, EntryRef | ProjectEntryRef | AreaEntryRef):
+    if isinstance(target, EntryRef | ProjectEntryRef | AreaEntryRef | DiscussionEntryRef):
         return format_entry_ref(target.key, target.no)
     return target.key
 
@@ -1262,11 +1386,21 @@ def _summary_part(value: Any) -> str:
 def _question_payload(
     raw: dict[str, Any], context: EntryContext, problems: FieldProblems
 ) -> dict[str, Any]:
-    """Адресаты и признак `blocking`. Существование адресатов проверяет сценарий."""
-    _reject_extra(raw, ("addressees", "blocking"), problems)
+    """Адресаты и признак `blocking`. Существование адресатов проверяет сценарий.
+
+    У вопроса обсуждения признак не выбирают (решение `TRK#51`, п. 2): любой вопрос
+    обсуждения держит привязанные задачи. Присланный `blocking` отвергается, а не
+    выбрасывается молча, и в нагрузку трекер кладёт `blocking: true` сам — так нагрузка
+    вопроса одной формы в любом деле и говорит правду: без ответа работа не идёт.
+    """
+    allowed = ("addressees",) if context.discussion else ("addressees", "blocking")
+    _reject_extra(raw, allowed, problems)
     payload: dict[str, Any] = {}
     with problems.field("addressees"):
         payload["addressees"] = _addressees(raw.get("addressees"))
+    if context.discussion:
+        payload["blocking"] = True
+        return payload
     with problems.field("blocking"):
         blocking = raw.get("blocking")
         if not isinstance(blocking, bool):
@@ -1274,6 +1408,23 @@ def _question_payload(
             # знает только спрашивающий, а угаданное значение решает за него.
             raise FieldProblem("required" if blocking is None else "not_a_boolean")
         payload["blocking"] = blocking
+    return payload
+
+
+def _conclusion_payload(
+    raw: dict[str, Any], context: EntryContext, problems: FieldProblems
+) -> dict[str, Any]:
+    """Части итога обсуждения, все непустые: «решено», «заменено», «открыто».
+
+    Правила части — те же, что у сводки (`_summary_part`): «ничего» — законное значение,
+    пустота — нет. Ссылки на записи, из которых следует строка итога, пишет автор в
+    тексте и в `refs`; трекер текст не читает, как и `unmeasured`.
+    """
+    _reject_extra(raw, CONCLUSION_PARTS, problems)
+    payload: dict[str, Any] = {}
+    for part in CONCLUSION_PARTS:
+        with problems.field(part):
+            payload[part] = _summary_part(raw.get(part))
     return payload
 
 
@@ -1500,6 +1651,7 @@ _PAYLOAD_BUILDERS: dict[EntryType, _PayloadBuilder] = {
     EntryType.REMARK: _no_payload,
     EntryType.RESOLUTION: _resolution_payload,
     EntryType.ACCEPTANCE: _no_payload,
+    EntryType.CONCLUSION: _conclusion_payload,
     EntryType.NOTE: _no_payload,
 }
 
@@ -1510,6 +1662,7 @@ _TITLE_SOURCES: dict[EntryType, str] = {
     EntryType.ANSWER: "question_no, outcome, replaced_by",
     EntryType.VERDICT: "check_no, outcome",
     EntryType.RESOLUTION: "remark_no, outcome",
+    EntryType.CONCLUSION: "decided",
 }
 
 
@@ -1522,6 +1675,9 @@ def _derive_title(entry_type: EntryType, payload: dict[str, Any], context: Entry
     """
     if entry_type is EntryType.SUMMARY:
         return summary_title(payload["done"])
+    if entry_type is EntryType.CONCLUSION:
+        # Как у сводки: опись — хронология, и итог в ней говорит о решённом.
+        return summary_title(payload["decided"])
     if entry_type is EntryType.ANSWER:
         # Исход назван в описи: снятый вопрос иначе выглядел бы там отвеченным, и
         # преемник читал бы тело записи, чтобы узнать, что ответа не было.

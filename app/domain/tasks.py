@@ -52,6 +52,7 @@ from app.domain.errors import (
     TaskDeferredError,
     TaskFieldsInvalidError,
     TaskHasOpenBlockingQuestionsError,
+    TaskHasOpenDiscussionsError,
     TaskHasUnclosedChildrenError,
     TaskMoveBatchSizeInvalidError,
     TaskMoveReasonRequiredError,
@@ -779,12 +780,17 @@ class TransitionFacts:
     #: и переход в `in_progress` запрещается: назвать блокеры при этом нечем, поэтому
     #: отказ приходит с `details.reason`, а не с пустым списком, который соврал бы.
     open_blockers: Sequence[str] | None = None
-    #: Номера открытых вопросов с `blocking` — без `answer` в деле задачи. `None` — «факт
-    #: не считали»: читается так же, как у блокеров, и по той же причине.
-    open_blocking_questions: Sequence[int] | None = None
+    #: Адреса вопросов без ответа, которые держат вход в работу: с `blocking` в деле
+    #: задачи (`TRK-42#3`) и любые в её незакрытых обсуждениях (`TRK~7#3`, решение
+    #: `TRK#51`, п. 4). `None` — «факт не считали»: читается так же, как у блокеров, и по
+    #: той же причине.
+    open_blocking_questions: Sequence[str] | None = None
     #: Ключи детей не в `done` и не в `cancelled`. `None` читается так же, как у
     #: блокеров, и по той же причине.
     unclosed_children: Sequence[str] | None = None
+    #: Адреса незакрытых обсуждений, к которым привязана задача (`TRK~7`). `None` читается
+    #: так же, как у блокеров, и по той же причине.
+    open_discussions: Sequence[str] | None = None
     #: Ход пришёл из сценария закрытия — того, который подшивает вердикты и сводку и
     #: переводит задачу одной транзакцией (`app/services/tasks.py`, `close_task`).
     #: `False` по умолчанию — незаполненный факт запрещает переход в `done`, а не
@@ -1018,7 +1024,11 @@ def check_no_open_blockers(facts: TransitionFacts) -> None:
 
 
 def check_no_open_blocking_questions(facts: TransitionFacts) -> None:
-    """`* → in_progress`: ни одного вопроса с `blocking` без ответа.
+    """`* → in_progress`: ни одного вопроса без ответа, который держит работу.
+
+    Держат вопрос с `blocking` в деле задачи и любой вопрос в незакрытом обсуждении, к
+    которому задача привязана (решение `TRK#51`, п. 4): привязать — значит сказать, что
+    задача зависит от итога. Адреса держащих вопросов уезжают в `details.questions`.
 
     Решение владельца `TRK-569#9`, развилка 3 (`CONCEPT.md`, 3.3): статуса ожидания нет,
     и дверь в работу держит сам носитель — как блокер у `check_no_open_blockers`. Иначе
@@ -1028,7 +1038,7 @@ def check_no_open_blocking_questions(facts: TransitionFacts) -> None:
     Это валидация, а не автоматика: ни вопрос, ни ответ статус не меняют. Ответ на
     последний блокирующий вопрос просто открывает этот вход; ставший ненужным вопрос
     снимают ответом с исходом `withdrawn`. Неблокирующий вопрос вход не держит — в факт
-    он не попадает вовсе (`app/services/case.py`, `open_blocking_question_nos`).
+    он не попадает вовсе (`app/services/case.py`, `open_blocking_question_refs`).
     """
     if facts.to_status is not TaskStatus.IN_PROGRESS:
         return
@@ -1128,6 +1138,33 @@ def check_children_closed_before_closing(facts: TransitionFacts) -> None:
     )
 
 
+def check_no_open_discussions_before_closing(facts: TransitionFacts) -> None:
+    """`* → done` и `* → cancelled`: ни одного незакрытого обсуждения, к которому привязана
+    задача (решение `TRK#51`, п. 4).
+
+    Задача, привязанная к обсуждению, зависит от его итога: закрыть её раньше значило бы
+    забыть обсуждение, а закрыть его потом было бы некому — закрывает агент, работающий по
+    задаче. Валидация, а не автоматика: трекер обсуждение сам не закрывает и задачу не
+    отвязывает.
+    """
+    if not is_closed(facts.to_status):
+        return
+    discussions = facts.open_discussions
+    details: dict[str, Any] = {
+        "key": facts.key,
+        "from": facts.from_status.value,
+        "to": facts.to_status.value,
+    }
+    if discussions is None:
+        # То же, что у детей: незаполненный факт запрещает ход и говорит об этом прямо.
+        raise TaskHasOpenDiscussionsError(
+            details={**details, "reason": "discussions_not_collected"}
+        )
+    if not discussions:
+        return
+    raise TaskHasOpenDiscussionsError(details={**details, "discussions": list(discussions)})
+
+
 #: Проверки перехода в порядке выполнения. Первая упавшая останавливает переход.
 #:
 #: Как подключить новую: добавить факт в `TransitionFacts` со значением по умолчанию,
@@ -1151,6 +1188,7 @@ TRANSITION_CHECKS: tuple[TransitionCheck, ...] = (
     check_no_open_blocking_questions,
     check_not_deferred,
     check_children_closed_before_closing,
+    check_no_open_discussions_before_closing,
 )
 
 

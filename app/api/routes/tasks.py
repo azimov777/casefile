@@ -30,6 +30,7 @@ from app.api.schemas.entries import (
     EntryHeadingRead,
     EntryRead,
     entry_read,
+    task_question_read,
 )
 from app.api.schemas.links import LinkTaskRead, TaskLinkRead
 from app.api.schemas.search import (
@@ -362,7 +363,9 @@ async def read_task(
             # сюда попали именно сводка, вопросы и замечания: сузить тип здесь нечем и
             # незачем.
             summary=None if package.summary is None else entry_read(package.summary, task_key=key),
-            questions=[entry_read(question, task_key=key) for question in package.questions],
+            questions=[
+                task_question_read(question, task_key=key) for question in package.questions
+            ],
             remarks=[entry_read(remark, task_key=key) for remark in package.remarks],
             transitions=list(package.transitions),
             index=[EntryHeadingRead.model_validate(heading) for heading in package.index],

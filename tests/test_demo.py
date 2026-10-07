@@ -19,6 +19,7 @@ from app.domain.participants import ParticipantKind
 from app.domain.tasks import AskedParent, TaskParent, TaskStatus
 from app.services import case as case_service
 from app.services import demo as demo_service
+from app.services import discussions as discussions_service
 from app.services import links as links_service
 from app.services import participants as participants_service
 from app.services import search as search_service
@@ -44,7 +45,7 @@ def reader(seeded: demo_service.DemoData, db_session: AsyncSession) -> Actor:
 async def _entry_types(
     session: AsyncSession, data: demo_service.DemoData, reader: Actor
 ) -> Counter[EntryType]:
-    """Сколько записей каждого типа во всех делах демо: задач и проекта."""
+    """Сколько записей каждого типа во всех делах демо: задач, проекта и обсуждений."""
     found: Counter[EntryType] = Counter()
     for task in data.tasks:
         page = await case_service.list_entries(session, task, actor=reader, limit=200)
@@ -54,6 +55,14 @@ async def _entry_types(
         session, data.project, actor=reader, limit=200
     )
     found.update(entry.type for entry in project_page.items)
+    discussions = await discussions_service.list_discussions(
+        session, actor=reader, project=data.project, limit=200
+    )
+    for row in discussions.items:
+        discussion_page = await case_service.list_discussion_entries(
+            session, row.discussion, actor=reader, limit=200
+        )
+        found.update(entry.type for entry in discussion_page.items)
     return found
 
 

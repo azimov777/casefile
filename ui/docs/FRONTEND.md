@@ -485,6 +485,43 @@ search_value_invalid`, а не пустая выдача. Поле строки 
 или `null`; приходит, когда `fields` пуст или называет `area` (набор полей списка
 его не просит: строка область не показывает).
 
+## Обсуждение: список, экран, заметка и ответ, привязка задач (TRK-669)
+
+Обсуждение — переписка человека и агентов по одному узкому вопросу (решение `TRK#51`);
+интерфейс — TRK-672. Адрес — `ПРОЕКТ~номер` (`TRK~7`), запись — `TRK~7#3`; тильда в
+сегменте пути экранирования не требует: адрес встаёт в `{discussion}` как есть.
+
+- Список: `GET /api/v1/discussions` — `DiscussionRead` (адрес, название, `status`,
+  `turn`, `open_questions`, `closed_at`). Отборы: `status` (`open`/`closed`), `turn`
+  (`human`/`agent`), `task` (ключ задачи), `project`; порядок `order` — `oldest` по
+  умолчанию, `newest` для истории. Входящая — `status=open&turn=human`, число для значка —
+  `open_discussions` в `GET /api/v1/bootstrap`; блок в карточке задачи — `?task=TRK-42`.
+  Обсуждения архивного проекта — только с названным `project`.
+- `turn` считает бэкенд: `human` — есть вопрос без ответа; `agent` — после последнего
+  итога ответ или запись человека; `null` — иначе и всегда у закрытого.
+- Экран: `GET /api/v1/discussions/{discussion}` — `DiscussionDetailRead`: привязанные
+  задачи `tasks` (`DiscussionTaskRead`: ключ, название, статус, кто и когда привязал) и
+  последний итог `conclusion` (`ConclusionEntryRead`: `decided`, `superseded`, `open`)
+  или `null`. Лента — `GET …/entries` (отборы как у дела задачи); у записи обсуждения
+  `discussion` — адрес, `task_key` — `null`.
+- Формы: `POST …/entries` с `{"type": "note", "title", "body"}` или
+  `{"type": "answer", "payload": {"question_no"}, "body"}`; вопрос и итог подшивает агент
+  через MCP, в REST их нет. Отказы — `409 discussion_closed`, `422 entry_fields_invalid`.
+- Новое обсуждение запиской: `POST /api/v1/discussions` с `project`, `title` (сам вопрос,
+  одна строка; он же заголовок первой записи), `body`, `refs`, `tasks` и
+  `Idempotency-Key`.
+- Привязать: `POST …/tasks` с `{"task"}` — `DiscussionTaskRead`; отказы
+  `409 discussion_task_exists`, `409 task_closed`, `409 discussion_closed`. Отвязать:
+  `DELETE …/tasks/{task_key}` — `204`; привязки нет — `404 discussion_task_not_found`.
+- Закрытия в REST нет: закрывает агент (MCP), у человека кнопки нет (`TRK#51`, п. 7).
+
+В задаче: `open_questions` и `open_blocking_questions` считают и вопросы её незакрытых
+обсуждений; вход в работу при таком вопросе — `409 task_has_open_blocking_questions` с
+адресами вопросов в `details.questions`; закрытие и отмена при незакрытом обсуждении —
+`409 task_has_open_discussions`. Привязка и отвязка ложатся в дело задачи записями
+`attached` и `detached` (факты `task_key`, `discussion`). Живой поток отдаёт и записи
+обсуждений — с полем `discussion`.
+
 ## Строка списка: значок «заблокирована» и родитель без второго запроса
 
 `GET /api/v1/tasks` отдаёт в каждой строке `features` — тот же объект `TaskFeaturesRead`,

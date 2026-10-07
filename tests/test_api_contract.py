@@ -46,8 +46,10 @@ from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.repositories import AccountRepository
+from app.domain.case import EntryType
 from app.domain.idempotency import IDEMPOTENCY_KEY_HEADER
 from app.services import areas as areas_service
+from app.services import discussions as discussions_service
 from app.services.auth import Actor
 
 #: Значение-затычка для развёртки без токена: до параметров дело не доходит, потому что
@@ -308,6 +310,14 @@ async def sample(
     area = await areas_service.create_area(
         db_session, actor=main_actor, address=f"{project.key}/sample", title="Область"
     )
+    discussion = await discussions_service.create_discussion(
+        db_session,
+        actor=main_actor,
+        project=project,
+        title="Обсуждение",
+        opening=EntryType.NOTE,
+        tasks=[task],
+    )
     return {
         "participant_name": owner.name,
         "account_id": str(account.id),
@@ -315,6 +325,8 @@ async def sample(
         # У только что заведённой области в деле тоже одна запись `created` — номер 1
         # годится и записи дела области (`entry_no` ниже).
         "area_key": area.key,
+        # Обсуждение адресуется целиком: `TRK~1` (TRK-669).
+        "discussion": discussion.address,
         "task_key": task.key,
         # У только что заведённой задачи в деле одна запись — `created` с номером 1.
         "entry_no": "1",

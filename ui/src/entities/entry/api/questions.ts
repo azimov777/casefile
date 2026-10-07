@@ -8,8 +8,11 @@ import { apiClient, unwrapPage, type Page, type components, type operations } fr
  */
 export type Question = components['schemas']['AnsweredQuestionRead'];
 
-/** Ответ под вопросом в выдаче: та же запись `answer`, что и в деле задачи. */
-export type QuestionAnswer = components['schemas']['AnswerEntryRead'];
+/**
+ * Ответ под вопросом в выдаче: та же запись `answer`, что и в деле задачи, суженная до
+ * владельца-задачи (TRK-669: ответ бывает и в деле обсуждения, но в эту выдачу не попадает).
+ */
+export type QuestionAnswer = components['schemas']['QuestionAnswerRead'];
 
 export type QuestionListParams = NonNullable<operations['list_questions']['parameters']['query']>;
 

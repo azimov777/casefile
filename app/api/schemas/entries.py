@@ -67,14 +67,16 @@ from app.services.decisions import Standing
 
 _REFS_DESCRIPTION = (
     "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries "
-    "`KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string "
-    "is refused; entry and task references must exist, URLs are not checked"
+    "`KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs "
+    "with a scheme (`https://…`). Any other string is refused; entry, task and discussion "
+    "references must exist, URLs are not checked"
 )
 _TITLE_DESCRIPTION = "One line; this is what the case index shows"
 _BODY_DESCRIPTION = "Markdown; empty for service entries, whose content is the payload"
 _NO_DESCRIPTION = (
-    "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task "
-    "entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry"
+    "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a "
+    "task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` "
+    "for a discussion entry"
 )
 _ACTION_ID_DESCRIPTION = (
     "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this "
@@ -104,8 +106,10 @@ class NoFactsRead(_EntryFactsBase):
         EntryType.ARTIFACT,
         EntryType.REMARK,
         EntryType.ACCEPTANCE,
+        EntryType.CONCLUSION,
         EntryType.NOTE,
         EntryType.CREATED,
+        EntryType.CLOSED,
         EntryType.ARCHIVED,
         EntryType.RESTORED,
     ]
@@ -276,6 +280,16 @@ class WarningFactsRead(_EntryFactsBase):
     )
 
 
+class AttachmentFactsRead(_EntryFactsBase):
+    """Привязка задачи к обсуждению или её снятие: обе стороны."""
+
+    type: Literal[EntryType.ATTACHED, EntryType.DETACHED]
+    task_key: str | None = Field(default=None, examples=["TRK-42"], description="The task")
+    discussion: str | None = Field(
+        default=None, examples=["TRK~7"], description="Address of the discussion"
+    )
+
+
 # Состав полей каждой формы объявлен схемой, а не угадывается по тому, какие ключи
 # пришли непустыми. Разметка повторяет `type` строки описи, и это осознанная плата за
 # то, чтобы `facts` читался сам по себе: клиент принимает его отдельным значением — и из
@@ -295,7 +309,8 @@ type EntryFactsRead = Annotated[
     | ResolutionFactsRead
     | AttributeFactsRead
     | MovedFactsRead
-    | WarningFactsRead,
+    | WarningFactsRead
+    | AttachmentFactsRead,
     Field(discriminator="type"),
 ]
 """Факты записи: размеченное по `type` объединение всех форм."""
@@ -457,7 +472,11 @@ class QuestionPayload(BaseModel):
     )
     blocking: bool = Field(
         examples=[True],
-        description="Whether work can continue without an answer. Required, no default",
+        description=(
+            "Whether work can continue without an answer. Required, no default. Always "
+            "`true` on a question of a discussion: any such question holds the tasks "
+            "attached to it"
+        ),
     )
 
 
@@ -468,9 +487,41 @@ _ANSWER_OUTCOME_DESCRIPTION = (
     "question has no answer yet: an answered question stays with its answer"
 )
 _REPLACED_BY_DESCRIPTION = (
-    "Number of a later `question` entry of the same task that replaces this one; required "
+    "Number of a later `question` entry of the same case that replaces this one; required "
     "with `" + OUTCOME_WITH_REPLACEMENT.value + "` and not accepted with any other outcome"
 )
+
+
+class ConclusionPayload(BaseModel):
+    """Итог обсуждения: что решено, что заменено, что открыто (решение `TRK#51`, п. 2).
+
+    Все три части непустые; «ничего» — законное значение части. Последний итог главнее
+    предыдущих, как сводка у задачи.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    decided: str = Field(
+        min_length=1,
+        max_length=MAX_SUMMARY_PART_LENGTH,
+        examples=["Обсуждение — своя сущность проекта (TRK~7#4)"],
+        description=(
+            "What is decided, each line with the entry it follows from. Its first line "
+            "becomes the entry title"
+        ),
+    )
+    superseded: str = Field(
+        min_length=1,
+        max_length=MAX_SUMMARY_PART_LENGTH,
+        examples=["ничего"],
+        description="What an earlier answer decided and a later one replaced; `nothing` is valid",
+    )
+    open: str = Field(
+        min_length=1,
+        max_length=MAX_SUMMARY_PART_LENGTH,
+        examples=["ничего"],
+        description="What is still open; `nothing` is valid",
+    )
 
 
 class AnswerFilingPayload(BaseModel):
@@ -488,7 +539,7 @@ class AnswerFilingPayload(BaseModel):
     question_no: int = Field(
         ge=1,
         examples=[7],
-        description="Number of a `question` entry of the same task",
+        description="Number of a `question` entry of the same case: the task or the discussion",
     )
     outcome: AnswerOutcome | None = Field(
         default=None,
@@ -515,7 +566,7 @@ class AnswerPayload(BaseModel):
     question_no: int = Field(
         ge=1,
         examples=[7],
-        description="Number of a `question` entry of the same task",
+        description="Number of a `question` entry of the same case: the task or the discussion",
     )
     outcome: AnswerOutcome = Field(
         examples=[AnswerOutcome.ANSWERED],
@@ -666,6 +717,25 @@ class LinkPayload(BaseModel):
     other: str = Field(examples=["TRK-7"], description="Key of the task on the other side")
 
 
+class AttachmentPayload(BaseModel):
+    """Задача привязана к обсуждению или отвязана. Подшивается в дело обеих сторон."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task: str = Field(examples=["TRK-42"], description="Key of the task")
+    discussion: str = Field(examples=["TRK~7"], description="Address of the discussion")
+
+
+class ClosedPayload(BaseModel):
+    """Обсуждение закрыто: номер итога, с которым закрыто, — запись строкой выше."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    conclusion_no: int = Field(
+        ge=1, examples=[9], description="Number of the conclusion the discussion closed with"
+    )
+
+
 class AttributeCreatedPayload(BaseModel):
     """Атрибут проекта заведён: имя, значение и причина, если её назвали."""
 
@@ -780,6 +850,13 @@ class _EntryReadBase(BaseModel):
         examples=[None],
         description="Always `null`: entries of this type belong to a task, never to an area",
     )
+    # Четвёртое поле владельца (решение `TRK#51`): с умолчанием, как `area`, — ответы
+    # подшивки, сохранённые ключами идемпотентности до него, поднимаются этой моделью.
+    discussion: None = Field(
+        default=None,
+        examples=[None],
+        description="Always `null`: entries of this type never belong to a discussion",
+    )
     author: AuthorRead
     title: str = Field(examples=["Status changed: backlog -> open"], description=_TITLE_DESCRIPTION)
     body: str = Field(examples=[""], description=_BODY_DESCRIPTION)
@@ -810,13 +887,18 @@ _AREA_OWNER_DESCRIPTION = (
     "Address of the owning area for an entry of an area's case "
     "(`TRK/promotion#3`); `null` for a task or project entry"
 )
+_DISCUSSION_OWNER_DESCRIPTION = (
+    "Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); "
+    "`null` otherwise"
+)
 
 
 class _ProjectOwnableEntryRead(_EntryReadBase):
-    """Общие поля записи, которая бывает и в деле задачи, и в деле проекта или области.
+    """Общие поля записи, которая бывает и в деле задачи, и в деле проекта или области, а
+    заметка и `created` — ещё и в деле обсуждения.
 
-    Владелец записи — задача, проект или область, и непуст ровно один ключ, как колонки
-    владельца в базе (`ck_entries_one_owner`). Все три поля обязательны в схеме, а не
+    Владелец записи — задача, проект, область или обсуждение, и непуст ровно один ключ,
+    как колонки владельца в базе (`ck_entries_one_owner`). Все три поля обязательны в схеме, а не
     пропускаются при `null`: форма записи одна в любом ответе (`docs/notes/api.md`).
     Сужение только у этих вариантов: типы, которых в деле проекта не бывает (сводка, вопрос,
     вердикт, переход и прочие), всегда принадлежат задаче — их `task_key` остаётся строкой,
@@ -827,19 +909,52 @@ class _ProjectOwnableEntryRead(_EntryReadBase):
     task_key: str | None = Field(  # type: ignore[assignment]
         examples=["TRK-42"],
         description=(
-            "Key of the owning task; `null` for an entry of a project's or an area's case"
+            "Key of the owning task; `null` for an entry of a project's, an area's or a "
+            "discussion's case"
         ),
     )
     project_key: str | None = Field(  # type: ignore[assignment]
         examples=[None],
         description=(
             "Key of the owning project for an entry of a project's case (`TRK#7`); "
-            "`null` for a task entry, whose project is part of `task_key`, and for a "
-            "area entry"
+            "`null` for a task entry, whose project is part of `task_key`, and for an "
+            "area or a discussion entry"
         ),
     )
     area: str | None = Field(  # type: ignore[assignment]
         default=None, examples=[None], description=_AREA_OWNER_DESCRIPTION
+    )
+    discussion: str | None = Field(  # type: ignore[assignment]
+        default=None, examples=[None], description=_DISCUSSION_OWNER_DESCRIPTION
+    )
+
+
+class _TaskOrDiscussionEntryRead(_EntryReadBase):
+    """Общие поля записи, которая бывает в деле задачи и в деле обсуждения: вопрос, ответ,
+    привязка (решение `TRK#51`, пункты 2 и 3).
+
+    Непуст ровно один из `task_key` и `discussion`, как колонки владельца в базе.
+    """
+
+    task_key: str | None = Field(  # type: ignore[assignment]
+        examples=["TRK-42"],
+        description="Key of the owning task; `null` for an entry of a discussion's case",
+    )
+    discussion: str | None = Field(  # type: ignore[assignment]
+        default=None, examples=[None], description=_DISCUSSION_OWNER_DESCRIPTION
+    )
+
+
+class _DiscussionEntryRead(_EntryReadBase):
+    """Общие поля записи, которая бывает только в деле обсуждения: итог и закрытие."""
+
+    task_key: None = Field(  # type: ignore[assignment]
+        examples=[None],
+        description="Always `null`: entries of this type belong to a discussion",
+    )
+    discussion: str = Field(  # type: ignore[assignment]
+        examples=["TRK~7"],
+        description="Address of the owning discussion; the entry address is `TRK~7#3`",
     )
 
 
@@ -937,14 +1052,14 @@ class SummaryEntryRead(_EntryReadBase):
     payload: SummaryPayload
 
 
-class QuestionEntryRead(_EntryReadBase):
+class QuestionEntryRead(_TaskOrDiscussionEntryRead):
     """Вопрос участникам. Открыт, пока в деле нет `answer` с его номером."""
 
     type: Literal[EntryType.QUESTION]
     payload: QuestionPayload
 
 
-class AnswerEntryRead(_EntryReadBase):
+class AnswerEntryRead(_TaskOrDiscussionEntryRead):
     """Ответ на вопрос, его снятие или замена. Ответить может кто угодно; первый ответ
     закрывает вопрос."""
 
@@ -952,16 +1067,76 @@ class AnswerEntryRead(_EntryReadBase):
     payload: AnswerPayload
 
 
-class AnsweredQuestionRead(QuestionEntryRead):
+class TaskQuestionRead(QuestionEntryRead):
+    """Вопрос дела задачи: владелец — всегда задача.
+
+    Сужение `QuestionEntryRead` там, где вопрос приходит из дела задачи, — в пакете
+    преемника и в выдаче вопросов поперёк задач: клиенту незачем проверять на `null`
+    ключ, который `null` быть не может.
+    """
+
+    task_key: str = Field(examples=["TRK-42"])  # type: ignore[assignment]
+    discussion: None = Field(  # type: ignore[assignment]
+        default=None,
+        examples=[None],
+        description="Always `null`: a question of a task's case belongs to the task",
+    )
+
+
+def task_question_read(entry: Entry, *, task_key: str) -> TaskQuestionRead:
+    """Вопрос дела задачи в суженной форме — тем же сборщиком, что любая запись."""
+    return TaskQuestionRead.model_validate(
+        entry_read(entry, task_key=task_key).model_dump(by_alias=True)
+    )
+
+
+class QuestionAnswerRead(AnswerEntryRead):
+    """Ответ на вопрос задачи в выдаче поперёк задач: владелец — всегда задача.
+
+    Сужение `AnswerEntryRead` для `GET /api/v1/questions`: выдача идёт по делам задач, и
+    клиенту незачем проверять на `null` ключ, который `null` быть не может.
+    """
+
+    task_key: str = Field(examples=["TRK-42"])  # type: ignore[assignment]
+    discussion: None = Field(  # type: ignore[assignment]
+        default=None,
+        examples=[None],
+        description="Always `null`: the questions listing reads the cases of tasks",
+    )
+
+
+class ConclusionEntryRead(_DiscussionEntryRead):
+    """Итог обсуждения: решено, заменено, открыто. Последний главнее предыдущих."""
+
+    type: Literal[EntryType.CONCLUSION]
+    payload: ConclusionPayload
+
+
+class AttachmentEntryRead(_TaskOrDiscussionEntryRead):
+    """Служебная запись: задача привязана к обсуждению или отвязана — в деле обеих сторон."""
+
+    type: Literal[EntryType.ATTACHED, EntryType.DETACHED]
+    payload: AttachmentPayload
+
+
+class DiscussionClosedEntryRead(_DiscussionEntryRead):
+    """Служебная запись: обсуждение закрыто итогом, номер которого в нагрузке."""
+
+    type: Literal[EntryType.CLOSED]
+    payload: ClosedPayload
+
+
+class AnsweredQuestionRead(TaskQuestionRead):
     """Вопрос в выдаче поперёк задач (`GET /api/v1/questions`) вместе с ответами.
 
     Отдельная модель, а не поле у `QuestionEntryRead`: в деле задачи ответ — своя
     запись рядом с вопросом, и вложить его туда значило бы отдать одну запись дважды.
     Здесь дела рядом нет, и без вложения клиенту пришлось бы собирать ответы запросом
-    на каждую задачу.
+    на каждую задачу. Выдача идёт по делам задач, поэтому `task_key` — строка, а
+    `discussion` — `null` (`TaskQuestionRead`).
     """
 
-    answers: list[AnswerEntryRead] = Field(
+    answers: list[QuestionAnswerRead] = Field(
         default_factory=list,
         description=(
             "`answer` entries of the same task that point at this question, by entry "
@@ -1104,7 +1279,10 @@ type EntryRead = Annotated[
     | AttributeCreatedEntryRead
     | AttributeChangedEntryRead
     | AttributeRemovedEntryRead
-    | ProjectArchiveEntryRead,
+    | ProjectArchiveEntryRead
+    | ConclusionEntryRead
+    | AttachmentEntryRead
+    | DiscussionClosedEntryRead,
     Field(discriminator="type"),
 ]
 """Запись дела целиком: размеченное по `type` объединение всех форм нагрузки."""
@@ -1151,6 +1329,10 @@ _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
     EntryType.ATTRIBUTE_REMOVED: AttributeRemovedEntryRead,
     EntryType.ARCHIVED: ProjectArchiveEntryRead,
     EntryType.RESTORED: ProjectArchiveEntryRead,
+    EntryType.CONCLUSION: ConclusionEntryRead,
+    EntryType.ATTACHED: AttachmentEntryRead,
+    EntryType.DETACHED: AttachmentEntryRead,
+    EntryType.CLOSED: DiscussionClosedEntryRead,
 }
 
 
@@ -1160,14 +1342,16 @@ def entry_read(
     task_key: str | None = None,
     project_key: str | None = None,
     area: str | None = None,
+    discussion: str | None = None,
     standing: Standing | None = None,
 ) -> EntryRead:
     """Собирает вариант ответа по типу записи.
 
-    Ключ владельца приходит от вызывающего: у записи связи с задачей, проектом и
-    областью нет, только `task_id`, `project_id` или `area_id`. Передаётся ровно
-    один — ключ задачи для записи задачи, ключ проекта для записи дела проекта, адрес
-    области для записи дела области.
+    Ключ владельца приходит от вызывающего: у записи связи с задачей, проектом,
+    областью и обсуждением нет, только `task_id`, `project_id`, `area_id` или
+    `discussion_id`. Передаётся ровно один — ключ задачи для записи задачи, ключ проекта
+    для записи дела проекта, адрес области для записи дела области, адрес обсуждения для
+    записи его дела.
 
     `standing` — статус решения или заметки, посчитанный чтением дела проекта
     (`app/services/decisions.py`); без него `status` и `superseded_by` — `null`.
@@ -1176,7 +1360,7 @@ def entry_read(
     объединения, а не рабочее состояние: `KeyError` здесь честнее молчаливого
     возврата записи со свободным `payload`, который фронт не разберёт.
     """
-    owners = [key for key in (task_key, project_key, area) if key is not None]
+    owners = [key for key in (task_key, project_key, area, discussion) if key is not None]
     assert len(owners) == 1, "entry owner is exactly one key"
     return _READ_MODELS.get(entry.type, PlainEntryRead)(
         id=entry.id,
@@ -1185,6 +1369,7 @@ def entry_read(
         task_key=task_key,
         project_key=project_key,
         area=area,
+        discussion=discussion,
         type=entry.type,
         author=AuthorRead.model_validate(entry.author),
         title=entry.title,
@@ -1362,6 +1547,26 @@ class AreaEntryCreate(_TitledEntryCreate):
         EntryType.FINDING,
         EntryType.ARTIFACT,
     ]
+
+
+class DiscussionNoteCreate(_TitledEntryCreate):
+    """Заметка в деле обсуждения: человек пишет её сам, без вопроса (решение `TRK#51`, п. 2).
+
+    Свободная запись человека задаёт работу привязанных задач, как ответ (`TRK#51`, п. 5).
+    """
+
+    type: Literal[EntryType.NOTE]
+
+
+type DiscussionEntryCreate = Annotated[
+    DiscussionNoteCreate | AnswerEntryCreate,
+    Field(discriminator="type"),
+]
+"""Запись, которую интерфейс человека подшивает в дело обсуждения: заметка или ответ.
+
+Вопрос и итог в обсуждение подшивает агент — через MCP (TRK-671); ручки REST под них нет
+по решению проекта `TRK#53`: REST — это API интерфейса человека.
+"""
 
 
 type ClosingEntryCreate = Annotated[

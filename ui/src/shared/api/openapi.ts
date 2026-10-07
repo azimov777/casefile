@@ -1270,6 +1270,144 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/discussions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List discussions
+         * @description Обсуждения с отбором: входящая — `status=open&turn=human`, история — без отбора с
+         *     `order=newest`, обсуждения задачи — `task`.
+         *
+         *     У каждого — чей ход и число открытых вопросов, посчитанные при чтении. Неизвестный
+         *     проект — `404 project_not_found`, неизвестная задача — `404 task_not_found`: пустая
+         *     выдача на такой отбор читалась бы как ответ.
+         */
+        get: operations["list_discussions"];
+        put?: never;
+        /**
+         * Create a discussion
+         * @description Заводит обсуждение запиской и привязывает задачи из `tasks` тем же действием.
+         *
+         *     Название — сам узкий вопрос; оно же заголовок первой записи дела, заметки с телом
+         *     `body`. Номер выдаётся внутри проекта, адрес — `TRK~7`. В деле обсуждения ложатся
+         *     `created`, заметка и `attached` на каждую задачу, в деле задачи — свой `attached`.
+         *     Отказы: архивный проект — `409 project_archived`, закрытая задача — `409 task_closed`,
+         *     название не одной строкой — `422 entry_fields_invalid`. Повтор с тем же
+         *     `Idempotency-Key` отвечает первым обсуждением, а не заводит второе.
+         */
+        post: operations["create_discussion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discussions/{discussion}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a discussion
+         * @description Экран обсуждения: карточка, чей ход, открытые вопросы, привязанные задачи и
+         *     последний итог. Лента записей — `/discussions/{discussion}/entries`.
+         *
+         *     Адрес не по форме — `422 invalid_discussion_address`, неизвестный проект —
+         *     `404 project_not_found`, номер — `404 discussion_not_found`.
+         */
+        get: operations["read_discussion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discussions/{discussion}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read discussion case entries
+         * @description Записи дела обсуждения с телами и нагрузкой, в порядке `no` — те же фильтры, что у
+         *     дела задачи. Ссылка на запись — `TRK~7#3`.
+         */
+        get: operations["list_discussion_entries"];
+        put?: never;
+        /**
+         * Append a discussion case entry
+         * @description Подшивает в дело обсуждения заметку или ответ — формы «Заметка» и «Ответить на #N».
+         *
+         *     Ответ ссылается на вопрос этого же обсуждения (`question_no`); первый ответ закрывает
+         *     вопрос, и задачи, которые он держал, снова можно брать в работу. Закрытое обсуждение —
+         *     `409 discussion_closed`; замечания к форме и ссылкам — разом в
+         *     `422 entry_fields_invalid`. Повтор с тем же `Idempotency-Key` отвечает первой записью.
+         */
+        post: operations["create_discussion_entry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discussions/{discussion}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach a task to a discussion
+         * @description Привязывает задачу: она зависит от итога — не берётся в работу, пока в обсуждении
+         *     есть вопрос без ответа, и не закрывается, пока оно открыто.
+         *
+         *     `attached` ложится в дело обсуждения и в дело задачи. Отказы: закрытое обсуждение —
+         *     `409 discussion_closed`, закрытая задача — `409 task_closed`, уже привязана —
+         *     `409 discussion_task_exists`. Повтор с тем же `Idempotency-Key` отвечает первой
+         *     привязкой.
+         */
+        post: operations["attach_discussion_task"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discussions/{discussion}/tasks/{task_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Detach a task from a discussion
+         * @description Отвязывает задачу: она больше не ждёт итога этого обсуждения. `detached` ложится в
+         *     дела обеих сторон. Привязки нет — `404 discussion_task_not_found`; закрытое
+         *     обсуждение — `409 discussion_closed`: у закрытого привязки не меняются.
+         */
+        delete: operations["detach_discussion_task"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/questions": {
         parameters: {
             query?: never;
@@ -1471,7 +1609,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -1505,7 +1643,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -1526,6 +1664,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1541,7 +1685,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1762,7 +1906,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -1792,15 +1936,16 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
+             * @description Key of the owning task; `null` for an entry of a discussion's case
              * @example TRK-42
              */
-            task_key: string;
+            task_key: string | null;
             /**
              * Project Key
              * @description Always `null`: entries of this type belong to a task, never to a project
@@ -1813,6 +1958,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise
+             * @example null
+             */
+            discussion?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1828,7 +1979,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1906,7 +2057,7 @@ export interface components {
         AnswerFilingPayload: {
             /**
              * Question No
-             * @description Number of a `question` entry of the same task
+             * @description Number of a `question` entry of the same case: the task or the discussion
              * @example 7
              */
             question_no: number;
@@ -1917,7 +2068,7 @@ export interface components {
             outcome?: components["schemas"]["AnswerOutcome"] | null;
             /**
              * Replaced By
-             * @description Number of a later `question` entry of the same task that replaces this one; required with `replaced` and not accepted with any other outcome
+             * @description Number of a later `question` entry of the same case that replaces this one; required with `replaced` and not accepted with any other outcome
              * @example null
              */
             replaced_by?: number | null;
@@ -1948,7 +2099,7 @@ export interface components {
         AnswerPayload: {
             /**
              * Question No
-             * @description Number of a `question` entry of the same task
+             * @description Number of a `question` entry of the same case: the task or the discussion
              * @example 7
              */
             question_no: number;
@@ -1959,7 +2110,7 @@ export interface components {
             outcome: components["schemas"]["AnswerOutcome"];
             /**
              * Replaced By
-             * @description Number of a later `question` entry of the same task that replaces this one; required with `replaced` and not accepted with any other outcome
+             * @description Number of a later `question` entry of the same case that replaces this one; required with `replaced` and not accepted with any other outcome
              * @example null
              */
             replaced_by: number | null;
@@ -1971,7 +2122,8 @@ export interface components {
          *     Отдельная модель, а не поле у `QuestionEntryRead`: в деле задачи ответ — своя
          *     запись рядом с вопросом, и вложить его туда значило бы отдать одну запись дважды.
          *     Здесь дела рядом нет, и без вложения клиенту пришлось бы собирать ответы запросом
-         *     на каждую задачу.
+         *     на каждую задачу. Выдача идёт по делам задач, поэтому `task_key` — строка, а
+         *     `discussion` — `null` (`TaskQuestionRead`).
          */
         AnsweredQuestionRead: {
             /**
@@ -1987,7 +2139,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -2008,6 +2160,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: a question of a task's case belongs to the task
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2023,7 +2181,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2063,7 +2221,7 @@ export interface components {
              * Answers
              * @description `answer` entries of the same task that point at this question, by entry number. The first one closed the question, the rest add to it; its `payload.outcome` says whether it was answered, withdrawn or replaced. Empty means the question is still open
              */
-            answers?: components["schemas"]["AnswerEntryRead"][];
+            answers?: components["schemas"]["QuestionAnswerRead"][];
         };
         /**
          * ArchiveFormat
@@ -2265,7 +2423,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -2391,7 +2549,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -2412,6 +2570,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2427,7 +2591,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2502,6 +2666,145 @@ export interface components {
             after?: string | null;
         };
         /**
+         * AttachmentEntryRead
+         * @description Служебная запись: задача привязана к обсуждению или отвязана — в деле обеих сторон.
+         */
+        AttachmentEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @description Key of the owning task; `null` for an entry of a discussion's case
+             * @example TRK-42
+             */
+            task_key: string | null;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
+            /**
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
+             * @example null
+             */
+            area?: null;
+            /**
+             * Discussion
+             * @description Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise
+             * @example null
+             */
+            discussion?: string | null;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "attached" | "detached";
+            payload: components["schemas"]["AttachmentPayload"];
+        };
+        /**
+         * AttachmentFactsRead
+         * @description Привязка задачи к обсуждению или её снятие: обе стороны.
+         */
+        AttachmentFactsRead: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "attached" | "detached";
+            /**
+             * Task Key
+             * @description The task
+             * @example TRK-42
+             */
+            task_key?: string | null;
+            /**
+             * Discussion
+             * @description Address of the discussion
+             * @example TRK~7
+             */
+            discussion?: string | null;
+        };
+        /**
+         * AttachmentPayload
+         * @description Задача привязана к обсуждению или отвязана. Подшивается в дело обеих сторон.
+         */
+        AttachmentPayload: {
+            /**
+             * Task
+             * @description Key of the task
+             * @example TRK-42
+             */
+            task: string;
+            /**
+             * Discussion
+             * @description Address of the discussion
+             * @example TRK~7
+             */
+            discussion: string;
+        };
+        /**
          * AttributeChangedEntryRead
          * @description Служебная запись: значение атрибута проекта изменено.
          */
@@ -2519,7 +2822,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -2541,6 +2844,12 @@ export interface components {
              * @example null
              */
             area?: string | null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2556,7 +2865,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2639,7 +2948,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -2661,6 +2970,12 @@ export interface components {
              * @example null
              */
             area?: string | null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2676,7 +2991,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2812,7 +3127,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -2834,6 +3149,12 @@ export interface components {
              * @example null
              */
             area?: string | null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2849,7 +3170,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2984,6 +3305,12 @@ export interface components {
              * @example 1
              */
             open_warnings: number;
+            /**
+             * Open Discussions
+             * @description Discussions that are not closed and wait for a human (`turn: human`: a question with no answer), in projects that are not archived — the inbox by discussions. A turn has no addressee, so the number is the same for every token
+             * @example 2
+             */
+            open_discussions: number;
         };
         /**
          * CheckUpdate
@@ -3034,6 +3361,18 @@ export interface components {
             status: components["schemas"]["DecisionStatus"];
             /** @description The later decision that named this one in `supersedes`, with its own status; `null` while this one is in force */
             superseded_by: components["schemas"]["DecisionRefRead"] | null;
+        };
+        /**
+         * ClosedPayload
+         * @description Обсуждение закрыто: номер итога, с которым закрыто, — запись строкой выше.
+         */
+        ClosedPayload: {
+            /**
+             * Conclusion No
+             * @description Number of the conclusion the discussion closed with
+             * @example 9
+             */
+            conclusion_no: number;
         };
         ClosingEntryCreate: components["schemas"]["PlainEntryCreate"] | components["schemas"]["RemarkEntryCreate"];
         /**
@@ -3098,6 +3437,12 @@ export interface components {
             data: components["schemas"]["AreaRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
+        /** CollectionResponse[DiscussionRead] */
+        CollectionResponse_DiscussionRead_: {
+            /** Data */
+            data: components["schemas"]["DiscussionRead"][];
+            meta?: components["schemas"]["PageMeta"];
+        };
         /** CollectionResponse[EntryRead] */
         CollectionResponse_EntryRead_: {
             /** Data */
@@ -3133,6 +3478,131 @@ export interface components {
             /** Data */
             data: components["schemas"]["TokenRead"][];
             meta?: components["schemas"]["PageMeta"];
+        };
+        /**
+         * ConclusionEntryRead
+         * @description Итог обсуждения: решено, заменено, открыто. Последний главнее предыдущих.
+         */
+        ConclusionEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @description Always `null`: entries of this type belong to a discussion
+             * @example null
+             */
+            task_key: null;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
+            /**
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
+             * @example null
+             */
+            area?: null;
+            /**
+             * Discussion
+             * @description Address of the owning discussion; the entry address is `TRK~7#3`
+             * @example TRK~7
+             */
+            discussion: string;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "conclusion";
+            payload: components["schemas"]["ConclusionPayload"];
+        };
+        /**
+         * ConclusionPayload
+         * @description Итог обсуждения: что решено, что заменено, что открыто (решение `TRK#51`, п. 2).
+         *
+         *     Все три части непустые; «ничего» — законное значение части. Последний итог главнее
+         *     предыдущих, как сводка у задачи.
+         */
+        ConclusionPayload: {
+            /**
+             * Decided
+             * @description What is decided, each line with the entry it follows from. Its first line becomes the entry title
+             * @example Обсуждение — своя сущность проекта (TRK~7#4)
+             */
+            decided: string;
+            /**
+             * Superseded
+             * @description What an earlier answer decided and a later one replaced; `nothing` is valid
+             * @example ничего
+             */
+            superseded: string;
+            /**
+             * Open
+             * @description What is still open; `nothing` is valid
+             * @example ничего
+             */
+            open: string;
         };
         /**
          * CurrentTokenRead
@@ -3184,6 +3654,14 @@ export interface components {
         /** DataResponse[BootstrapRead] */
         DataResponse_BootstrapRead_: {
             data: components["schemas"]["BootstrapRead"];
+        };
+        /** DataResponse[DiscussionDetailRead] */
+        DataResponse_DiscussionDetailRead_: {
+            data: components["schemas"]["DiscussionDetailRead"];
+        };
+        /** DataResponse[DiscussionTaskRead] */
+        DataResponse_DiscussionTaskRead_: {
+            data: components["schemas"]["DiscussionTaskRead"];
         };
         /** DataResponse[EntryRead] */
         DataResponse_EntryRead_: {
@@ -3259,19 +3737,19 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Key of the owning task; `null` for an entry of a project's or an area's case
+             * @description Key of the owning task; `null` for an entry of a project's, an area's or a discussion's case
              * @example TRK-42
              */
             task_key: string | null;
             /**
              * Project Key
-             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for an area or a discussion entry
              * @example null
              */
             project_key: string | null;
@@ -3281,6 +3759,12 @@ export interface components {
              * @example null
              */
             area?: string | null;
+            /**
+             * Discussion
+             * @description Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise
+             * @example null
+             */
+            discussion?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3296,7 +3780,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3397,11 +3881,388 @@ export interface components {
             after: string[];
         };
         /**
+         * DiscussionClosedEntryRead
+         * @description Служебная запись: обсуждение закрыто итогом, номер которого в нагрузке.
+         */
+        DiscussionClosedEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @description Always `null`: entries of this type belong to a discussion
+             * @example null
+             */
+            task_key: null;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
+            /**
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
+             * @example null
+             */
+            area?: null;
+            /**
+             * Discussion
+             * @description Address of the owning discussion; the entry address is `TRK~7#3`
+             * @example TRK~7
+             */
+            discussion: string;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "closed";
+            payload: components["schemas"]["ClosedPayload"];
+        };
+        /**
+         * DiscussionCreate
+         * @description Новое обсуждение запиской — «Новое обсуждение» интерфейса (решение `TRK#51`, п. 8).
+         *
+         *     Название — сам узкий вопрос одной строкой; оно же заголовок первой записи дела,
+         *     заметки с телом `body`. Задачи из `tasks` привязываются тем же действием. Завести
+         *     обсуждение вопросом может агент — через MCP (TRK-671).
+         */
+        DiscussionCreate: {
+            /**
+             * Project
+             * @description Project key; matching ignores case
+             * @example TRK
+             */
+            project: string;
+            /**
+             * Title
+             * @description The narrow question, one line. A line break or a blank title answers `422 entry_fields_invalid` (field `title`)
+             * @example Обсуждение — своя сущность или ярлык над записями задач?
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown body of the first entry, a note: the context of the question
+             * @default
+             * @example Контекст: вопросы растекаются по задачам…
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References of the first entry, as in any case entry
+             * @example [
+             *       "TRK-667#8"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Tasks
+             * @description Keys of the tasks that depend on the outcome, attached by the same action. A closed task answers `409 task_closed`
+             * @example [
+             *       "TRK-42"
+             *     ]
+             */
+            tasks?: string[];
+        };
+        /**
+         * DiscussionDetailRead
+         * @description Одно обсуждение для его экрана: привязанные задачи и последний итог сверху.
+         */
+        DiscussionDetailRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Key
+             * @description Key of the project; never changes
+             * @example TRK
+             */
+            project_key: string;
+            /**
+             * Number
+             * @description Number inside the project, from 1
+             * @example 7
+             */
+            number: number;
+            /**
+             * Address
+             * @description Address of the discussion: the project key and its number, `TRK~7`. References to its case entries are `TRK~7#3`
+             * @example TRK~7
+             */
+            address: string;
+            /**
+             * Title
+             * @description The narrow question itself, one line; the title of the first entry
+             * @example Обсуждение — своя сущность или ярлык над записями задач?
+             */
+            title: string;
+            /**
+             * @description `open` or `closed`. A closed discussion never reopens and is frozen: any entry, attaching or detaching answers `409 discussion_closed`
+             * @example open
+             */
+            status: components["schemas"]["DiscussionStatus"];
+            /**
+             * @description Whose move it is, computed on read: `human` — a question has no answer yet; `agent` — no open questions, but an answer or a person's entry came after the latest conclusion; `null` — neither, and always on a closed discussion
+             * @example human
+             */
+            turn: components["schemas"]["DiscussionTurn"] | null;
+            /**
+             * Open Questions
+             * @description Questions of the discussion with no answer yet
+             * @example 1
+             */
+            open_questions: number;
+            created_by: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Closed At
+             * @description When the discussion was closed; `null` while open
+             * @example null
+             */
+            closed_at: string | null;
+            /**
+             * Tasks
+             * @description Tasks attached to the discussion, in the order they were attached. Attaching says a task depends on the outcome: it cannot go into work while a question here has no answer, nor be closed or cancelled while the discussion is open
+             */
+            tasks: components["schemas"]["DiscussionTaskRead"][];
+            /** @description The latest conclusion — what is decided, superseded and still open; it outranks the earlier ones. `null` until the first conclusion is filed */
+            conclusion: components["schemas"]["ConclusionEntryRead"] | null;
+        };
+        /**
+         * DiscussionNoteCreate
+         * @description Заметка в деле обсуждения: человек пишет её сам, без вопроса (решение `TRK#51`, п. 2).
+         *
+         *     Свободная запись человека задаёт работу привязанных задач, как ответ (`TRK#51`, п. 5).
+         */
+        DiscussionNoteCreate: {
+            /**
+             * Body
+             * @description Markdown body of the entry
+             * @default
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
+             * @example []
+             */
+            refs?: string[];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Номер задачи выдаётся до валидации
+             */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "note";
+        };
+        /**
+         * DiscussionOrder
+         * @description Порядок списка обсуждений: входящей — от старых, истории — от свежих.
+         *
+         *     Те же два вопроса человека, что у выдачи вопросов (`QuestionOrder`): дольше всех ждёт
+         *     то, что заведено первым, а в истории ищут недавнее.
+         * @enum {string}
+         */
+        DiscussionOrder: "oldest" | "newest";
+        /**
+         * DiscussionRead
+         * @description Обсуждение в ответе: карточка и признаки, посчитанные при чтении.
+         */
+        DiscussionRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Key
+             * @description Key of the project; never changes
+             * @example TRK
+             */
+            project_key: string;
+            /**
+             * Number
+             * @description Number inside the project, from 1
+             * @example 7
+             */
+            number: number;
+            /**
+             * Address
+             * @description Address of the discussion: the project key and its number, `TRK~7`. References to its case entries are `TRK~7#3`
+             * @example TRK~7
+             */
+            address: string;
+            /**
+             * Title
+             * @description The narrow question itself, one line; the title of the first entry
+             * @example Обсуждение — своя сущность или ярлык над записями задач?
+             */
+            title: string;
+            /**
+             * @description `open` or `closed`. A closed discussion never reopens and is frozen: any entry, attaching or detaching answers `409 discussion_closed`
+             * @example open
+             */
+            status: components["schemas"]["DiscussionStatus"];
+            /**
+             * @description Whose move it is, computed on read: `human` — a question has no answer yet; `agent` — no open questions, but an answer or a person's entry came after the latest conclusion; `null` — neither, and always on a closed discussion
+             * @example human
+             */
+            turn: components["schemas"]["DiscussionTurn"] | null;
+            /**
+             * Open Questions
+             * @description Questions of the discussion with no answer yet
+             * @example 1
+             */
+            open_questions: number;
+            created_by: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Closed At
+             * @description When the discussion was closed; `null` while open
+             * @example null
+             */
+            closed_at: string | null;
+        };
+        /**
+         * DiscussionStatus
+         * @description Статус обсуждения: открыто или закрыто. Закрытое не открывается снова.
+         * @enum {string}
+         */
+        DiscussionStatus: "open" | "closed";
+        /**
+         * DiscussionTaskAttach
+         * @description Привязка задачи к обсуждению.
+         */
+        DiscussionTaskAttach: {
+            /**
+             * Task
+             * @description Key of the task; matching ignores case
+             * @example TRK-42
+             */
+            task: string;
+        };
+        /**
+         * DiscussionTaskRead
+         * @description Привязанная задача: ключ, название, статус и кто привязал.
+         */
+        DiscussionTaskRead: {
+            /**
+             * Key
+             * @example TRK-42
+             */
+            key: string;
+            /**
+             * Title
+             * @example Бэкенд обсуждения
+             */
+            title: string;
+            /** @example open */
+            status: components["schemas"]["TaskStatus"];
+            attached_by: components["schemas"]["AuthorRead"];
+            /**
+             * Attached At
+             * Format: date-time
+             */
+            attached_at: string;
+        };
+        /**
+         * DiscussionTurn
+         * @description Чей ход в обсуждении (`TRK#51`, п. 4); отсутствие значения — «ничей».
+         *
+         *     `human` — в деле есть вопрос без ответа. `agent` — вопросов без ответа нет, но после
+         *     последнего итога есть ответ или запись человека: агенту читать её и писать итог.
+         * @enum {string}
+         */
+        DiscussionTurn: "human" | "agent";
+        /**
          * EmptyPayload
          * @description Нагрузки нет: всё содержание записи в её заголовке, теле и ссылках.
          */
         EmptyPayload: Record<string, never>;
-        EntryFactsRead: components["schemas"]["NoFactsRead"] | components["schemas"]["StatusChangedFactsRead"] | components["schemas"]["SectionChangedFactsRead"] | components["schemas"]["FieldChangedFactsRead"] | components["schemas"]["AssigneeChangedFactsRead"] | components["schemas"]["LinkFactsRead"] | components["schemas"]["QuestionFactsRead"] | components["schemas"]["AnswerFactsRead"] | components["schemas"]["VerdictFactsRead"] | components["schemas"]["ResolutionFactsRead"] | components["schemas"]["AttributeFactsRead"] | components["schemas"]["MovedFactsRead"] | components["schemas"]["WarningFactsRead"];
+        EntryFactsRead: components["schemas"]["NoFactsRead"] | components["schemas"]["StatusChangedFactsRead"] | components["schemas"]["SectionChangedFactsRead"] | components["schemas"]["FieldChangedFactsRead"] | components["schemas"]["AssigneeChangedFactsRead"] | components["schemas"]["LinkFactsRead"] | components["schemas"]["QuestionFactsRead"] | components["schemas"]["AnswerFactsRead"] | components["schemas"]["VerdictFactsRead"] | components["schemas"]["ResolutionFactsRead"] | components["schemas"]["AttributeFactsRead"] | components["schemas"]["MovedFactsRead"] | components["schemas"]["WarningFactsRead"] | components["schemas"]["AttachmentFactsRead"];
         /**
          * EntryHeadingRead
          * @description Строка описи дела: то, что видно о записи, не читая её тела.
@@ -3409,7 +4270,7 @@ export interface components {
         EntryHeadingRead: {
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -3435,13 +4296,13 @@ export interface components {
             /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Which fields there are follows from `type`; entries whose title is written by their author have none */
             facts: components["schemas"]["EntryFactsRead"];
         };
-        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["FindingEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
+        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["FindingEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"] | components["schemas"]["ConclusionEntryRead"] | components["schemas"]["AttachmentEntryRead"] | components["schemas"]["DiscussionClosedEntryRead"];
         /**
          * EntryType
          * @description Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после.
          * @enum {string}
          */
-        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "remark" | "resolution" | "acceptance" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed" | "moved" | "warning" | "attribute_created" | "attribute_changed" | "attribute_removed" | "archived" | "restored";
+        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "remark" | "resolution" | "acceptance" | "conclusion" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed" | "moved" | "warning" | "attached" | "detached" | "closed" | "attribute_created" | "attribute_changed" | "attribute_removed" | "archived" | "restored";
         /**
          * ErrorDetail
          * @description Тело ошибки. `code` — стабильный идентификатор, на него завязывается фронтенд.
@@ -3491,19 +4352,19 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Key of the owning task; `null` for an entry of a project's or an area's case
+             * @description Key of the owning task; `null` for an entry of a project's, an area's or a discussion's case
              * @example TRK-42
              */
             task_key: string | null;
             /**
              * Project Key
-             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for an area or a discussion entry
              * @example null
              */
             project_key: string | null;
@@ -3513,6 +4374,12 @@ export interface components {
              * @example null
              */
             area?: string | null;
+            /**
+             * Discussion
+             * @description Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise
+             * @example null
+             */
+            discussion?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3528,7 +4395,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3627,19 +4494,19 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Key of the owning task; `null` for an entry of a project's or an area's case
+             * @description Key of the owning task; `null` for an entry of a project's, an area's or a discussion's case
              * @example TRK-42
              */
             task_key: string | null;
             /**
              * Project Key
-             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for an area or a discussion entry
              * @example null
              */
             project_key: string | null;
@@ -3649,6 +4516,12 @@ export interface components {
              * @example null
              */
             area?: string | null;
+            /**
+             * Discussion
+             * @description Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise
+             * @example null
+             */
+            discussion?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3664,7 +4537,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3828,7 +4701,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -3849,6 +4722,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3864,7 +4743,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3986,7 +4865,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -4007,6 +4886,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4022,7 +4907,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4127,7 +5012,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "acceptance" | "archived" | "artifact" | "attempt" | "created" | "decision" | "finding" | "note" | "remark" | "restored" | "summary";
+            type: "acceptance" | "archived" | "artifact" | "attempt" | "closed" | "conclusion" | "created" | "decision" | "finding" | "note" | "remark" | "restored" | "summary";
         };
         /**
          * OnboardingHintsRead
@@ -4398,7 +5283,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4432,19 +5317,19 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Key of the owning task; `null` for an entry of a project's or an area's case
+             * @description Key of the owning task; `null` for an entry of a project's, an area's or a discussion's case
              * @example TRK-42
              */
             task_key: string | null;
             /**
              * Project Key
-             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for an area or a discussion entry
              * @example null
              */
             project_key: string | null;
@@ -4454,6 +5339,12 @@ export interface components {
              * @example null
              */
             area?: string | null;
+            /**
+             * Discussion
+             * @description Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise
+             * @example null
+             */
+            discussion?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4469,7 +5360,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4524,7 +5415,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -4546,6 +5437,12 @@ export interface components {
              * @example null
              */
             area?: string | null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4561,7 +5458,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4798,7 +5695,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4915,6 +5812,106 @@ export interface components {
             description?: string;
         };
         /**
+         * QuestionAnswerRead
+         * @description Ответ на вопрос задачи в выдаче поперёк задач: владелец — всегда задача.
+         *
+         *     Сужение `AnswerEntryRead` для `GET /api/v1/questions`: выдача идёт по делам задач, и
+         *     клиенту незачем проверять на `null` ключ, который `null` быть не может.
+         */
+        QuestionAnswerRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @example TRK-42
+             */
+            task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
+            /**
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
+             * @example null
+             */
+            area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: the questions listing reads the cases of tasks
+             * @example null
+             */
+            discussion?: null;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
+             * Type
+             * @constant
+             */
+            type: "answer";
+            payload: components["schemas"]["AnswerPayload"];
+        };
+        /**
          * QuestionEntryCreate
          * @description Вопрос участникам реестра.
          */
@@ -4927,7 +5924,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4962,15 +5959,16 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
+             * @description Key of the owning task; `null` for an entry of a discussion's case
              * @example TRK-42
              */
-            task_key: string;
+            task_key: string | null;
             /**
              * Project Key
              * @description Always `null`: entries of this type belong to a task, never to a project
@@ -4983,6 +5981,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise
+             * @example null
+             */
+            discussion?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4998,7 +6002,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5081,7 +6085,7 @@ export interface components {
             addressees: string[];
             /**
              * Blocking
-             * @description Whether work can continue without an answer. Required, no default
+             * @description Whether work can continue without an answer. Required, no default. Always `true` on a question of a discussion: any such question holds the tasks attached to it
              * @example true
              */
             blocking: boolean;
@@ -5128,7 +6132,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -5162,7 +6166,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -5183,6 +6187,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -5198,7 +6208,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5279,7 +6289,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -5308,7 +6318,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -5329,6 +6339,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -5344,7 +6360,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5447,7 +6463,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -5468,6 +6484,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -5483,7 +6505,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5711,7 +6733,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -5732,6 +6754,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -5747,7 +6775,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5842,7 +6870,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -5871,7 +6899,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -5892,6 +6920,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -5907,7 +6941,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -6547,9 +7581,9 @@ export interface components {
             summary?: components["schemas"]["SummaryEntryRead"] | null;
             /**
              * Questions
-             * @description Every question with no answer yet, in full
+             * @description Every question of the task's case with no answer yet, in full
              */
-            questions: components["schemas"]["QuestionEntryRead"][];
+            questions: components["schemas"]["TaskQuestionRead"][];
             /**
              * Remarks
              * @description Every remark with no resolution yet, in full
@@ -6626,6 +7660,107 @@ export interface components {
              * @example null
              */
             archived_at: string | null;
+        };
+        /**
+         * TaskQuestionRead
+         * @description Вопрос дела задачи: владелец — всегда задача.
+         *
+         *     Сужение `QuestionEntryRead` там, где вопрос приходит из дела задачи, — в пакете
+         *     преемника и в выдаче вопросов поперёк задач: клиенту незачем проверять на `null`
+         *     ключ, который `null` быть не может.
+         */
+        TaskQuestionRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @example TRK-42
+             */
+            task_key: string;
+            /**
+             * Project Key
+             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @example null
+             */
+            project_key: null;
+            /**
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
+             * @example null
+             */
+            area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: a question of a task's case belongs to the task
+             * @example null
+             */
+            discussion?: null;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
+             * Type
+             * @constant
+             */
+            type: "question";
+            payload: components["schemas"]["QuestionPayload"];
         };
         /**
          * TaskRead
@@ -7120,7 +8255,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -7149,7 +8284,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -7170,6 +8305,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -7185,7 +8326,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -7318,7 +8459,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
              * @example 12
              */
             no: number;
@@ -7339,6 +8480,12 @@ export interface components {
              * @example null
              */
             area?: null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -7354,7 +8501,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -12053,6 +13200,604 @@ export interface operations {
             };
         };
     };
+    list_discussions: {
+        parameters: {
+            query?: {
+                /** @description Project key; matching ignores case. Without it discussions of archived projects are left out; a project named here is listed even archived */
+                project?: string | null;
+                /** @description Keep only open or only closed discussions */
+                status?: components["schemas"]["DiscussionStatus"] | null;
+                /** @description Keep only discussions where the move is a human's (`human`: a question has no answer) or an agent's (`agent`); the inbox is `status=open&turn=human` */
+                turn?: components["schemas"]["DiscussionTurn"] | null;
+                /** @description Key of a task: keep only discussions it is attached to; matching ignores case. A previous key of a moved task names it as well */
+                task?: string | null;
+                /** @description `oldest` (the default) puts the earliest discussion first, as an inbox needs; `newest` the latest first, as a history needs. A cursor only continues the order it was issued in */
+                order?: components["schemas"]["DiscussionOrder"];
+                /** @description Page size */
+                limit?: number;
+                /** @description Cursor from `meta.next_cursor` of a previous page */
+                cursor?: string | null;
+            };
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse_DiscussionRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_discussion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscussionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DiscussionDetailRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_discussion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Discussion address `PROJECT~number`; matching ignores case */
+                discussion: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DiscussionDetailRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_discussion_entries: {
+        parameters: {
+            query?: {
+                /** @description Read only these entry numbers */
+                nos?: number[] | null;
+                /** @description Read only entries of these types */
+                types?: components["schemas"]["EntryType"][] | null;
+                /** @description Read only entries after this number — what happened since */
+                after_no?: number | null;
+                /** @description Page size */
+                limit?: number;
+                /** @description Cursor from `meta.next_cursor` of a previous page */
+                cursor?: string | null;
+            };
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Discussion address `PROJECT~number`; matching ignores case */
+                discussion: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse_EntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_discussion_entry: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Discussion address `PROJECT~number`; matching ignores case */
+                discussion: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscussionNoteCreate"] | components["schemas"]["AnswerEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_EntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    attach_discussion_task: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Discussion address `PROJECT~number`; matching ignores case */
+                discussion: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscussionTaskAttach"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_DiscussionTaskRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    detach_discussion_task: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Discussion address `PROJECT~number`; matching ignores case */
+                discussion: string;
+                /** @description Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well */
+                task_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_questions: {
         parameters: {
             query?: {
@@ -12357,7 +14102,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["FindingEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"];
+                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["FindingEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"] | components["schemas"]["ConclusionEntryRead"] | components["schemas"]["AttachmentEntryRead"] | components["schemas"]["DiscussionClosedEntryRead"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

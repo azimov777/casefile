@@ -124,7 +124,14 @@ async def list_questions(
 def answered_question_read(item: AnsweredQuestion) -> AnsweredQuestionRead:
     """Строка выдачи: вопрос тем же сборщиком, что и в деле, плюс его ответы."""
     question = entry_read(item.entry, task_key=item.task_key)
-    return AnsweredQuestionRead(
-        **question.model_dump(by_alias=True),
-        answers=[entry_read(answer, task_key=item.task_key) for answer in item.answers],
+    return AnsweredQuestionRead.model_validate(
+        {
+            **question.model_dump(by_alias=True),
+            # Ответы — словарями: модель выдачи сужает их до ответа задачи
+            # (`QuestionAnswerRead`), а объект общего варианта она не примет как свой.
+            "answers": [
+                entry_read(answer, task_key=item.task_key).model_dump(by_alias=True)
+                for answer in item.answers
+            ],
+        }
     )
