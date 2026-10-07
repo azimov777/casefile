@@ -16,6 +16,7 @@ from app.domain.errors import (
     TaskDeferredError,
     TaskFieldsInvalidError,
     TaskHasOpenBlockingQuestionsError,
+    TaskHasOpenDiscussionsError,
     TaskHasUnclosedChildrenError,
     TaskSectionsIncompleteError,
     TransitionNotAllowedError,
@@ -64,8 +65,9 @@ def facts(
     has_summary: bool = True,
     pending_checks: tuple[CheckGap, ...] | None = (),
     blockers: tuple[str, ...] | None = (),
-    blocking_questions: tuple[int, ...] | None = (),
+    blocking_questions: tuple[str, ...] | None = (),
     children: tuple[str, ...] | None = (),
+    discussions: tuple[str, ...] | None = (),
     closing: bool = True,
     assignee: str | None = "claude",
     requester: str | None = "claude",
@@ -90,6 +92,7 @@ def facts(
         open_blockers=blockers,
         open_blocking_questions=blocking_questions,
         unclosed_children=children,
+        open_discussions=discussions,
         closing=closing,
         assignee=assignee,
         requester=requester,
@@ -254,7 +257,7 @@ def test_the_section_check_only_guards_the_move_into_open() -> None:
 
 def test_the_check_list_is_the_extension_point() -> None:
     """Следующие задачи добавляют проверки в список, а не в таблицу."""
-    assert len(TRANSITION_CHECKS) == 10
+    assert len(TRANSITION_CHECKS) == 11
     assert all(callable(check) for check in TRANSITION_CHECKS)
 
 
@@ -440,10 +443,15 @@ def test_blockers_are_checked_only_on_the_way_into_work() -> None:
 
 
 def test_an_open_blocking_question_keeps_the_task_out_of_work() -> None:
-    """Развилка 3 TRK-569#9 на уровне домена: отказ `409` называет номера вопросов."""
+    """Развилка 3 TRK-569#9 на уровне домена: отказ `409` называет вопросы адресами — и
+    вопрос дела задачи, и вопрос её обсуждения (решение `TRK#51`, п. 4)."""
     with pytest.raises(TaskHasOpenBlockingQuestionsError) as error:
         ensure_transition_allowed(
-            facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, blocking_questions=(4, 7))
+            facts(
+                TaskStatus.OPEN,
+                TaskStatus.IN_PROGRESS,
+                blocking_questions=("TRK-1#4", "TRK~2#3"),
+            )
         )
 
     assert error.value.code == "task_has_open_blocking_questions"
@@ -452,7 +460,7 @@ def test_an_open_blocking_question_keeps_the_task_out_of_work() -> None:
         "key": "TRK-1",
         "from": "open",
         "to": "in_progress",
-        "questions": [4, 7],
+        "questions": ["TRK-1#4", "TRK~2#3"],
     }
 
     ensure_transition_allowed(facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, blocking_questions=()))
@@ -648,6 +656,45 @@ def test_an_unfilled_fact_forbids_the_move() -> None:
         )
 
     assert children.value.details["reason"] == "children_not_collected"
+
+    with pytest.raises(TaskHasOpenDiscussionsError) as discussions:
+        ensure_transition_allowed(
+            TransitionFacts(
+                key="TRK-1",
+                from_status=TaskStatus.OPEN,
+                to_status=TaskStatus.CANCELLED,
+                reason="передумали",
+                sections=FILLED,
+                checks=(),
+                unclosed_children=(),
+            )
+        )
+
+    assert discussions.value.details["reason"] == "discussions_not_collected"
+
+
+def test_an_open_discussion_keeps_the_task_from_closing_and_cancelling() -> None:
+    """Решение `TRK#51`, п. 4: пока привязанное обсуждение не закрыто, задачу не закрыть и
+    не отменить; отказ называет обсуждения адресами. Вход в работу обсуждение без вопроса
+    не держит — его держат только вопросы."""
+    for to_status, reason in ((TaskStatus.DONE, None), (TaskStatus.CANCELLED, "передумали")):
+        with pytest.raises(TaskHasOpenDiscussionsError) as error:
+            ensure_transition_allowed(
+                facts(TaskStatus.IN_PROGRESS, to_status, reason=reason, discussions=("TRK~2",))
+            )
+        assert error.value.code == "task_has_open_discussions"
+        assert error.value.status_code == 409
+        assert error.value.details == {
+            "key": "TRK-1",
+            "from": "in_progress",
+            "to": to_status.value,
+            "discussions": ["TRK~2"],
+        }
+
+    ensure_transition_allowed(
+        facts(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, discussions=("TRK~2",))
+    )
+    ensure_transition_allowed(facts(TaskStatus.IN_PROGRESS, TaskStatus.DONE, discussions=()))
 
 
 # --- Вход в работу только исполнителю (TRK-123) -----------------------------------------

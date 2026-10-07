@@ -53,6 +53,8 @@
 | `account_not_found` | Account not found | Учётной записи с таким идентификатором или почтой нет. |
 | `area_not_found` | Area not found | Области с таким адресом нет: проект есть, ключа в нём нет (`CONCEPT.md`, 3.7). |
 | `attribute_not_found` | Attribute not found | Атрибута с таким именем (без учёта регистра) у проекта или области нет. |
+| `discussion_not_found` | Discussion not found | Обсуждения с таким адресом нет: проект есть, номера в нём нет (решение `TRK#51`). |
+| `discussion_task_not_found` | Task is not attached to the discussion | Задача не привязана к этому обсуждению — отвязывать нечего. |
 | `entry_not_found` | Case entry not found | Записи с таким номером в этой задаче нет. |
 | `link_not_found` | Link not found | Связи такого вида между этими задачами нет. |
 | `not_found` | Object not found | Запрошенного объекта не существует. |
@@ -83,6 +85,9 @@
 | `closing_not_a_transition` | Closing a task is a separate call, not a status transition | `done` достигается только сценарием закрытия, а не переводом статуса. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
 | `decision_not_in_force` | Project decision is superseded by a later decision | Решение проекта уже заменено другим, а его называют как действующее. |
+| `discussion_closed` | Discussion is closed: its case and its tasks are frozen | Обсуждение закрыто: любая запись, привязка, отвязка и повторное закрытие — отказ. |
+| `discussion_has_open_questions` | Discussion has questions with no answer | Закрытие обсуждения, в деле которого есть вопрос без ответа: адреса вопросов (`TRK~7#3`) — в `details.questions`. |
+| `discussion_task_exists` | Task is already attached to the discussion | Задача уже привязана к этому обсуждению: привязка хранится одной строкой. |
 | `finding_not_in_force` | Project finding is superseded by a later finding | Заметка дела проекта уже заменена другой, а её заменяют снова. |
 | `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |
 | `installation_not_empty` | Only an installation without projects can take an archive | Приём архива в установку, где уже есть проекты. |
@@ -101,7 +106,8 @@
 | `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля не меняются, и связи, влияющие на переходы, тоже. |
 | `task_deferred` | Task is deferred until its not_before moment | Вход в `in_progress` до момента `not_before` по часам базы: момент в `details.not_before`. |
 | `task_field_locked` | Field cannot be changed in the current status | Поле не редактируется в этом статусе: содержание задачи меняется только в `backlog`. |
-| `task_has_open_blocking_questions` | Task has open blocking questions | Вход в `in_progress` при открытом вопросе `blocking`: номера вопросов в `details.questions`. |
+| `task_has_open_blocking_questions` | Task has open blocking questions | Вход в `in_progress` при вопросе без ответа, который держит работу: адреса вопросов в `details.questions` — `TRK-42#3` у вопроса `blocking` в деле задачи, `TRK~7#3` у вопроса в незакрытом обсуждении, к которому задача привязана. |
+| `task_has_open_discussions` | Task has discussions that are not closed | Закрытие или отмена задачи, пока привязанное к ней обсуждение не закрыто: адреса обсуждений — в `details.discussions`. |
 | `task_has_parent` | Task already has a parent | У задачи уже есть родитель: второй не ставится, нынешний назван в `details.parent`. |
 | `task_has_unclosed_children` | Task has children that are not closed | Закрытие задачи при детях не в `done` и не в `cancelled`. |
 | `transition_not_allowed` | Transition is not allowed | Перехода между этими статусами нет в таблице; допустимые перечислены в `details.allowed`. |
@@ -129,6 +135,7 @@
 | `invalid_area_key` | Area key is invalid | Адрес новой области не `ПРОЕКТ/ключ` или ключ не по шаблону. |
 | `invalid_attribute_name` | Attribute name is invalid | Имя атрибута не соответствует шаблону. |
 | `invalid_cursor` | Pagination cursor is malformed | Курсор не разбирается. Ошибка механизма, а не предметной области, поэтому живёт здесь. |
+| `invalid_discussion_address` | Discussion address is invalid | Адрес обсуждения не разбирается как `ПРОЕКТ~номер`; форма — в `details.expected`. |
 | `invalid_email` | Email is invalid | Почта не похожа на адрес: нет `@`, пустая часть, пробел или слишком длинная. |
 | `invalid_idempotency_key` | Idempotency key is invalid | Ключ идемпотентности пуст или длиннее допустимого. |
 | `invalid_journal_cursor` | Last-Event-ID is not a journal sequence number | `Last-Event-ID` потока не разбирается как сквозной номер записи. |

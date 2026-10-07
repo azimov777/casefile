@@ -20,12 +20,13 @@
 **Вычисляемый признак не переписывается.** `blocked` — это `EXISTS` над запросом
 `open_blockers_of` из `app/db/repositories/links.py`, `deferred` — условие
 `deferred_now` из `app/db/repositories/tasks.py`, счётчики вопросов — скалярный
-подзапрос `open_question_count`, время последней сводки — `latest_summary`, оба из
-`app/db/repositories/entries.py`. Все запросы написаны один раз и там же, где ими
-пользуется карточка: второе написание того же условия развело бы поиск с карточкой
-молча (`CONCEPT.md`, 4.3). Отсюда же собираются признаки **в строках выдачи**
-(`feature_columns`): условие отбора и колонка ответа — один и тот же запрос, поэтому
-`blocked: false` и `features.blocked` не могут разойтись.
+подзапрос `open_question_count` вместе с вопросами незакрытых обсуждений задачи
+(`open_discussion_question_count`, `app/db/repositories/discussions.py`), время
+последней сводки — `latest_summary` из `app/db/repositories/entries.py`. Все запросы
+написаны один раз и там же, где ими пользуется карточка: второе написание того же
+условия развело бы поиск с карточкой молча (`CONCEPT.md`, 4.3). Отсюда же собираются
+признаки **в строках выдачи** (`feature_columns`): условие отбора и колонка ответа —
+один и тот же запрос, поэтому `blocked: false` и `features.blocked` не могут разойтись.
 
 **Порядок по ключу — это не порядок строки.** `TRK-10` обязан идти после `TRK-2`, а по
 алфавиту он идёт раньше. Поэтому ключ раскладывается на пару «ключ проекта, номер», и
@@ -56,6 +57,7 @@ from app.db.pagination import (
     resolve_limit,
     resolve_offset,
 )
+from app.db.repositories.discussions import open_discussion_question_count
 from app.db.repositories.entries import (
     last_entry_at,
     last_summary_at,
@@ -237,11 +239,8 @@ def feature_columns() -> tuple[ColumnElement[Any], ...]:
     return (
         open_blockers_of(Task.id).correlate(Task).exists().label("blocked"),
         deferred_now(Task.not_before).label("deferred"),
-        open_question_count(Task.id).correlate(Task).scalar_subquery().label("open_questions"),
-        open_question_count(Task.id, blocking=True)
-        .correlate(Task)
-        .scalar_subquery()
-        .label("open_blocking_questions"),
+        open_question_total().label("open_questions"),
+        open_question_total(blocking=True).label("open_blocking_questions"),
         open_remark_count(Task.id).correlate(Task).scalar_subquery().label("open_remarks"),
         open_warning_count(Task.id).correlate(Task).scalar_subquery().label("open_warnings"),
         last_summary_at(Task.id).correlate(Task).scalar_subquery().label("last_summary_at"),
@@ -523,9 +522,9 @@ def _counted(field: SearchField) -> ColumnElement[Any]:
     """
     match field:
         case SearchField.OPEN_QUESTIONS:
-            counted = open_question_count(Task.id)
+            return open_question_total()
         case SearchField.OPEN_BLOCKING_QUESTIONS:
-            counted = open_question_count(Task.id, blocking=True)
+            return open_question_total(blocking=True)
         case SearchField.OPEN_REMARKS:
             counted = open_remark_count(Task.id)
         case SearchField.OPEN_WARNINGS:
@@ -537,6 +536,20 @@ def _counted(field: SearchField) -> ColumnElement[Any]:
             # тихого нуля — чтобы новый счётчик, забытый здесь, назвал себя сам.
             raise ValueError(f"Search field {field.value!r} is not a counter")
     return counted.correlate(Task).scalar_subquery()
+
+
+def open_question_total(*, blocking: bool | None = None) -> ColumnElement[int]:
+    """Вопросы без ответа у задачи строки: её дела и её незакрытых обсуждений.
+
+    Признаки `open_questions` и `open_blocking_questions` считают и вопросы обсуждений,
+    к которым задача привязана (решение `TRK#51`, п. 4). Признака `blocking` у вопроса
+    обсуждения нет — держит любой, поэтому вторая половина одна на оба признака. Два
+    скалярных подзапроса суммой, а не один с условием «или» по владельцу: каждый ложится
+    на свой индекс. Питоновский двойник — `app/services/case.py`, `features`.
+    """
+    in_task = open_question_count(Task.id, blocking=blocking).correlate(Task).scalar_subquery()
+    in_discussions = open_discussion_question_count(Task.id).correlate(Task).scalar_subquery()
+    return in_task + in_discussions
 
 
 def _fulltext(operator: Operator, values: Sequence[Any]) -> ColumnElement[bool]:

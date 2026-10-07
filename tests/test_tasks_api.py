@@ -241,9 +241,10 @@ async def test_an_open_blocking_question_keeps_the_task_out_of_work(
 ) -> None:
     """Обзорная проверка 4 TRK-573: вход в работу держит открытый вопрос с `blocking`.
 
-    Отказ — `409` с кодом из таблицы валидаций `CONCEPT.md`, 3.3, и номером вопроса в
-    `details.questions`. Неблокирующий вопрос вход не держит; ответ на блокирующий его
-    открывает — сам ответ статус не меняет, задачу берёт в работу её исполнитель.
+    Отказ — `409` с кодом из таблицы валидаций `CONCEPT.md`, 3.3, и адресом вопроса в
+    `details.questions` (`TRK-1#N`; с TRK-669 — адреса, как у вопросов обсуждений).
+    Неблокирующий вопрос вход не держит; ответ на блокирующий его открывает — сам ответ
+    статус не меняет, задачу берёт в работу её исполнитель.
     """
     await create(auth_client)
     await move(auth_client, "TRK-1", "open")
@@ -258,7 +259,7 @@ async def test_an_open_blocking_question_keeps_the_task_out_of_work(
         "key": "TRK-1",
         "from": "open",
         "to": "in_progress",
-        "questions": [blocking],
+        "questions": [f"TRK-1#{blocking}"],
     }
 
     answered = await auth_client.post(

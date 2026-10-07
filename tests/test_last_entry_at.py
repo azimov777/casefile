@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.authors import label_author
-from app.domain.case import AGENT_ENTRY_TYPES, SERVICE_ENTRY_TYPES, EntryType
+from app.domain.case import SERVICE_ENTRY_TYPES, TASK_ENTRY_TYPES, EntryType
 from app.domain.errors import SearchFieldUnknownError, SearchValueInvalidError
 from app.domain.links import LinkKind
 from app.domain.search import SearchField, sortable_names
@@ -55,7 +55,8 @@ async def feature_of(session: AsyncSession, actor: Actor, task: Task) -> Any:
 # --- Какие записи считаются -----------------------------------------------------------
 
 
-@pytest.mark.parametrize("entry_type", sorted(AGENT_ENTRY_TYPES, key=lambda item: item.value))
+# Типы дела задачи: итог бывает только в деле обсуждения (решение `TRK#51`, п. 2).
+@pytest.mark.parametrize("entry_type", sorted(TASK_ENTRY_TYPES, key=lambda item: item.value))
 async def test_an_entry_of_an_agent_moves_the_feature(
     db_session: AsyncSession,
     task_actor: Actor,

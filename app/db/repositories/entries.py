@@ -26,6 +26,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models.area import Area
+from app.db.models.discussion import Discussion, DiscussionTask
 from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
@@ -36,12 +37,14 @@ from app.db.pagination import (
     encode_sort_cursor,
     resolve_limit,
 )
+from app.db.repositories.discussions import discussion_ids_of_tasks, unanswered_in_discussion
 from app.db.repositories.projects import in_active_project
 from app.db.sql import ilike_contains
 from app.domain.areas import format_area_address
 from app.domain.authors import Author
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
+    ATTACHMENT_ENTRY_TYPES,
     ATTRIBUTE_ENTRY_TYPES,
     FIRST_ENTRY_NUMBER,
     OUTCOME_WITH_CONTINUATION,
@@ -49,6 +52,7 @@ from app.domain.case import (
     WARNING_REACTIONS,
     AnswerFacts,
     AssigneeChangedFacts,
+    AttachmentFacts,
     AttributeFacts,
     EntryFacts,
     EntryHeading,
@@ -69,6 +73,7 @@ from app.domain.case import (
     WarningFacts,
     answer_outcome,
 )
+from app.domain.discussions import DiscussionStatus, format_discussion_address
 from app.domain.links import LinkKind
 from app.domain.tasks import CLOSED_STATUSES, TaskField, TaskStatus
 
@@ -139,6 +144,19 @@ class EntryRepository:
             raise RuntimeError(f"Area {area_id} disappeared while allocating an entry number")
         return await self._next_no(Entry.area_id == area_id)
 
+    async def allocate_discussion_no(self, discussion_id: uuid.UUID) -> int:
+        """Следующий номер записи в деле обсуждения — тем же способом, что у области.
+
+        Блокируется строка обсуждения: номер считается внутри него (`TRK~7#3`). Порядок
+        захвата тот же — после очереди изменений (`lock_changes`).
+        """
+        lock = select(Discussion.id).where(Discussion.id == discussion_id).with_for_update()
+        if await self._session.scalar(lock) is None:
+            raise RuntimeError(
+                f"Discussion {discussion_id} disappeared while allocating an entry number"
+            )
+        return await self._next_no(Entry.discussion_id == discussion_id)
+
     async def _next_no(self, owned: ColumnElement[bool]) -> int:
         """`max(no) + 1` среди записей владельца; вызывается под блокировкой его строки."""
         highest = select(func.coalesce(func.max(Entry.no), FIRST_ENTRY_NUMBER - 1)).where(owned)
@@ -182,6 +200,10 @@ class EntryRepository:
         """Одна запись дела области по номеру — адрес из ссылки `TRK/promotion#3`."""
         return await self._get(Entry.area_id == area_id, no)
 
+    async def get_by_discussion_no(self, discussion_id: uuid.UUID, no: int) -> Entry | None:
+        """Одна запись дела обсуждения по номеру — адрес из ссылки `TRK~7#3`."""
+        return await self._get(Entry.discussion_id == discussion_id, no)
+
     async def _get(self, owned: ColumnElement[bool], no: int) -> Entry | None:
         statement = select(Entry).where(owned, Entry.no == no)
         return (await self._session.scalars(statement)).one_or_none()
@@ -201,6 +223,12 @@ class EntryRepository:
     async def existing_area_nos(self, area_id: uuid.UUID, nos: Sequence[int]) -> set[int]:
         """Какие из перечисленных номеров есть в деле области — для `TRK/promotion#3`."""
         return await self._existing(Entry.area_id == area_id, nos)
+
+    async def existing_discussion_nos(
+        self, discussion_id: uuid.UUID, nos: Sequence[int]
+    ) -> set[int]:
+        """Какие из перечисленных номеров есть в деле обсуждения — для `TRK~7#3`."""
+        return await self._existing(Entry.discussion_id == discussion_id, nos)
 
     async def _existing(self, owned: ColumnElement[bool], nos: Sequence[int]) -> set[int]:
         if not nos:
@@ -293,6 +321,26 @@ class EntryRepository:
             types=types,
             attribute=attribute,
             text=text,
+            after_no=after_no,
+            limit=limit,
+            cursor=cursor,
+        )
+
+    async def list_discussion_page(
+        self,
+        discussion_id: uuid.UUID,
+        *,
+        nos: Sequence[int] | None = None,
+        types: Sequence[EntryType] | None = None,
+        after_no: int | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> Page[Entry]:
+        """Страница записей дела обсуждения — те же фильтры, что у дела задачи."""
+        return await self._list_page(
+            Entry.discussion_id == discussion_id,
+            nos=nos,
+            types=types,
             after_no=after_no,
             limit=limit,
             cursor=cursor,
@@ -592,6 +640,66 @@ class EntryRepository:
         )
         return list(await self._session.scalars(statement))
 
+    # --- Дело обсуждения ---------------------------------------------------------------
+
+    async def discussion_open_questions(self, discussion_id: uuid.UUID) -> list[Entry]:
+        """Вопросы обсуждения без ответа, в порядке подшивки: факт закрытия обсуждения."""
+        statement = unanswered_in_discussion(
+            select(Entry).where(Entry.discussion_id == discussion_id, _IS_QUESTION)
+        ).order_by(Entry.no)
+        return list(await self._session.scalars(statement))
+
+    async def first_discussion_answer_no(
+        self, discussion_id: uuid.UUID, question_no: int
+    ) -> int | None:
+        """Номер первого ответа на вопрос обсуждения; `None` — вопрос ещё открыт.
+
+        Двойник `first_answer_no` дела задачи: тот же признак открытости, другой владелец.
+        """
+        statement = select(func.min(Entry.no)).where(
+            Entry.discussion_id == discussion_id,
+            Entry.type == EntryType.ANSWER,
+            Entry.payload["question_no"].as_integer() == question_no,
+        )
+        return await self._session.scalar(statement)
+
+    async def last_conclusion(self, discussion_id: uuid.UUID) -> Entry | None:
+        """Последний итог обсуждения: он главнее предыдущих, как сводка у задачи."""
+        statement = (
+            select(Entry)
+            .where(Entry.discussion_id == discussion_id, Entry.type == EntryType.CONCLUSION)
+            .order_by(Entry.no.desc())
+            .limit(1)
+        )
+        return (await self._session.scalars(statement)).first()
+
+    async def open_discussion_questions_of_task(
+        self, task_id: uuid.UUID
+    ) -> list[tuple[Entry, str]]:
+        """Вопросы без ответа в незакрытых обсуждениях, к которым привязана задача, — пары
+        «вопрос и адрес обсуждения», по адресу и номеру.
+
+        Отсюда карточка задачи считает свою долю признаков `open_questions` и
+        `open_blocking_questions` (решение `TRK#51`, п. 4), а проверка входа в работу —
+        адреса вопросов `TRK~7#3`. Двойник подзапроса поиска —
+        `app/db/repositories/discussions.py`, `open_discussion_question_count`.
+        """
+        statement = unanswered_in_discussion(
+            select(Entry, Project.key, Discussion.number)
+            .join(DiscussionTask, DiscussionTask.discussion_id == Entry.discussion_id)
+            .join(Discussion, Discussion.id == Entry.discussion_id)
+            .join(Project, Project.id == Discussion.project_id)
+            .where(
+                DiscussionTask.task_id == task_id,
+                Discussion.status == DiscussionStatus.OPEN,
+                _IS_QUESTION,
+            )
+        ).order_by(Project.key, Discussion.number, Entry.no)
+        return [
+            (entry, format_discussion_address(project_key, number))
+            for entry, project_key, number in await self._session.execute(statement)
+        ]
+
     async def latest_warning(self, task_id: uuid.UUID) -> Entry | None:
         """Последнее предупреждение задачи, открытое или нет. У задачи оно одно — закрытие
         бывает один раз, — но «последнее» не полагается на это молча."""
@@ -796,25 +904,28 @@ class EntryRepository:
         project_id: uuid.UUID | None = None,
         types: Sequence[EntryType] | None = None,
         limit: int | None = None,
-    ) -> Page[tuple[Entry, str | None, str | None, str | None]]:
+    ) -> Page[tuple[Entry, str | None, str | None, str | None, str | None]]:
         """Хвост журнала: записи со сквозным номером больше `after`, по возрастанию.
 
         Отдельной таблицы событий нет — лента это та же таблица записей
         (`CONCEPT.md`, 4.1), поэтому и метод живёт здесь, а не в своём репозитории.
 
-        Отдаёт четвёрки «запись, ключ задачи, ключ проекта, адрес области»: у записи
-        связи с владельцем нет, только `task_id`, `project_id` или `area_id`, а кадром
-        ленты нечего адресовать без ключа. Непуст ровно один — ключ владельца: у записи
-        задачи это ключ задачи, у записи дела проекта — ключ проекта, у записи дела
-        области — её адрес `TRK/promotion`. Соединения все внешние: у записи один
-        владелец, остальных нет. Ключ проекта области — через свой псевдоним таблицы
-        проектов: прямой проект записи (`Entry.project_id`) у записи области пуст.
+        Отдаёт пятёрки «запись, ключ задачи, ключ проекта, адрес области, адрес
+        обсуждения»: у записи связи с владельцем нет, только `task_id`, `project_id`,
+        `area_id` или `discussion_id`, а кадром ленты нечего адресовать без ключа. Непуст
+        ровно один — ключ владельца: у записи задачи это ключ задачи, у записи дела
+        проекта — ключ проекта, у записи дела области — её адрес `TRK/promotion`, у записи
+        обсуждения — его адрес `TRK~7`. Соединения все внешние: у записи один владелец,
+        остальных нет. Ключ проекта области и обсуждения — через свои псевдонимы таблицы
+        проектов: прямой проект записи (`Entry.project_id`) у таких записей пуст.
 
-        Отбор по проекту берёт дело проекта, дела его задач и дела его областей: «всё
+        Отбор по проекту берёт дело проекта, дела его задач, областей и обсуждений: «всё
         о проекте» — одна лента.
 
         `task_ids` сужает хвост набором задач, а не одной: сессия ведёт несколько дел и
-        ждёт новостей по ним одним вызовом. `None` — «все задачи»; пустой набор сюда не
+        ждёт новостей по ним одним вызовом. В хвост входят и записи обсуждений, к которым
+        привязана хоть одна из задач (решение `TRK#51`, п. 4): агент, ждущий ответа по
+        своей задаче, ждёт его в обсуждении. `None` — «все задачи»; пустой набор сюда не
         приезжает (`app/domain/journal.py`, `resolve_task_keys`).
 
         Ложится на уникальный индекс по `seq`: чтение всегда идёт с конца, а фильтры
@@ -822,22 +933,39 @@ class EntryRepository:
         """
         size = resolve_limit(limit)
         area_project = aliased(Project)
+        discussion_project = aliased(Project)
         statement = (
-            select(Entry, Task.key, Project.key, area_project.key, Area.key)
+            select(
+                Entry,
+                Task.key,
+                Project.key,
+                area_project.key,
+                Area.key,
+                discussion_project.key,
+                Discussion.number,
+            )
             .outerjoin(Task, Task.id == Entry.task_id)
             .outerjoin(Project, Project.id == Entry.project_id)
             .outerjoin(Area, Area.id == Entry.area_id)
             .outerjoin(area_project, area_project.id == Area.project_id)
+            .outerjoin(Discussion, Discussion.id == Entry.discussion_id)
+            .outerjoin(discussion_project, discussion_project.id == Discussion.project_id)
             .where(Entry.seq > after)
         )
         if task_ids is not None:
-            statement = statement.where(Entry.task_id.in_(list(task_ids)))
+            statement = statement.where(
+                or_(
+                    Entry.task_id.in_(list(task_ids)),
+                    Entry.discussion_id.in_(discussion_ids_of_tasks(task_ids)),
+                )
+            )
         if project_id is not None:
             statement = statement.where(
                 or_(
                     Task.project_id == project_id,
                     Entry.project_id == project_id,
                     Area.project_id == project_id,
+                    Discussion.project_id == project_id,
                 )
             )
         if types is not None:
@@ -851,6 +979,9 @@ class EntryRepository:
                 task_key,
                 project_key,
                 None if area_key is None else format_area_address(area_project_key, area_key),
+                None
+                if discussion_number is None
+                else format_discussion_address(discussion_project_key, discussion_number),
             )
             for (
                 entry,
@@ -858,6 +989,8 @@ class EntryRepository:
                 project_key,
                 area_project_key,
                 area_key,
+                discussion_project_key,
+                discussion_number,
             ) in await self._session.execute(statement)
         ]
         if len(rows) <= size:
@@ -1220,6 +1353,13 @@ def _facts_json() -> ColumnElement[Any]:
             Entry.type == EntryType.WARNING,
             func.jsonb_build_object("checks", payload["checks"]),
         ),
+        # Привязка задачи к обсуждению и её снятие — обе стороны: ключ и адрес коротки.
+        (
+            Entry.type.in_(ATTACHMENT_ENTRY_TYPES),
+            func.jsonb_build_object(
+                "task_key", payload["task"], "discussion", payload["discussion"]
+            ),
+        ),
         # Записи об атрибутах проекта — только имя: оно ограничено шаблоном, а значения и
         # причина — свободный текст и остаются в записи.
         (
@@ -1302,6 +1442,12 @@ def _read_facts(entry_type: EntryType, raw: Any) -> EntryFacts:
             EntryType.ATTRIBUTE_CREATED | EntryType.ATTRIBUTE_CHANGED | EntryType.ATTRIBUTE_REMOVED
         ):
             return AttributeFacts(type=entry_type, name=values.get("name"))
+        case EntryType.ATTACHED | EntryType.DETACHED:
+            return AttachmentFacts(
+                type=entry_type,
+                task_key=values.get("task_key"),
+                discussion=values.get("discussion"),
+            )
         case _:
             return NoFacts(type=entry_type)
 

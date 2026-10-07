@@ -55,3 +55,11 @@ class BootstrapRead(BaseModel):
             "for every token"
         ),
     )
+    open_discussions: int = Field(
+        examples=[2],
+        description=(
+            "Discussions that are not closed and wait for a human (`turn: human`: a "
+            "question with no answer), in projects that are not archived — the inbox by "
+            "discussions. A turn has no addressee, so the number is the same for every token"
+        ),
+    )

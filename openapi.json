@@ -8548,6 +8548,1185 @@
         }
       }
     },
+    "/api/v1/discussions": {
+      "get": {
+        "tags": [
+          "discussions"
+        ],
+        "summary": "List discussions",
+        "description": "Обсуждения с отбором: входящая — `status=open&turn=human`, история — без отбора с\n`order=newest`, обсуждения задачи — `task`.\n\nУ каждого — чей ход и число открытых вопросов, посчитанные при чтении. Неизвестный\nпроект — `404 project_not_found`, неизвестная задача — `404 task_not_found`: пустая\nвыдача на такой отбор читалась бы как ответ.",
+        "operationId": "list_discussions",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Project key; matching ignores case. Without it discussions of archived projects are left out; a project named here is listed even archived",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project"
+            },
+            "description": "Project key; matching ignores case. Without it discussions of archived projects are left out; a project named here is listed even archived"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/DiscussionStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keep only open or only closed discussions",
+              "title": "Status"
+            },
+            "description": "Keep only open or only closed discussions"
+          },
+          {
+            "name": "turn",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/DiscussionTurn"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keep only discussions where the move is a human's (`human`: a question has no answer) or an agent's (`agent`); the inbox is `status=open&turn=human`",
+              "title": "Turn"
+            },
+            "description": "Keep only discussions where the move is a human's (`human`: a question has no answer) or an agent's (`agent`); the inbox is `status=open&turn=human`"
+          },
+          {
+            "name": "task",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Key of a task: keep only discussions it is attached to; matching ignores case. A previous key of a moved task names it as well",
+              "examples": [
+                "TRK-42"
+              ],
+              "title": "Task"
+            },
+            "description": "Key of a task: keep only discussions it is attached to; matching ignores case. A previous key of a moved task names it as well"
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/DiscussionOrder",
+              "description": "`oldest` (the default) puts the earliest discussion first, as an inbox needs; `newest` the latest first, as a history needs. A cursor only continues the order it was issued in",
+              "default": "oldest"
+            },
+            "description": "`oldest` (the default) puts the earliest discussion first, as an inbox needs; `newest` the latest first, as a history needs. A cursor only continues the order it was issued in"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cursor from `meta.next_cursor` of a previous page",
+              "title": "Cursor"
+            },
+            "description": "Cursor from `meta.next_cursor` of a previous page"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse_DiscussionRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "discussions"
+        ],
+        "summary": "Create a discussion",
+        "description": "Заводит обсуждение запиской и привязывает задачи из `tasks` тем же действием.\n\nНазвание — сам узкий вопрос; оно же заголовок первой записи дела, заметки с телом\n`body`. Номер выдаётся внутри проекта, адрес — `TRK~7`. В деле обсуждения ложатся\n`created`, заметка и `attached` на каждую задачу, в деле задачи — свой `attached`.\nОтказы: архивный проект — `409 project_archived`, закрытая задача — `409 task_closed`,\nназвание не одной строкой — `422 entry_fields_invalid`. Повтор с тем же\n`Idempotency-Key` отвечает первым обсуждением, а не заводит второе.",
+        "operationId": "create_discussion",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscussionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_DiscussionDetailRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/discussions/{discussion}": {
+      "get": {
+        "tags": [
+          "discussions"
+        ],
+        "summary": "Read a discussion",
+        "description": "Экран обсуждения: карточка, чей ход, открытые вопросы, привязанные задачи и\nпоследний итог. Лента записей — `/discussions/{discussion}/entries`.\n\nАдрес не по форме — `422 invalid_discussion_address`, неизвестный проект —\n`404 project_not_found`, номер — `404 discussion_not_found`.",
+        "operationId": "read_discussion",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "discussion",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Discussion address `PROJECT~number`; matching ignores case",
+              "examples": [
+                "TRK~7"
+              ],
+              "title": "Discussion"
+            },
+            "description": "Discussion address `PROJECT~number`; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_DiscussionDetailRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/discussions/{discussion}/entries": {
+      "get": {
+        "tags": [
+          "discussions"
+        ],
+        "summary": "Read discussion case entries",
+        "description": "Записи дела обсуждения с телами и нагрузкой, в порядке `no` — те же фильтры, что у\nдела задачи. Ссылка на запись — `TRK~7#3`.",
+        "operationId": "list_discussion_entries",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "discussion",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Discussion address `PROJECT~number`; matching ignores case",
+              "examples": [
+                "TRK~7"
+              ],
+              "title": "Discussion"
+            },
+            "description": "Discussion address `PROJECT~number`; matching ignores case"
+          },
+          {
+            "name": "nos",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only these entry numbers",
+              "examples": [
+                [
+                  3,
+                  12
+                ]
+              ],
+              "title": "Nos"
+            },
+            "description": "Read only these entry numbers"
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EntryType"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only entries of these types",
+              "examples": [
+                [
+                  "summary"
+                ]
+              ],
+              "title": "Types"
+            },
+            "description": "Read only entries of these types"
+          },
+          {
+            "name": "after_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Read only entries after this number — what happened since",
+              "examples": [
+                12
+              ],
+              "title": "After No"
+            },
+            "description": "Read only entries after this number — what happened since"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cursor from `meta.next_cursor` of a previous page",
+              "title": "Cursor"
+            },
+            "description": "Cursor from `meta.next_cursor` of a previous page"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse_EntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "discussions"
+        ],
+        "summary": "Append a discussion case entry",
+        "description": "Подшивает в дело обсуждения заметку или ответ — формы «Заметка» и «Ответить на #N».\n\nОтвет ссылается на вопрос этого же обсуждения (`question_no`); первый ответ закрывает\nвопрос, и задачи, которые он держал, снова можно брать в работу. Закрытое обсуждение —\n`409 discussion_closed`; замечания к форме и ссылкам — разом в\n`422 entry_fields_invalid`. Повтор с тем же `Idempotency-Key` отвечает первой записью.",
+        "operationId": "create_discussion_entry",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "discussion",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Discussion address `PROJECT~number`; matching ignores case",
+              "examples": [
+                "TRK~7"
+              ],
+              "title": "Discussion"
+            },
+            "description": "Discussion address `PROJECT~number`; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/DiscussionNoteCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AnswerEntryCreate"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "type",
+                  "mapping": {
+                    "note": "#/components/schemas/DiscussionNoteCreate",
+                    "answer": "#/components/schemas/AnswerEntryCreate"
+                  }
+                },
+                "title": "Entry"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_EntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/discussions/{discussion}/tasks": {
+      "post": {
+        "tags": [
+          "discussions"
+        ],
+        "summary": "Attach a task to a discussion",
+        "description": "Привязывает задачу: она зависит от итога — не берётся в работу, пока в обсуждении\nесть вопрос без ответа, и не закрывается, пока оно открыто.\n\n`attached` ложится в дело обсуждения и в дело задачи. Отказы: закрытое обсуждение —\n`409 discussion_closed`, закрытая задача — `409 task_closed`, уже привязана —\n`409 discussion_task_exists`. Повтор с тем же `Idempotency-Key` отвечает первой\nпривязкой.",
+        "operationId": "attach_discussion_task",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "discussion",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Discussion address `PROJECT~number`; matching ignores case",
+              "examples": [
+                "TRK~7"
+              ],
+              "title": "Discussion"
+            },
+            "description": "Discussion address `PROJECT~number`; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscussionTaskAttach"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_DiscussionTaskRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/discussions/{discussion}/tasks/{task_key}": {
+      "delete": {
+        "tags": [
+          "discussions"
+        ],
+        "summary": "Detach a task from a discussion",
+        "description": "Отвязывает задачу: она больше не ждёт итога этого обсуждения. `detached` ложится в\nдела обеих сторон. Привязки нет — `404 discussion_task_not_found`; закрытое\nобсуждение — `409 discussion_closed`: у закрытого привязки не меняются.",
+        "operationId": "detach_discussion_task",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "discussion",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Discussion address `PROJECT~number`; matching ignores case",
+              "examples": [
+                "TRK~7"
+              ],
+              "title": "Discussion"
+            },
+            "description": "Discussion address `PROJECT~number`; matching ignores case"
+          },
+          {
+            "name": "task_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well",
+              "examples": [
+                "TRK-42"
+              ],
+              "title": "Task Key"
+            },
+            "description": "Task key `PROJECT-number`; matching ignores case. A previous key of a moved task addresses it as well"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/questions": {
       "get": {
         "tags": [
@@ -9412,12 +10591,16 @@
                       "archived": "#/components/schemas/ProjectArchiveEntryRead",
                       "artifact": "#/components/schemas/PlainEntryRead",
                       "assignee_changed": "#/components/schemas/AssigneeChangedEntryRead",
+                      "attached": "#/components/schemas/AttachmentEntryRead",
                       "attempt": "#/components/schemas/PlainEntryRead",
                       "attribute_changed": "#/components/schemas/AttributeChangedEntryRead",
                       "attribute_created": "#/components/schemas/AttributeCreatedEntryRead",
                       "attribute_removed": "#/components/schemas/AttributeRemovedEntryRead",
+                      "closed": "#/components/schemas/DiscussionClosedEntryRead",
+                      "conclusion": "#/components/schemas/ConclusionEntryRead",
                       "created": "#/components/schemas/PlainEntryRead",
                       "decision": "#/components/schemas/DecisionEntryRead",
+                      "detached": "#/components/schemas/AttachmentEntryRead",
                       "field_changed": "#/components/schemas/FieldChangedEntryRead",
                       "finding": "#/components/schemas/FindingEntryRead",
                       "link_added": "#/components/schemas/LinkEntryRead",
@@ -9499,6 +10682,15 @@
                     },
                     {
                       "$ref": "#/components/schemas/ProjectArchiveEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConclusionEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AttachmentEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DiscussionClosedEntryRead"
                     }
                   ]
                 }
@@ -9822,7 +11014,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -9870,7 +11062,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -9894,6 +11086,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
             "examples": [
               null
             ]
@@ -9923,7 +11123,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -10271,7 +11471,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -10312,14 +11512,22 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
           },
           "task_key": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Task Key",
+            "description": "Key of the owning task; `null` for an entry of a discussion's case",
             "examples": [
               "TRK-42"
             ]
@@ -10336,6 +11544,21 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discussion",
+            "description": "Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise",
             "examples": [
               null
             ]
@@ -10365,7 +11588,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -10501,7 +11724,7 @@
             "type": "integer",
             "minimum": 1.0,
             "title": "Question No",
-            "description": "Number of a `question` entry of the same task",
+            "description": "Number of a `question` entry of the same case: the task or the discussion",
             "examples": [
               7
             ]
@@ -10531,7 +11754,7 @@
               }
             ],
             "title": "Replaced By",
-            "description": "Number of a later `question` entry of the same task that replaces this one; required with `replaced` and not accepted with any other outcome",
+            "description": "Number of a later `question` entry of the same case that replaces this one; required with `replaced` and not accepted with any other outcome",
             "examples": [
               null
             ]
@@ -10561,7 +11784,7 @@
             "type": "integer",
             "minimum": 1.0,
             "title": "Question No",
-            "description": "Number of a `question` entry of the same task",
+            "description": "Number of a `question` entry of the same case: the task or the discussion",
             "examples": [
               7
             ]
@@ -10584,7 +11807,7 @@
               }
             ],
             "title": "Replaced By",
-            "description": "Number of a later `question` entry of the same task that replaces this one; required with `replaced` and not accepted with any other outcome",
+            "description": "Number of a later `question` entry of the same case that replaces this one; required with `replaced` and not accepted with any other outcome",
             "examples": [
               null
             ]
@@ -10618,7 +11841,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -10642,6 +11865,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: a question of a task's case belongs to the task",
             "examples": [
               null
             ]
@@ -10671,7 +11902,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -10726,7 +11957,7 @@
           },
           "answers": {
             "items": {
-              "$ref": "#/components/schemas/AnswerEntryRead"
+              "$ref": "#/components/schemas/QuestionAnswerRead"
             },
             "type": "array",
             "title": "Answers",
@@ -10748,7 +11979,7 @@
           "payload"
         ],
         "title": "AnsweredQuestionRead",
-        "description": "Вопрос в выдаче поперёк задач (`GET /api/v1/questions`) вместе с ответами.\n\nОтдельная модель, а не поле у `QuestionEntryRead`: в деле задачи ответ — своя\nзапись рядом с вопросом, и вложить его туда значило бы отдать одну запись дважды.\nЗдесь дела рядом нет, и без вложения клиенту пришлось бы собирать ответы запросом\nна каждую задачу."
+        "description": "Вопрос в выдаче поперёк задач (`GET /api/v1/questions`) вместе с ответами.\n\nОтдельная модель, а не поле у `QuestionEntryRead`: в деле задачи ответ — своя\nзапись рядом с вопросом, и вложить его туда значило бы отдать одну запись дважды.\nЗдесь дела рядом нет, и без вложения клиенту пришлось бы собирать ответы запросом\nна каждую задачу. Выдача идёт по делам задач, поэтому `task_key` — строка, а\n`discussion` — `null` (`TaskQuestionRead`)."
       },
       "ArchiveFormat": {
         "type": "string",
@@ -11061,7 +12292,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -11257,7 +12488,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -11281,6 +12512,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
             "examples": [
               null
             ]
@@ -11310,7 +12549,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11456,6 +12695,250 @@
         "title": "AssigneeChangedPayload",
         "description": "Смена исполнителя. `null` с любой стороны означает «исполнителя не было»."
       },
+      "AttachmentEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Key",
+            "description": "Key of the owning task; `null` for an entry of a discussion's case",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "area": {
+            "type": "null",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discussion",
+            "description": "Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise",
+            "examples": [
+              null
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "attached",
+              "detached"
+            ],
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AttachmentPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "AttachmentEntryRead",
+        "description": "Служебная запись: задача привязана к обсуждению или отвязана — в деле обеих сторон."
+      },
+      "AttachmentFactsRead": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "attached",
+              "detached"
+            ],
+            "title": "Type"
+          },
+          "task_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Key",
+            "description": "The task",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "discussion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discussion",
+            "description": "Address of the discussion",
+            "examples": [
+              "TRK~7"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "AttachmentFactsRead",
+        "description": "Привязка задачи к обсуждению или её снятие: обе стороны."
+      },
+      "AttachmentPayload": {
+        "properties": {
+          "task": {
+            "type": "string",
+            "title": "Task",
+            "description": "Key of the task",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "discussion": {
+            "type": "string",
+            "title": "Discussion",
+            "description": "Address of the discussion",
+            "examples": [
+              "TRK~7"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task",
+          "discussion"
+        ],
+        "title": "AttachmentPayload",
+        "description": "Задача привязана к обсуждению или отвязана. Подшивается в дело обеих сторон."
+      },
       "AttributeChangedEntryRead": {
         "properties": {
           "id": {
@@ -11474,7 +12957,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -11517,6 +13000,14 @@
               null
             ]
           },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
+            "examples": [
+              null
+            ]
+          },
           "author": {
             "$ref": "#/components/schemas/AuthorRead"
           },
@@ -11542,7 +13033,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11671,7 +13162,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -11714,6 +13205,14 @@
               null
             ]
           },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
+            "examples": [
+              null
+            ]
+          },
           "author": {
             "$ref": "#/components/schemas/AuthorRead"
           },
@@ -11739,7 +13238,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11964,7 +13463,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -12007,6 +13506,14 @@
               null
             ]
           },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
+            "examples": [
+              null
+            ]
+          },
           "author": {
             "$ref": "#/components/schemas/AuthorRead"
           },
@@ -12032,7 +13539,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -12264,6 +13771,14 @@
             "examples": [
               1
             ]
+          },
+          "open_discussions": {
+            "type": "integer",
+            "title": "Open Discussions",
+            "description": "Discussions that are not closed and wait for a human (`turn: human`: a question with no answer), in projects that are not archived — the inbox by discussions. A turn has no addressee, so the number is the same for every token",
+            "examples": [
+              2
+            ]
           }
         },
         "type": "object",
@@ -12271,7 +13786,8 @@
           "token",
           "projects",
           "open_questions",
-          "open_warnings"
+          "open_warnings",
+          "open_discussions"
         ],
         "title": "BootstrapRead",
         "description": "Всё, что нужно интерфейсу до первой отрисовки, и ничего сверх этого."
@@ -12352,6 +13868,26 @@
         ],
         "title": "CitedDecisionRead",
         "description": "Решение проекта, на которое ссылается задача, и его преемник (`CONCEPT.md`, 4.2).\n\nТа же форма, что у `get_task` в MCP (`CitedDecisionView`): пакет задачи совпадает в\nобоих интерфейсах поле в поле."
+      },
+      "ClosedPayload": {
+        "properties": {
+          "conclusion_no": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Conclusion No",
+            "description": "Number of the conclusion the discussion closed with",
+            "examples": [
+              9
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "conclusion_no"
+        ],
+        "title": "ClosedPayload",
+        "description": "Обсуждение закрыто: номер итога, с которым закрыто, — запись строкой выше."
       },
       "ClosingEntryCreate": {
         "oneOf": [
@@ -12496,6 +14032,25 @@
         ],
         "title": "CollectionResponse[AreaRead]"
       },
+      "CollectionResponse_DiscussionRead_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DiscussionRead"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "CollectionResponse[DiscussionRead]"
+      },
       "CollectionResponse_EntryRead_": {
         "properties": {
           "data": {
@@ -12610,6 +14165,201 @@
         ],
         "title": "CollectionResponse[TokenRead]"
       },
+      "ConclusionEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "null",
+            "title": "Task Key",
+            "description": "Always `null`: entries of this type belong to a discussion",
+            "examples": [
+              null
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "area": {
+            "type": "null",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "string",
+            "title": "Discussion",
+            "description": "Address of the owning discussion; the entry address is `TRK~7#3`",
+            "examples": [
+              "TRK~7"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "conclusion",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ConclusionPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "discussion",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "ConclusionEntryRead",
+        "description": "Итог обсуждения: решено, заменено, открыто. Последний главнее предыдущих."
+      },
+      "ConclusionPayload": {
+        "properties": {
+          "decided": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Decided",
+            "description": "What is decided, each line with the entry it follows from. Its first line becomes the entry title",
+            "examples": [
+              "Обсуждение — своя сущность проекта (TRK~7#4)"
+            ]
+          },
+          "superseded": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Superseded",
+            "description": "What an earlier answer decided and a later one replaced; `nothing` is valid",
+            "examples": [
+              "ничего"
+            ]
+          },
+          "open": {
+            "type": "string",
+            "maxLength": 16384,
+            "minLength": 1,
+            "title": "Open",
+            "description": "What is still open; `nothing` is valid",
+            "examples": [
+              "ничего"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decided",
+          "superseded",
+          "open"
+        ],
+        "title": "ConclusionPayload",
+        "description": "Итог обсуждения: что решено, что заменено, что открыто (решение `TRK#51`, п. 2).\n\nВсе три части непустые; «ничего» — законное значение части. Последний итог главнее\nпредыдущих, как сводка у задачи."
+      },
       "CurrentTokenRead": {
         "properties": {
           "id": {
@@ -12719,6 +14469,30 @@
           "data"
         ],
         "title": "DataResponse[BootstrapRead]"
+      },
+      "DataResponse_DiscussionDetailRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DiscussionDetailRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[DiscussionDetailRead]"
+      },
+      "DataResponse_DiscussionTaskRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DiscussionTaskRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[DiscussionTaskRead]"
       },
       "DataResponse_EntryRead_": {
         "properties": {
@@ -12902,7 +14676,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -12917,7 +14691,7 @@
               }
             ],
             "title": "Task Key",
-            "description": "Key of the owning task; `null` for an entry of a project's or an area's case",
+            "description": "Key of the owning task; `null` for an entry of a project's, an area's or a discussion's case",
             "examples": [
               "TRK-42"
             ]
@@ -12932,7 +14706,7 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for an area or a discussion entry",
             "examples": [
               null
             ]
@@ -12948,6 +14722,21 @@
             ],
             "title": "Area",
             "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discussion",
+            "description": "Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise",
             "examples": [
               null
             ]
@@ -12977,7 +14766,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -13151,6 +14940,613 @@
         "title": "DecisionsChangedPayload",
         "description": "Правка решений проекта задачи (`decisions`): списки ссылок «было» и «стало».\n\nСвоя форма, а не расширение `FieldChangedPayload` до «строка либо список»: там\nзначения — строки, и объединение «на всякий случай» сделало бы тип каждого поля\nобвязки неопределённым. Разметка — `field`: у этой формы оно всегда `decisions`."
       },
+      "DiscussionClosedEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "null",
+            "title": "Task Key",
+            "description": "Always `null`: entries of this type belong to a discussion",
+            "examples": [
+              null
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "area": {
+            "type": "null",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "string",
+            "title": "Discussion",
+            "description": "Address of the owning discussion; the entry address is `TRK~7#3`",
+            "examples": [
+              "TRK~7"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "closed",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ClosedPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "discussion",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "DiscussionClosedEntryRead",
+        "description": "Служебная запись: обсуждение закрыто итогом, номер которого в нагрузке."
+      },
+      "DiscussionCreate": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project",
+            "description": "Project key; matching ignores case",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "description": "The narrow question, one line. A line break or a blank title answers `422 entry_fields_invalid` (field `title`)",
+            "examples": [
+              "Обсуждение — своя сущность или ярлык над записями задач?"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Body",
+            "description": "Markdown body of the first entry, a note: the context of the question",
+            "default": "",
+            "examples": [
+              "Контекст: вопросы растекаются по задачам…"
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Refs",
+            "description": "References of the first entry, as in any case entry",
+            "examples": [
+              [
+                "TRK-667#8"
+              ]
+            ]
+          },
+          "tasks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Tasks",
+            "description": "Keys of the tasks that depend on the outcome, attached by the same action. A closed task answers `409 task_closed`",
+            "examples": [
+              [
+                "TRK-42"
+              ]
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project",
+          "title"
+        ],
+        "title": "DiscussionCreate",
+        "description": "Новое обсуждение запиской — «Новое обсуждение» интерфейса (решение `TRK#51`, п. 8).\n\nНазвание — сам узкий вопрос одной строкой; оно же заголовок первой записи дела,\nзаметки с телом `body`. Задачи из `tasks` привязываются тем же действием. Завести\nобсуждение вопросом может агент — через MCP (TRK-671)."
+      },
+      "DiscussionDetailRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Key of the project; never changes",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number",
+            "description": "Number inside the project, from 1",
+            "examples": [
+              7
+            ]
+          },
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the discussion: the project key and its number, `TRK~7`. References to its case entries are `TRK~7#3`",
+            "examples": [
+              "TRK~7"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "The narrow question itself, one line; the title of the first entry",
+            "examples": [
+              "Обсуждение — своя сущность или ярлык над записями задач?"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/DiscussionStatus",
+            "description": "`open` or `closed`. A closed discussion never reopens and is frozen: any entry, attaching or detaching answers `409 discussion_closed`",
+            "examples": [
+              "open"
+            ]
+          },
+          "turn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscussionTurn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whose move it is, computed on read: `human` — a question has no answer yet; `agent` — no open questions, but an answer or a person's entry came after the latest conclusion; `null` — neither, and always on a closed discussion",
+            "examples": [
+              "human"
+            ]
+          },
+          "open_questions": {
+            "type": "integer",
+            "title": "Open Questions",
+            "description": "Questions of the discussion with no answer yet",
+            "examples": [
+              1
+            ]
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At",
+            "description": "When the discussion was closed; `null` while open",
+            "examples": [
+              null
+            ]
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/DiscussionTaskRead"
+            },
+            "type": "array",
+            "title": "Tasks",
+            "description": "Tasks attached to the discussion, in the order they were attached. Attaching says a task depends on the outcome: it cannot go into work while a question here has no answer, nor be closed or cancelled while the discussion is open"
+          },
+          "conclusion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConclusionEntryRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The latest conclusion — what is decided, superseded and still open; it outranks the earlier ones. `null` until the first conclusion is filed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_key",
+          "number",
+          "address",
+          "title",
+          "status",
+          "turn",
+          "open_questions",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "closed_at",
+          "tasks",
+          "conclusion"
+        ],
+        "title": "DiscussionDetailRead",
+        "description": "Одно обсуждение для его экрана: привязанные задачи и последний итог сверху."
+      },
+      "DiscussionNoteCreate": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Body",
+            "description": "Markdown body of the entry",
+            "default": ""
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
+            "examples": [
+              []
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Номер задачи выдаётся до валидации"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "note",
+            "title": "Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "type"
+        ],
+        "title": "DiscussionNoteCreate",
+        "description": "Заметка в деле обсуждения: человек пишет её сам, без вопроса (решение `TRK#51`, п. 2).\n\nСвободная запись человека задаёт работу привязанных задач, как ответ (`TRK#51`, п. 5)."
+      },
+      "DiscussionOrder": {
+        "type": "string",
+        "enum": [
+          "oldest",
+          "newest"
+        ],
+        "title": "DiscussionOrder",
+        "description": "Порядок списка обсуждений: входящей — от старых, истории — от свежих.\n\nТе же два вопроса человека, что у выдачи вопросов (`QuestionOrder`): дольше всех ждёт\nто, что заведено первым, а в истории ищут недавнее."
+      },
+      "DiscussionRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Key of the project; never changes",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number",
+            "description": "Number inside the project, from 1",
+            "examples": [
+              7
+            ]
+          },
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the discussion: the project key and its number, `TRK~7`. References to its case entries are `TRK~7#3`",
+            "examples": [
+              "TRK~7"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "The narrow question itself, one line; the title of the first entry",
+            "examples": [
+              "Обсуждение — своя сущность или ярлык над записями задач?"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/DiscussionStatus",
+            "description": "`open` or `closed`. A closed discussion never reopens and is frozen: any entry, attaching or detaching answers `409 discussion_closed`",
+            "examples": [
+              "open"
+            ]
+          },
+          "turn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscussionTurn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whose move it is, computed on read: `human` — a question has no answer yet; `agent` — no open questions, but an answer or a person's entry came after the latest conclusion; `null` — neither, and always on a closed discussion",
+            "examples": [
+              "human"
+            ]
+          },
+          "open_questions": {
+            "type": "integer",
+            "title": "Open Questions",
+            "description": "Questions of the discussion with no answer yet",
+            "examples": [
+              1
+            ]
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At",
+            "description": "When the discussion was closed; `null` while open",
+            "examples": [
+              null
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_key",
+          "number",
+          "address",
+          "title",
+          "status",
+          "turn",
+          "open_questions",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "closed_at"
+        ],
+        "title": "DiscussionRead",
+        "description": "Обсуждение в ответе: карточка и признаки, посчитанные при чтении."
+      },
+      "DiscussionStatus": {
+        "type": "string",
+        "enum": [
+          "open",
+          "closed"
+        ],
+        "title": "DiscussionStatus",
+        "description": "Статус обсуждения: открыто или закрыто. Закрытое не открывается снова."
+      },
+      "DiscussionTaskAttach": {
+        "properties": {
+          "task": {
+            "type": "string",
+            "title": "Task",
+            "description": "Key of the task; matching ignores case",
+            "examples": [
+              "TRK-42"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task"
+        ],
+        "title": "DiscussionTaskAttach",
+        "description": "Привязка задачи к обсуждению."
+      },
+      "DiscussionTaskRead": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Бэкенд обсуждения"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus",
+            "examples": [
+              "open"
+            ]
+          },
+          "attached_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "attached_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Attached At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "title",
+          "status",
+          "attached_by",
+          "attached_at"
+        ],
+        "title": "DiscussionTaskRead",
+        "description": "Привязанная задача: ключ, название, статус и кто привязал."
+      },
+      "DiscussionTurn": {
+        "type": "string",
+        "enum": [
+          "human",
+          "agent"
+        ],
+        "title": "DiscussionTurn",
+        "description": "Чей ход в обсуждении (`TRK#51`, п. 4); отсутствие значения — «ничей».\n\n`human` — в деле есть вопрос без ответа. `agent` — вопросов без ответа нет, но после\nпоследнего итога есть ответ или запись человека: агенту читать её и писать итог."
+      },
       "EmptyPayload": {
         "properties": {},
         "additionalProperties": false,
@@ -13198,6 +15594,9 @@
           },
           {
             "$ref": "#/components/schemas/WarningFactsRead"
+          },
+          {
+            "$ref": "#/components/schemas/AttachmentFactsRead"
           }
         ],
         "discriminator": {
@@ -13208,12 +15607,16 @@
             "archived": "#/components/schemas/NoFactsRead",
             "artifact": "#/components/schemas/NoFactsRead",
             "assignee_changed": "#/components/schemas/AssigneeChangedFactsRead",
+            "attached": "#/components/schemas/AttachmentFactsRead",
             "attempt": "#/components/schemas/NoFactsRead",
             "attribute_changed": "#/components/schemas/AttributeFactsRead",
             "attribute_created": "#/components/schemas/AttributeFactsRead",
             "attribute_removed": "#/components/schemas/AttributeFactsRead",
+            "closed": "#/components/schemas/NoFactsRead",
+            "conclusion": "#/components/schemas/NoFactsRead",
             "created": "#/components/schemas/NoFactsRead",
             "decision": "#/components/schemas/NoFactsRead",
+            "detached": "#/components/schemas/AttachmentFactsRead",
             "field_changed": "#/components/schemas/FieldChangedFactsRead",
             "finding": "#/components/schemas/NoFactsRead",
             "link_added": "#/components/schemas/LinkFactsRead",
@@ -13237,7 +15640,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -13360,6 +15763,15 @@
           },
           {
             "$ref": "#/components/schemas/ProjectArchiveEntryRead"
+          },
+          {
+            "$ref": "#/components/schemas/ConclusionEntryRead"
+          },
+          {
+            "$ref": "#/components/schemas/AttachmentEntryRead"
+          },
+          {
+            "$ref": "#/components/schemas/DiscussionClosedEntryRead"
           }
         ],
         "discriminator": {
@@ -13370,12 +15782,16 @@
             "archived": "#/components/schemas/ProjectArchiveEntryRead",
             "artifact": "#/components/schemas/PlainEntryRead",
             "assignee_changed": "#/components/schemas/AssigneeChangedEntryRead",
+            "attached": "#/components/schemas/AttachmentEntryRead",
             "attempt": "#/components/schemas/PlainEntryRead",
             "attribute_changed": "#/components/schemas/AttributeChangedEntryRead",
             "attribute_created": "#/components/schemas/AttributeCreatedEntryRead",
             "attribute_removed": "#/components/schemas/AttributeRemovedEntryRead",
+            "closed": "#/components/schemas/DiscussionClosedEntryRead",
+            "conclusion": "#/components/schemas/ConclusionEntryRead",
             "created": "#/components/schemas/PlainEntryRead",
             "decision": "#/components/schemas/DecisionEntryRead",
+            "detached": "#/components/schemas/AttachmentEntryRead",
             "field_changed": "#/components/schemas/FieldChangedEntryRead",
             "finding": "#/components/schemas/FindingEntryRead",
             "link_added": "#/components/schemas/LinkEntryRead",
@@ -13408,6 +15824,7 @@
           "remark",
           "resolution",
           "acceptance",
+          "conclusion",
           "note",
           "created",
           "status_changed",
@@ -13418,6 +15835,9 @@
           "link_removed",
           "moved",
           "warning",
+          "attached",
+          "detached",
+          "closed",
           "attribute_created",
           "attribute_changed",
           "attribute_removed",
@@ -13488,7 +15908,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -13503,7 +15923,7 @@
               }
             ],
             "title": "Task Key",
-            "description": "Key of the owning task; `null` for an entry of a project's or an area's case",
+            "description": "Key of the owning task; `null` for an entry of a project's, an area's or a discussion's case",
             "examples": [
               "TRK-42"
             ]
@@ -13518,7 +15938,7 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for an area or a discussion entry",
             "examples": [
               null
             ]
@@ -13534,6 +15954,21 @@
             ],
             "title": "Area",
             "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discussion",
+            "description": "Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise",
             "examples": [
               null
             ]
@@ -13563,7 +15998,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -13728,7 +16163,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -13743,7 +16178,7 @@
               }
             ],
             "title": "Task Key",
-            "description": "Key of the owning task; `null` for an entry of a project's or an area's case",
+            "description": "Key of the owning task; `null` for an entry of a project's, an area's or a discussion's case",
             "examples": [
               "TRK-42"
             ]
@@ -13758,7 +16193,7 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for an area or a discussion entry",
             "examples": [
               null
             ]
@@ -13774,6 +16209,21 @@
             ],
             "title": "Area",
             "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discussion",
+            "description": "Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise",
             "examples": [
               null
             ]
@@ -13803,7 +16253,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -14078,7 +16528,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -14102,6 +16552,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
             "examples": [
               null
             ]
@@ -14131,7 +16589,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -14339,7 +16797,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -14363,6 +16821,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
             "examples": [
               null
             ]
@@ -14392,7 +16858,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -14575,8 +17041,10 @@
               "artifact",
               "remark",
               "acceptance",
+              "conclusion",
               "note",
               "created",
+              "closed",
               "archived",
               "restored"
             ],
@@ -14978,7 +17446,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -15032,7 +17500,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -15047,7 +17515,7 @@
               }
             ],
             "title": "Task Key",
-            "description": "Key of the owning task; `null` for an entry of a project's or an area's case",
+            "description": "Key of the owning task; `null` for an entry of a project's, an area's or a discussion's case",
             "examples": [
               "TRK-42"
             ]
@@ -15062,7 +17530,7 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for an area or a discussion entry",
             "examples": [
               null
             ]
@@ -15078,6 +17546,21 @@
             ],
             "title": "Area",
             "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discussion",
+            "description": "Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise",
             "examples": [
               null
             ]
@@ -15107,7 +17590,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -15200,7 +17683,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -15243,6 +17726,14 @@
               null
             ]
           },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
+            "examples": [
+              null
+            ]
+          },
           "author": {
             "$ref": "#/components/schemas/AuthorRead"
           },
@@ -15268,7 +17759,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -15636,7 +18127,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -15815,6 +18306,156 @@
         "title": "ProjectUpdate",
         "description": "Частичное обновление: применяется только переданное.\n\nПоля `key` здесь нет и не будет: ключ вшит в ключ каждой задачи проекта, и правка\nзадним числом порвала бы все уже записанные ссылки. Схема отвергает лишнее поле, а\nне игнорирует его молча — иначе клиент получил бы `200` на изменение, которого не\nбыло."
       },
+      "QuestionAnswerRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "string",
+            "title": "Task Key",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "area": {
+            "type": "null",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: the questions listing reads the cases of tasks",
+            "examples": [
+              null
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "answer",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AnswerPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "QuestionAnswerRead",
+        "description": "Ответ на вопрос задачи в выдаче поперёк задач: владелец — всегда задача.\n\nСужение `AnswerEntryRead` для `GET /api/v1/questions`: выдача идёт по делам задач, и\nклиенту незачем проверять на `null` ключ, который `null` быть не может."
+      },
       "QuestionEntryCreate": {
         "properties": {
           "body": {
@@ -15831,7 +18472,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -15883,14 +18524,22 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
           },
           "task_key": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Task Key",
+            "description": "Key of the owning task; `null` for an entry of a discussion's case",
             "examples": [
               "TRK-42"
             ]
@@ -15907,6 +18556,21 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discussion",
+            "description": "Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise",
             "examples": [
               null
             ]
@@ -15936,7 +18600,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -16078,7 +18742,7 @@
           "blocking": {
             "type": "boolean",
             "title": "Blocking",
-            "description": "Whether work can continue without an answer. Required, no default",
+            "description": "Whether work can continue without an answer. Required, no default. Always `true` on a question of a discussion: any such question holds the tasks attached to it",
             "examples": [
               true
             ]
@@ -16165,7 +18829,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -16213,7 +18877,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -16237,6 +18901,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
             "examples": [
               null
             ]
@@ -16266,7 +18938,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -16396,7 +19068,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -16437,7 +19109,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -16461,6 +19133,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
             "examples": [
               null
             ]
@@ -16490,7 +19170,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -16678,7 +19358,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -16702,6 +19382,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
             "examples": [
               null
             ]
@@ -16731,7 +19419,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -17159,7 +19847,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -17183,6 +19871,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
             "examples": [
               null
             ]
@@ -17212,7 +19908,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -17389,7 +20085,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -17430,7 +20126,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -17454,6 +20150,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
             "examples": [
               null
             ]
@@ -17483,7 +20187,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -18555,11 +21259,11 @@
           },
           "questions": {
             "items": {
-              "$ref": "#/components/schemas/QuestionEntryRead"
+              "$ref": "#/components/schemas/TaskQuestionRead"
             },
             "type": "array",
             "title": "Questions",
-            "description": "Every question with no answer yet, in full"
+            "description": "Every question of the task's case with no answer yet, in full"
           },
           "remarks": {
             "items": {
@@ -18694,6 +21398,156 @@
         ],
         "title": "TaskProjectRead",
         "description": "Проект в карточке задачи: ключ, название, короткое описание и архив (`CONCEPT.md`, 4.2).\n\nОписание не длиннее 320 знаков как раз затем, чтобы ехать здесь: агент получает\nконтекст проекта тем же чтением задачи, без второго вызова. `archived_at` по той же\nпричине: заморожен ли проект, видно до первого отказа `project_archived` (TRK-167)."
+      },
+      "TaskQuestionRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "string",
+            "title": "Task Key",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "project_key": {
+            "type": "null",
+            "title": "Project Key",
+            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "examples": [
+              null
+            ]
+          },
+          "area": {
+            "type": "null",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: a question of a task's case belongs to the task",
+            "examples": [
+              null
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "question",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/QuestionPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "TaskQuestionRead",
+        "description": "Вопрос дела задачи: владелец — всегда задача.\n\nСужение `QuestionEntryRead` там, где вопрос приходит из дела задачи, — в пакете\nпреемника и в выдаче вопросов поперёк задач: клиенту незачем проверять на `null`\nключ, который `null` быть не может."
       },
       "TaskRead": {
         "properties": {
@@ -19747,7 +22601,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -19788,7 +22642,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -19812,6 +22666,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
             "examples": [
               null
             ]
@@ -19841,7 +22703,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -20052,7 +22914,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
             "examples": [
               12
             ]
@@ -20076,6 +22938,14 @@
             "type": "null",
             "title": "Area",
             "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
             "examples": [
               null
             ]
@@ -20105,7 +22975,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",

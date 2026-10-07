@@ -23,6 +23,9 @@
   опустевший `LEGACY` уходит в архив и в списке проектов не виден;
 - открытый блокирующий вопрос, адресованный человеку, — «входящая» и первый экран
   без него пусты;
+- обсуждения (решение `TRK#51`): закрытое с итогом — вопрос, ответ, итог, привязка и
+  отвязка задачи; открытое с вопросом к человеку, к которому привязана ждущая задача, —
+  входящая по обсуждениям; заведённое человеком запиской — ход за агентом;
 - связи всех трёх видов;
 - три автора: человек, постоянный агент и временный агент, подписанный меткой.
 
@@ -50,6 +53,7 @@ from app.domain.projects import normalize_project_key
 from app.domain.tasks import TaskPriority, TaskStatus
 from app.services import attributes as attributes_service
 from app.services import case as case_service
+from app.services import discussions as discussions_service
 from app.services import links as links_service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
@@ -160,6 +164,16 @@ async def seed_demo(session: AsyncSession) -> DemoData:
 
     accepted = await _accepted_warning_task(session, project, agent=agent, human=human)
     deferred = await _deferred_task(session, project, agent=agent)
+    await _discussions(
+        session,
+        project,
+        agent=agent,
+        owner=owner,
+        human=human,
+        awaiting=awaiting,
+        child=child,
+        checking=checking,
+    )
 
     return DemoData(
         project=project,
@@ -835,6 +849,79 @@ async def _cancelled_task(session: AsyncSession, project: Project, *, agent: Act
         reason="Лента с ожиданием закрывает ту же потребность; вебхуки отвергнуты концепцией",
     )
     return task
+
+
+async def _discussions(
+    session: AsyncSession,
+    project: Project,
+    *,
+    agent: Actor,
+    owner: Actor,
+    human: Participant,
+    awaiting: Task,
+    child: Task,
+    checking: Task,
+) -> None:
+    """Три обсуждения (решение `TRK#51`): закрытое, ждущее человека и ждущее агента.
+
+    Заводятся последними, после всех задач, — ключи задач и номера их записей, по которым
+    ходят сквозные сценарии интерфейса, от этого не сдвигаются. Кандидат назначателя
+    остаётся один: обсуждение с открытым вопросом привязано к задаче, которая и так ждёт.
+    """
+    # Закрытое: вопрос, ответ, итог и `closed`; одна задача привязана и отвязана.
+    settled = await discussions_service.create_discussion(
+        session,
+        actor=agent,
+        project=project,
+        title="Показывать ли во входящей вопросы архивных проектов?",
+        opening=EntryType.QUESTION,
+        body="Ответить на них нельзя, пока проект в архиве; показывать — значит звать в тупик.",
+        addressees=[human.name],
+        tasks=[child, checking],
+    )
+    question_no = 2  # `created` — первая запись дела, вопрос, которым оно заведено, — вторая
+    answer = await case_service.append_discussion_entry(
+        session,
+        settled,
+        actor=owner,
+        type=EntryType.ANSWER,
+        body="Не показывать. Вернётся проект из архива — вернутся и вопросы.",
+        payload={"question_no": question_no},
+    )
+    await discussions_service.detach_task(session, settled, checking, actor=agent)
+    await discussions_service.close_discussion(
+        session,
+        settled,
+        actor=agent,
+        decided=(
+            f"Вопросы архивных проектов во входящей не показываются ({settled.address}#{answer.no})"
+        ),
+        superseded="ничего",
+        open="ничего",
+        refs=[f"{settled.address}#{answer.no}"],
+    )
+
+    # Ждёт человека: вопрос без ответа держит привязанную задачу.
+    await discussions_service.create_discussion(
+        session,
+        actor=agent,
+        project=project,
+        title="Сколько хранить дела отменённых задач?",
+        opening=EntryType.QUESTION,
+        body="Концепция говорит «записи постоянны»; менять её может только владелец.",
+        addressees=[human.name],
+        tasks=[awaiting],
+    )
+
+    # Ждёт агента: человек завёл обсуждение запиской, без задач.
+    await discussions_service.create_discussion(
+        session,
+        actor=owner,
+        project=project,
+        title="Нужна ли ночная тема для демо-записи?",
+        opening=EntryType.NOTE,
+        body="Посмотрел запись в тёмной теме — читается хуже. Подумайте, что с этим делать.",
+    )
 
 
 async def _moved_there_and_back(

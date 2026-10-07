@@ -19,10 +19,10 @@ from app.api.schemas.decisions import CitedDecisionRead
 from app.api.schemas.entries import (
     ClosingEntryCreate,
     EntryHeadingRead,
-    QuestionEntryRead,
     RemarkEntryRead,
     SummaryEntryRead,
     SummaryPartsPayload,
+    TaskQuestionRead,
 )
 from app.api.schemas.links import LinkTaskRead, TaskLinkRead
 from app.domain.areas import MAX_AREA_DESCRIPTION_LENGTH
@@ -450,8 +450,8 @@ class TaskPackageRead(BaseModel):
             "way, what is next. Null until the case has one"
         ),
     )
-    questions: list[QuestionEntryRead] = Field(
-        description="Every question with no answer yet, in full"
+    questions: list[TaskQuestionRead] = Field(
+        description="Every question of the task's case with no answer yet, in full"
     )
     remarks: list[RemarkEntryRead] = Field(
         description="Every remark with no resolution yet, in full"

@@ -15,6 +15,7 @@ from app.domain.case import (
     TITLED_ENTRY_TYPES,
     AnswerFacts,
     AssigneeChangedFacts,
+    AttachmentFacts,
     AttributeFacts,
     EntryFacts,
     EntryHeading,
@@ -56,8 +57,10 @@ class NoFactsView(BaseModel):
         EntryType.ARTIFACT,
         EntryType.REMARK,
         EntryType.ACCEPTANCE,
+        EntryType.CONCLUSION,
         EntryType.NOTE,
         EntryType.CREATED,
+        EntryType.CLOSED,
         EntryType.ARCHIVED,
         EntryType.RESTORED,
     ]
@@ -163,6 +166,14 @@ class WarningFactsView(BaseModel):
     unverifiable: list[int] | None
 
 
+class AttachmentFactsView(BaseModel):
+    """Task attached to a discussion or detached from it: both sides."""
+
+    type: Literal[EntryType.ATTACHED, EntryType.DETACHED]
+    task_key: str | None
+    discussion: str | None
+
+
 type FactsView = Annotated[
     NoFactsView
     | StatusChangedFactsView
@@ -176,7 +187,8 @@ type FactsView = Annotated[
     | ResolutionFactsView
     | AttributeFactsView
     | MovedFactsView
-    | WarningFactsView,
+    | WarningFactsView
+    | AttachmentFactsView,
     Field(discriminator="type"),
 ]
 """Факты записи: те же формы и те же поля в том же порядке, что в схеме REST."""
@@ -257,6 +269,10 @@ def facts(value: EntryFacts) -> FactsView:
                 partial=None if value.partial is None else list(value.partial),
                 unverifiable=None if value.unverifiable is None else list(value.unverifiable),
             )
+        case AttachmentFacts():
+            return AttachmentFactsView(
+                type=value.type, task_key=value.task_key, discussion=value.discussion
+            )
     # Форма фактов, заведённая в домене без представления здесь, — дефект объединения, а
     # не рабочее состояние: молча вернуть `None` значило бы отдать агенту опись без строки.
     raise TypeError(f"форма фактов без представления MCP: {type(value).__name__}")
@@ -319,6 +335,10 @@ class EntryView(BaseModel):
         default=None,
         description="Address of the owning area (`TRK/promotion#3`); `null` otherwise",
     )
+    discussion: str | None = Field(
+        default=None,
+        description="Address of the owning discussion (`TRK~7#3`); `null` otherwise",
+    )
     type: EntryTypeSchema
     author: AuthorView
     title: str
@@ -375,15 +395,17 @@ def entry(
     task_key: str | None = None,
     project_key: str | None = None,
     area: str | None = None,
+    discussion: str | None = None,
     standing: Standing | None = None,
 ) -> EntryView:
     """Запись дела целиком. Ключ владельца приходит извне: у записи только `task_id`,
-    `project_id` или `area_id`. Передаётся ровно один — как и в REST (`entry_read`).
+    `project_id`, `area_id` или `discussion_id`. Передаётся ровно один — как и в REST
+    (`entry_read`).
     Нагрузка читается тем же правилом, что и в REST, — `read_payload`: ответ, подшитый до
     исходов, приходит с `outcome: answered`, а не без ключа. `standing` — статус решения
     или заметки, посчитанный чтением дела проекта; без него `status` и `superseded_by`
     в ответе MCP нет вовсе (в REST — `null`)."""
-    owners = [key for key in (task_key, project_key, area) if key is not None]
+    owners = [key for key in (task_key, project_key, area, discussion) if key is not None]
     assert len(owners) == 1, "entry owner is exactly one key"
     return EntryView(
         id=str(value.id),
@@ -392,6 +414,7 @@ def entry(
         task_key=task_key,
         project_key=project_key,
         area=area,
+        discussion=discussion,
         type=value.type,
         author=author(value.author),
         title=value.title,

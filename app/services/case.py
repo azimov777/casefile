@@ -57,6 +57,16 @@
 принимают владельцем и область (`CaseOwner`), а не дублируются: различаются только
 заголовки служебных записей («Area archived») и решения — механики `supersedes` у
 дела области нет. Служебные записи области ставит `app/services/areas.py`.
+
+## Дело обсуждения
+
+Четвёртый владелец (решение `TRK#51`, п. 2), та же точка подшивки `_append` и та же
+лента. Записи — вопрос, ответ, заметка и итог (`append_discussion_entry`), форму
+проверяет `build_entry` с контекстом обсуждения; номер вопроса у ответа ищется в деле
+**этого** обсуждения. Закрытое обсуждение заморожено той же проверкой, что архив
+(`app/services/freeze.py`), и подшивка в него отказывает `discussion_closed`.
+Служебные записи — `created`, `attached`/`detached` и `closed` — ставит
+`app/services/discussions.py`.
 """
 
 import uuid
@@ -70,6 +80,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.locks import lock_changes
 from app.db.models.area import Area
 from app.db.models.author import created_by_columns
+from app.db.models.discussion import Discussion
 from app.db.models.entry import Entry
 from app.db.models.participant import Participant
 from app.db.models.project import Project
@@ -77,6 +88,7 @@ from app.db.models.task import Task
 from app.db.pagination import Page
 from app.db.repositories import (
     AreaRepository,
+    DiscussionRepository,
     EntryRepository,
     ParticipantRepository,
     ProjectRepository,
@@ -90,6 +102,8 @@ from app.domain.case import (
     INCOMPLETE_OUTCOMES,
     REPLACEABLE_ENTRY_TYPES,
     AreaEntryRef,
+    DiscussionEntryRef,
+    DiscussionRef,
     EntryContext,
     EntryDraft,
     EntryHeading,
@@ -97,6 +111,7 @@ from app.domain.case import (
     EntryType,
     ProjectEntryRef,
     QuestionOrder,
+    TaskRef,
     TrackerRef,
     VerdictOutcome,
     WarningCheck,
@@ -111,6 +126,7 @@ from app.domain.case import (
     superseded_numbers,
     warning_title,
 )
+from app.domain.discussions import CONCLUSION_PARTS
 from app.domain.errors import (
     AcceptanceByCloserError,
     ActorNotAddressableError,
@@ -262,17 +278,37 @@ async def open_questions(session: AsyncSession, task: Task, *, actor: Actor) -> 
     return await EntryRepository(session).open_questions(task.id)
 
 
-async def open_blocking_question_nos(session: AsyncSession, task: Task) -> list[int]:
-    """Номера открытых вопросов задачи с `blocking` — факт проверки входа в `in_progress`.
+async def open_discussion_questions(
+    session: AsyncSession, task: Task, *, actor: Actor
+) -> list[tuple[Entry, str]]:
+    """Вопросы без ответа в незакрытых обсуждениях задачи — пары «вопрос и адрес
+    обсуждения». Из них карточка считает вторую долю признаков вопросов (`features`)."""
+    return await EntryRepository(session).open_discussion_questions_of_task(task.id)
 
-    Тот же список открытых вопросов и то же доменное `is_blocking_question`, из которых
-    считается признак `open_blocking_questions` (`features`): отказ на входе и признак в
-    карточке обязаны видеть одни и те же вопросы. Без `actor`: это факт перехода,
-    который сценарий считает под уже занятой очередью изменений, а не чтение для
-    вызывающего.
+
+async def open_blocking_question_refs(session: AsyncSession, task: Task) -> list[str]:
+    """Адреса вопросов, которые держат вход задачи в `in_progress`, — факт проверки входа.
+
+    Две доли, как у признака `open_blocking_questions` (`features`): вопросы с `blocking`
+    в деле задачи — `TRK-42#3`, и любой вопрос без ответа в незакрытом обсуждении, к
+    которому задача привязана, — `TRK~7#3` (решение `TRK#51`, п. 4). Тот же список
+    открытых вопросов и то же доменное `is_blocking_question`, что у признака: отказ на
+    входе и признак в карточке обязаны видеть одни и те же вопросы. Адреса, а не номера:
+    номер вопроса обсуждения без адреса ничего не называет. Без `actor`: это факт
+    перехода, который сценарий считает под уже занятой очередью изменений.
     """
-    questions = await EntryRepository(session).open_questions(task.id)
-    return [question.no for question in questions if is_blocking_question(question.payload)]
+    repository = EntryRepository(session)
+    questions = await repository.open_questions(task.id)
+    in_task = [
+        format_entry_ref(task.key, question.no)
+        for question in questions
+        if is_blocking_question(question.payload)
+    ]
+    in_discussions = [
+        format_entry_ref(address, question.no)
+        for question, address in await repository.open_discussion_questions_of_task(task.id)
+    ]
+    return in_task + in_discussions
 
 
 async def open_remarks(session: AsyncSession, task: Task, *, actor: Actor) -> list[Entry]:
@@ -292,6 +328,7 @@ def features(
     *,
     blocked: bool,
     deferred: bool,
+    discussion_questions: Sequence[Entry],
     remarks: Sequence[Entry] = (),
 ) -> TaskFeatures:
     """Вычисляемые признаки из уже прочитанного, без новых запросов.
@@ -309,14 +346,20 @@ def features(
     проверяется здесь по месту: тот же признак поиск считает запросом, и третьей формы
     одного определения быть не должно. По той же причине открытое предупреждение
     читается из описи доменной `open_warning`.
+
+    `discussion_questions` — вопросы без ответа в незакрытых обсуждениях задачи
+    (`open_discussion_questions`), тоже **без умолчания**: они входят в оба счётчика —
+    признака `blocking` у вопроса обсуждения нет, держит любой (решение `TRK#51`, п. 4).
+    Двойник в поиске — `app/db/repositories/search.py`, `open_question_total`.
     """
     return TaskFeatures(
         blocked=blocked,
         deferred=deferred,
-        open_questions=len(questions),
+        open_questions=len(questions) + len(discussion_questions),
         open_blocking_questions=sum(
             1 for question in questions if is_blocking_question(question.payload)
-        ),
+        )
+        + len(discussion_questions),
         open_remarks=len(remarks),
         open_warnings=0 if open_warning(index) is None else 1,
         last_summary_at=summary.created_at if summary is not None else None,
@@ -1058,6 +1101,202 @@ async def record_restored(
     )
 
 
+# --- Дело обсуждения ------------------------------------------------------------------
+
+
+async def append_discussion_entry(
+    session: AsyncSession,
+    discussion: Discussion,
+    *,
+    actor: Actor,
+    type: Any,
+    title: Any = None,
+    body: Any = "",
+    payload: dict[str, Any] | None = None,
+    refs: Any = (),
+    action_id: uuid.UUID | None = None,
+) -> Entry:
+    """Подшивает запись в дело обсуждения: вопрос, ответ, заметку или итог (`TRK#51`, п. 2).
+
+    Форму проверяет `build_entry` с контекстом обсуждения: набор типов свой, у вопроса нет
+    `blocking`, у итога три непустые части. Дальше — как у задачи: очередь изменений и
+    заморозка первым шагом (архив проекта, затем закрытое обсуждение —
+    `discussion_closed`), потом проверки по базе — адресаты, номер вопроса **в этом**
+    обсуждении, ссылки — и подшивка.
+    """
+    draft = build_entry(
+        EntryContext(task_key=discussion.address, checks=(), discussion=True),
+        type=type,
+        title=title,
+        body=body,
+        payload=payload,
+        refs=refs,
+    )
+    await freeze.lock_unfrozen(session, discussion=discussion)
+    problems = FieldProblems()
+    await _check_addressees(session, draft, problems)
+    await _check_discussion_question_no(session, discussion, draft, problems)
+    await _check_refs(session, discussion, draft, problems)
+    problems.raise_as(EntryFieldsInvalidError, key=discussion.address)
+    return await _append(
+        session,
+        discussion,
+        actor=actor,
+        type=draft.type,
+        title=draft.title,
+        body=draft.body,
+        payload=draft.payload,
+        refs=draft.refs,
+        action_id=action_id,
+    )
+
+
+async def add_conclusion(
+    session: AsyncSession,
+    discussion: Discussion,
+    *,
+    actor: Actor,
+    decided: Any,
+    superseded: Any,
+    open: Any,
+    body: Any = "",
+    refs: Any = (),
+    action_id: uuid.UUID | None = None,
+) -> Entry:
+    """Итог обсуждения: что решено, что заменено, что открыто. Последний главнее.
+
+    Заголовка не принимает: он выводится из первой строки «решено», как у сводки из `done`.
+    """
+    parts = {"decided": decided, "superseded": superseded, "open": open}
+    assert tuple(parts) == CONCLUSION_PARTS  # одна форма частей на домен и на вызов
+    return await append_discussion_entry(
+        session,
+        discussion,
+        actor=actor,
+        type=EntryType.CONCLUSION,
+        body=body,
+        payload=parts,
+        refs=refs,
+        action_id=action_id,
+    )
+
+
+async def list_discussion_entries(
+    session: AsyncSession,
+    discussion: Discussion,
+    *,
+    actor: Actor,
+    nos: Sequence[int] | None = None,
+    types: Sequence[EntryType] | None = None,
+    after_no: int | None = None,
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> Page[Entry]:
+    """Записи дела обсуждения страницами в порядке `no` — те же фильтры, что у задачи."""
+    return await EntryRepository(session).list_discussion_page(
+        discussion.id, nos=nos, types=types, after_no=after_no, limit=limit, cursor=cursor
+    )
+
+
+async def read_discussion_entry(
+    session: AsyncSession, discussion: Discussion, no: int, *, actor: Actor
+) -> Entry:
+    """Одна запись дела обсуждения по номеру — адрес из ссылки `TRK~7#3`."""
+    entry = await EntryRepository(session).get_by_discussion_no(discussion.id, no)
+    if entry is None:
+        raise EntryNotFoundError(details={"key": discussion.address, "no": no})
+    return entry
+
+
+async def last_conclusion(
+    session: AsyncSession, discussion: Discussion, *, actor: Actor
+) -> Entry | None:
+    """Последний итог обсуждения целиком — его показывают сверху (`TRK#51`, п. 8)."""
+    return await EntryRepository(session).last_conclusion(discussion.id)
+
+
+async def discussion_open_question_nos(session: AsyncSession, discussion: Discussion) -> list[int]:
+    """Номера вопросов обсуждения без ответа — факт закрытия, под очередью изменений."""
+    questions = await EntryRepository(session).discussion_open_questions(discussion.id)
+    return [question.no for question in questions]
+
+
+async def record_discussion_created(
+    session: AsyncSession,
+    discussion: Discussion,
+    *,
+    actor: Actor,
+    action_id: uuid.UUID | None = None,
+) -> Entry:
+    """Первая страница дела обсуждения: заведено. Нагрузки нет — карточка и есть содержание."""
+    return await _append(
+        session,
+        discussion,
+        actor=actor,
+        type=EntryType.CREATED,
+        title="Discussion created",
+        action_id=action_id,
+    )
+
+
+async def record_attachment(
+    session: AsyncSession,
+    owner: Task | Discussion,
+    *,
+    actor: Actor,
+    attached: bool,
+    task_key: str,
+    discussion: str,
+    action_id: uuid.UUID | None = None,
+) -> Entry:
+    """Привязка задачи к обсуждению или её снятие — в дело **этой** стороны.
+
+    Один сценарий подшивает две такие записи, в дело задачи и в дело обсуждения, с одним
+    `action_id`, как `link_added` у связей: событие обеих сторон, и дыра в одном деле
+    означала бы, что преемник не узнает, почему задача ждёт. Нагрузка одна на обе стороны —
+    ключ задачи и адрес обсуждения; заголовок называет другую сторону.
+    """
+    verb = "attached" if attached else "detached"
+    if isinstance(owner, Task):
+        preposition = "to" if attached else "from"
+        title = f"{verb.capitalize()} {preposition} discussion {discussion}"
+    else:
+        title = f"Task {verb}: {task_key}"
+    return await _append(
+        session,
+        owner,
+        actor=actor,
+        type=EntryType.ATTACHED if attached else EntryType.DETACHED,
+        title=title,
+        payload={"task": task_key, "discussion": discussion},
+        action_id=action_id,
+    )
+
+
+async def record_discussion_closed(
+    session: AsyncSession,
+    discussion: Discussion,
+    *,
+    actor: Actor,
+    conclusion_no: int,
+    action_id: uuid.UUID | None = None,
+) -> Entry:
+    """Обсуждение закрыто: служебная запись после итога, с которым закрыто, одним действием.
+
+    Подшивается, пока статус ещё `open`, — после неё сценарий закрытия ставит `closed`, и
+    дальше дело заморожено (`app/services/freeze.py`).
+    """
+    return await _append(
+        session,
+        discussion,
+        actor=actor,
+        type=EntryType.CLOSED,
+        title="Discussion closed",
+        payload={"conclusion_no": conclusion_no},
+        action_id=action_id,
+    )
+
+
 # --- Служебные записи -----------------------------------------------------------------
 #
 # Прав здесь не проверяют: это не точки входа, а продолжение сценария, который права уже
@@ -1383,6 +1622,49 @@ async def _check_question_no(
         )
 
 
+async def _check_discussion_question_no(
+    session: AsyncSession, discussion: Discussion, draft: EntryDraft, problems: FieldProblems
+) -> None:
+    """`question_no` и `replaced_by` ответа указывают на вопросы **этого** обсуждения.
+
+    Те же правила, что у ответа в деле задачи (`_check_question_no`): запись того типа,
+    снятие и замена — только у вопроса без ответа. Читается под очередью изменений,
+    которую `append_discussion_entry` занял до проверок.
+    """
+    if draft.type is not EntryType.ANSWER:
+        return
+    repository = EntryRepository(session)
+    address = discussion.address
+    question_no = draft.payload["question_no"]
+    question = await repository.get_by_discussion_no(discussion.id, question_no)
+    if question is None:
+        problems.add("question_no", "unknown_entry", key=address, no=question_no)
+    elif question.type is not EntryType.QUESTION:
+        problems.add(
+            "question_no", "not_a_question", key=address, no=question_no, got=question.type.value
+        )
+    elif answer_outcome(draft.payload) in CLOSING_WITHOUT_ANSWER:
+        answered_by = await repository.first_discussion_answer_no(discussion.id, question_no)
+        if answered_by is not None:
+            problems.add(
+                "question_no",
+                "already_answered",
+                key=address,
+                no=question_no,
+                answer_no=answered_by,
+            )
+    replaced_by = draft.payload.get("replaced_by")
+    if replaced_by is None:
+        return
+    replacement = await repository.get_by_discussion_no(discussion.id, replaced_by)
+    if replacement is None:
+        problems.add("replaced_by", "unknown_entry", key=address, no=replaced_by)
+    elif replacement.type is not EntryType.QUESTION:
+        problems.add(
+            "replaced_by", "not_a_question", key=address, no=replaced_by, got=replacement.type.value
+        )
+
+
 async def _check_remark_no(
     session: AsyncSession, task: Task, draft: EntryDraft, problems: FieldProblems
 ) -> None:
@@ -1426,7 +1708,7 @@ async def _check_continuation(
 
 async def _check_refs(
     session: AsyncSession,
-    owner: Task | Project | Area,
+    owner: Task | Project | Area | Discussion,
     draft: EntryDraft,
     problems: FieldProblems,
 ) -> None:
@@ -1436,15 +1718,17 @@ async def _check_refs(
     записи единицы, и разбор их по задачам дешевле, чем `IN` по парам. Записи проекта
     (`TRK#7`) — так же, по запросу на проект; неизвестный проект — `unknown_project`.
     Записи области (`TRK/promotion#3`) — по запросу на область; неизвестный проект
-    — `unknown_project`, неизвестная область — `unknown_area`. Владелец
-    подшиваемой записи — задача, проект или область — не влияет ни на что: ссылки из
-    любого дела в любое проверяются одинаково.
+    — `unknown_project`, неизвестная область — `unknown_area`. Обсуждения (`TRK~7`) и их
+    записи (`TRK~7#3`) — по запросу на обсуждение; неизвестное — `unknown_discussion`.
+    Владелец подшиваемой записи — задача, проект, область или обсуждение — не влияет ни на
+    что: ссылки из любого дела в любое проверяются одинаково.
     """
-    task_refs = [
-        ref for ref in draft.tracker_refs if not isinstance(ref, ProjectEntryRef | AreaEntryRef)
-    ]
+    task_refs = [ref for ref in draft.tracker_refs if isinstance(ref, TaskRef | EntryRef)]
     project_refs = [ref for ref in draft.tracker_refs if isinstance(ref, ProjectEntryRef)]
     area_refs = [ref for ref in draft.tracker_refs if isinstance(ref, AreaEntryRef)]
+    discussion_refs = [
+        ref for ref in draft.tracker_refs if isinstance(ref, DiscussionRef | DiscussionEntryRef)
+    ]
     entries = EntryRepository(session)
 
     if task_refs:
@@ -1515,17 +1799,56 @@ async def _check_refs(
                 if ref.no not in existing:
                     problems.add("refs", "unknown_entry", ref=_ref_text(ref))
 
+    if discussion_refs:
+        await _check_discussion_refs(session, owner, discussion_refs, problems)
+
+
+async def _check_discussion_refs(
+    session: AsyncSession,
+    owner: Task | Project | Area | Discussion,
+    refs: Sequence[DiscussionRef | DiscussionEntryRef],
+    problems: FieldProblems,
+) -> None:
+    """Обсуждения и их записи из `refs` существуют — по запросу на обсуждение."""
+    wanted: dict[tuple[str, int], list[DiscussionRef | DiscussionEntryRef]] = {}
+    for ref in refs:
+        wanted.setdefault((ref.project_key, ref.number), []).append(ref)
+    discussions = DiscussionRepository(session)
+    projects = ProjectRepository(session)
+    entries = EntryRepository(session)
+    for (project_key, number), named in wanted.items():
+        found = (
+            owner
+            if isinstance(owner, Discussion)
+            and (owner.project.key, owner.number) == (project_key, number)
+            else await discussions.get_by_address(project_key, number)
+        )
+        if found is None:
+            reason = (
+                "unknown_project"
+                if await projects.get_by_key(project_key) is None
+                else "unknown_discussion"
+            )
+            for ref in named:
+                problems.add("refs", reason, ref=_ref_text(ref))
+            continue
+        nos = sorted({ref.no for ref in named if isinstance(ref, DiscussionEntryRef)})
+        existing = await entries.existing_discussion_nos(found.id, nos)
+        for ref in named:
+            if isinstance(ref, DiscussionEntryRef) and ref.no not in existing:
+                problems.add("refs", "unknown_entry", ref=_ref_text(ref))
+
 
 def _ref_text(ref: TrackerRef) -> str:
     """Ссылка в каноническом виде — та же строка, что уедет в `refs` записи."""
-    if isinstance(ref, EntryRef | ProjectEntryRef | AreaEntryRef):
+    if isinstance(ref, EntryRef | ProjectEntryRef | AreaEntryRef | DiscussionEntryRef):
         return format_entry_ref(ref.key, ref.no)
     return ref.key
 
 
 async def _append(
     session: AsyncSession,
-    owner: Task | Project | Area,
+    owner: Task | Project | Area | Discussion,
     *,
     actor: Actor,
     type: EntryType,
@@ -1537,9 +1860,9 @@ async def _append(
 ) -> Entry:
     """Подшивает запись: номер в деле выдаётся под блокировкой строки владельца.
 
-    Владелец — задача, проект или область (`CONCEPT.md`, 3.4 и 3.7): одна точка
-    подшивки на все дела, иначе у дела проекта была бы своя очередь, своё оповещение и свой
-    порядок `seq`.
+    Владелец — задача, проект, область или обсуждение (`CONCEPT.md`, 3.4 и 3.7; решение
+    `TRK#51`): одна точка подшивки на все дела, иначе у дела проекта была бы своя очередь,
+    своё оповещение и свой порядок `seq`.
 
     Автор раскладывается по колонкам общей функцией `created_by_columns` и берётся
     только из структуры автора действия — второй раскладки в проекте нет.
@@ -1560,11 +1883,12 @@ async def _append(
        повторный захват в той же транзакции законен и ничего не стоит, — а подшивка,
        которая полагалась бы на чужой захват, однажды пришла бы из сценария, где его
        забыли сделать.
-    2. Заморозка архива (`app/services/freeze.py`) — под очередью, до выдачи номера:
-       запись в дело архивного проекта или его задачи отклоняется здесь, в какой бы
-       сценарий её ни подал, кроме записей из `freeze.UNFROZEN_ENTRY_TYPES`. Это
-       гарантия правила; сценарии спрашивают ту же проверку ещё и первым шагом, чтобы
-       архив называл отказ раньше их собственных правил.
+    2. Заморозка (`app/services/freeze.py`) — под очередью, до выдачи номера: запись в
+       дело архивного проекта или его задачи и в дело закрытого обсуждения отклоняется
+       здесь, в какой бы сценарий её ни подал, кроме записей из
+       `freeze.UNFROZEN_ENTRY_TYPES`. Это гарантия правила; сценарии спрашивают ту же
+       проверку ещё и первым шагом, чтобы заморозка называла отказ раньше их собственных
+       правил.
     3. `announce` — оповещение ждущих ленту. После `add`, потому что номер выдаёт база;
        внутри транзакции, потому что доставить его PostgreSQL обязан при фиксации, а не
        раньше строки.
@@ -1577,10 +1901,14 @@ async def _append(
             tasks=(owner,) if isinstance(owner, Task) else (),
             projects=(owner,) if isinstance(owner, Project) else (),
             areas=(owner,) if isinstance(owner, Area) else (),
+            discussions=(owner,) if isinstance(owner, Discussion) else (),
         )
     if isinstance(owner, Task):
         no = await repository.allocate_no(owner.id)
         ownership = {"task_id": owner.id}
+    elif isinstance(owner, Discussion):
+        no = await repository.allocate_discussion_no(owner.id)
+        ownership = {"discussion_id": owner.id}
     elif isinstance(owner, Area):
         no = await repository.allocate_area_no(owner.id)
         ownership = {"area_id": owner.id}
