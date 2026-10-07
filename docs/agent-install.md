@@ -133,6 +133,8 @@ told to use.
   `auth: oauth`. Any other client: a streamable HTTP server at `<MCP address from the installer output>`
   with the header `Authorization: Bearer <token>`.
 
+**Where the OAuth token lives.** After an OAuth sign-in the harness keeps the token in the system keychain. On a machine without one — a server, Linux without a secret service, a container — it keeps it in a file readable only by you (mode 0600) in its own directory; Codex uses `~/.codex/.credentials.json`. The token never goes into the harness configuration (`config.toml`, `settings.json`, `.claude.json`, the plugin's `mcp.json`), so finding `trk_` in such a credentials file is expected and is not a token in a config.
+
 A running session does not pick up a new plugin or MCP server by itself: tell the user to
 restart the session (in Claude Code, `/reload-plugins` and then `/mcp`).
 
