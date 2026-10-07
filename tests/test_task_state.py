@@ -24,6 +24,7 @@ from app.domain.state import (
     SummaryParts,
     build_state,
     clip,
+    project_decisions_after_card,
     status_change,
 )
 from app.domain.tasks import TaskField, TaskStatus
@@ -70,6 +71,7 @@ def _state(index: list[EntryHeading], **overrides: Any) -> Any:
         "open_blockers": [],
         "children": [],
         "discussions_after_card": [],
+        "project_decisions_after_card": [],
     }
     arguments.update(overrides)
     return build_state(**arguments)
@@ -117,6 +119,15 @@ def test_decisions_after_card_count_from_the_last_section_edit() -> None:
         _heading(6, EntryType.DECISION),
     ]
     assert _state(index).decisions_after_card == [4, 6]
+
+
+def test_project_decisions_after_card_skip_superseded_and_older_ones() -> None:
+    decisions = [(3, 10), (5, 30), (6, 31), (7, 40)]
+    assert project_decisions_after_card("TRK", decisions, cut_seq=20, superseded={6}) == [
+        "TRK#5",
+        "TRK#7",
+    ]
+    assert project_decisions_after_card("TRK", decisions, cut_seq=40, superseded=set()) == []
 
 
 def test_a_move_without_a_reason_has_no_reason() -> None:

@@ -42,7 +42,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.entry import Entry
 from app.db.models.project import Project
+from app.db.models.task import Task
 from app.db.repositories import EntryRepository, ProjectRepository, TaskRepository
+from app.domain import state as state_domain
 from app.domain.case import (
     REPLACEABLE_ENTRY_TYPES,
     SUPERSEDES_FIELD,
@@ -206,6 +208,26 @@ async def case_knowledge(session: AsyncSession, project: Project, *, actor: Acto
         decisions=listed[EntryType.DECISION],
         findings=listed[EntryType.FINDING],
         totals={kind: sum(1 for row in rows if row[1] is kind) for kind in _KNOWLEDGE_TYPES},
+    )
+
+
+async def project_decisions_after_card(
+    session: AsyncSession, task: Task, *, actor: Actor
+) -> list[str]:
+    """Действующие решения проекта задачи, подшитые после последней правки её разделов, —
+    ссылками `TRK#7` для блока `state` (`CONCEPT.md`, 4.2).
+
+    Статус считает тот же `CaseStandings`, что у чтения проекта: заменённое решение в поле
+    не входит. Решения областей и направлений — дела других сущностей, их здесь нет.
+    """
+    entries = EntryRepository(session)
+    project_key = task.key.rsplit("-", 1)[0]
+    standings = _standings(await entries.project_replaceables(task.project_id))
+    return state_domain.project_decisions_after_card(
+        project_key,
+        await entries.project_decision_seqs(task.project_id),
+        cut_seq=await entries.card_edit_seq(task.id),
+        superseded=standings.superseded,
     )
 
 

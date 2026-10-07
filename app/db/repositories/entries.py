@@ -497,6 +497,28 @@ class EntryRepository:
         rows: list[Any] = list(await self._session.execute(statement))
         return [(row.no, row.type, row.title, row.payload) for row in rows]
 
+    async def project_decision_seqs(self, project_id: uuid.UUID) -> list[tuple[int, int]]:
+        """Пары «номер и `seq`» всех решений дела проекта, по номеру, без тел.
+
+        Для блока `state` задачи (`project_decisions_after_card`): граница «после правки
+        разделов» сравнивается по `seq`, а не по времени, как у обсуждений
+        (`discussion_entries_after_card`): записи одной транзакции делят `created_at`.
+        """
+        statement = (
+            select(Entry.no, Entry.seq)
+            .where(Entry.project_id == project_id, Entry.type == EntryType.DECISION)
+            .order_by(Entry.no)
+        )
+        return [(row.no, row.seq) for row in await self._session.execute(statement)]
+
+    async def card_edit_seq(self, task_id: uuid.UUID) -> int:
+        """`seq` последней записи `created` или `section_changed` дела задачи; 0 без неё."""
+        statement = select(func.max(Entry.seq)).where(
+            Entry.task_id == task_id,
+            Entry.type.in_([EntryType.CREATED, EntryType.SECTION_CHANGED]),
+        )
+        return (await self._session.scalar(statement)) or 0
+
     async def _headings(self, owned: ColumnElement[bool]) -> list[EntryHeading]:
         statement = (
             select(

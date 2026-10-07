@@ -21371,6 +21371,19 @@
                 "TRK~7#5"
               ]
             ]
+          },
+          "project_decisions_after_card": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Project Decisions After Card",
+            "description": "Decisions in force of the task's project filed after the last edit of the sections, as references `TRK#7`, ascending: they set the work too, and the statement may not account for them. Superseded decisions are left out",
+            "examples": [
+              [
+                "TRK#7"
+              ]
+            ]
           }
         },
         "type": "object",
@@ -21388,7 +21401,8 @@
           "children",
           "children_unclosed",
           "decisions_after_card",
-          "discussions_after_card"
+          "discussions_after_card",
+          "project_decisions_after_card"
         ],
         "title": "TaskStateRead",
         "description": "Состояние задачи на момент чтения (`CONCEPT.md`, 4.2; TRK-579).\n\nНикто не пишет и ничего не хранится: блок считается из дела и связей при каждом\nчтении, поэтому не устаревает. Он так же информативен, как то, что агенты уже пишут:\nпричина перехода, `next_step`, заголовки записей."
