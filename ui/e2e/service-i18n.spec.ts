@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { LANGUAGE_STORAGE_KEY } from '../src/shared/i18n/languages';
-import { readE2eToken, silenceJournal } from './contour';
+import { readE2eToken, removeLink, silenceJournal } from './contour';
 
 /*
  * Служебное на языке человека (UI-140): карточка задачи и лента её дела на русском не
@@ -112,7 +112,7 @@ function seed(request: APIRequestContext): Promise<Seeded> {
         { kind: 'relates', other: 'DEMO-1' },
         201,
       );
-      await api(request, 'delete', `/api/v1/tasks/${key}/links/relates/DEMO-1`, undefined, 204);
+      removeLink(me, key, 'relates', 'DEMO-1');
 
       await api(
         request,

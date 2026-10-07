@@ -157,12 +157,11 @@ def test_every_request_body_refuses_a_field_it_does_not_declare(schema: dict) ->
 def test_patch_field_is_not_nullable_when_null_has_no_meaning(schema: dict) -> None:
     """Схемы `PATCH` не должны разрешать `null`: сгенерированный клиент обязан это знать.
 
-    Проверяются все схемы частичного обновления сразу: у описания участника, у полей
+    Проверяются все схемы частичного обновления сразу: у полей
     проекта и у текстов задачи `null` смысла не имеет, и поле, объявленное как
     `T | None`, разрешило бы фронтенду отправить то, что сервер отвергнет.
     """
     partial_updates = (
-        ("ParticipantUpdate", ["description"]),
         ("ProjectUpdate", ["title", "description"]),
         ("TaskUpdate", ["title", "description", "goal", "context", "constraints", "output"]),
     )

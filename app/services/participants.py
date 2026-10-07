@@ -25,18 +25,13 @@ from app.services.auth import Actor
 async def get_participant(session: AsyncSession, name: str) -> Participant:
     """Участник по имени или `participant_not_found`.
 
-    Адресация мягкая: `Alice` находит `alice`. Отдельно от `read_participant` — этот
-    вызывается из других сценариев и прав не проверяет.
+    Адресация мягкая: `Alice` находит `alice`. Права не проверяет: вызывается
+    из других сценариев.
     """
     participant = await ParticipantRepository(session).get_by_name(normalize_participant_name(name))
     if participant is None:
         raise ParticipantNotFoundError(details={"name": name})
     return participant
-
-
-async def read_participant(session: AsyncSession, name: str, *, actor: Actor) -> Participant:
-    """Карточка участника: точка входа интерфейса, поэтому проверяет права."""
-    return await get_participant(session, name)
 
 
 async def list_participants(
@@ -140,7 +135,7 @@ async def update_participant(
     дело обязано хранить неизменной.
 
     `None` означает «поле не передано»: у описания нет осмысленного значения `null`,
-    поэтому схема `ParticipantUpdate` отвергает явный `null` сама.
+    поэтому схема инструмента MCP отвергает явный `null` сама.
     """
 
     if description is not None:

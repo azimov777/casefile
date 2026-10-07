@@ -7,8 +7,13 @@
 from typing import Any
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.project import Project
+from app.domain.links import LinkKind
+from app.services import links as links_service
+from app.services import tasks as tasks_service
+from app.services.auth import Actor
 
 READY = {
     "project": "trk",
@@ -105,32 +110,19 @@ async def test_a_link_shows_up_on_both_cards_under_its_own_kind(
     assert await links_of(auth_client, second) == [("blocked_by", first)]
 
 
-async def test_a_link_is_removed_from_either_side(
+async def test_removing_a_link_has_no_rest_route(
     auth_client: AsyncClient,
     project: Project,
 ) -> None:
+    """Интерфейс связи не снимает (TRK#53): снятие живёт в сервисе и в инструменте `unlink`."""
     first = await create(auth_client, "первая")
     second = await create(auth_client, "вторая")
     assert (await link(auth_client, first, "blocks", second)).status_code == 201
 
-    removed = await auth_client.delete(f"/api/v1/tasks/{second}/links/blocked_by/{first}")
+    response = await auth_client.delete(f"/api/v1/tasks/{first}/links/blocks/{second}")
 
-    assert removed.status_code == 204
-    assert removed.content == b""
-    assert await links_of(auth_client, first) == []
-
-
-async def test_removing_a_link_that_is_not_there_answers_404(
-    auth_client: AsyncClient,
-    project: Project,
-) -> None:
-    first = await create(auth_client, "первая")
-    second = await create(auth_client, "вторая")
-
-    response = await auth_client.delete(f"/api/v1/tasks/{first}/links/relates/{second}")
-
-    assert response.status_code == 404
-    assert response.json()["error"]["code"] == "link_not_found"
+    assert response.status_code in (404, 405)
+    assert await links_of(auth_client, first) == [("blocks", second)]
 
 
 # --- Отказы -----------------------------------------------------------------------------
@@ -233,22 +225,6 @@ async def test_a_continuation_leaves_the_closed_card_as_it_was(
         key: value for key, value in before.items() if key not in changed
     }
     assert [item["type"] for item in after["index"][len(before["index"]) :]] == ["link_added"]
-
-
-async def test_relates_is_removed_from_a_closed_task_too(
-    auth_client: AsyncClient,
-    project: Project,
-) -> None:
-    """Промах ключом у закрытой задачи снимается: правило одно и на постановку, и на снятие."""
-    closed = await create(auth_client, "закрытая")
-    other = await create(auth_client, "живая")
-    await close(auth_client, closed)
-    assert (await link(auth_client, other, "relates", closed)).status_code == 201
-
-    removed = await auth_client.delete(f"/api/v1/tasks/{closed}/links/relates/{other}")
-
-    assert removed.status_code == 204
-    assert await links_of(auth_client, closed) == []
 
 
 async def test_an_unknown_kind_never_reaches_the_service(
@@ -390,6 +366,8 @@ async def test_a_waiting_child_holds_both_ways_of_closing_a_parent(
 
 async def test_the_link_entry_is_read_back_by_its_own_variant(
     auth_client: AsyncClient,
+    db_session: AsyncSession,
+    main_actor: Actor,
     project: Project,
 ) -> None:
     """Обзорные проверки 4 и 4a: записи в обоих делах и чтение их вариантом `LinkEntryRead`."""
@@ -411,7 +389,13 @@ async def test_the_link_entry_is_read_back_by_its_own_variant(
     )
     assert other_side.json()["data"][0]["payload"] == {"kind": "blocked_by", "other": first}
 
-    await auth_client.delete(f"/api/v1/tasks/{first}/links/blocks/{second}")
+    await links_service.remove_link(
+        db_session,
+        await tasks_service.get_task(db_session, first),
+        await tasks_service.get_task(db_session, second),
+        actor=main_actor,
+        kind=LinkKind.BLOCKS,
+    )
 
     for key, kind, other in ((first, "blocks", second), (second, "blocked_by", first)):
         removed = await auth_client.get(

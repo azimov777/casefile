@@ -199,69 +199,14 @@ async def test_reason_and_unknown_project_refuse_the_whole_call(
 # --- REST ----------------------------------------------------------------------------------
 
 
-async def test_rest_batch_answers_per_key_and_refuses_a_long_list(
-    auth_client: AsyncClient,
-) -> None:
-    for key in ("TRK", "UI"):
-        created = await auth_client.post("/api/v1/projects", json={"key": key, "title": key})
-        assert created.status_code == 201, created.text
-        area = await auth_client.post(
-            f"/api/v1/projects/{key}/areas", json={"key": "core", "title": "Основа"}
-        )
-        assert area.status_code == 201, area.text
-    for project in ("UI", "TRK"):
-        created = await auth_client.post(
-            "/api/v1/tasks",
-            json={
-                "project": project,
-                "area": f"{project}/core",
-                "title": "Задача",
-                "description": "d",
-            },
-        )
-        assert created.status_code == 201, created.text
-
-    moved = await auth_client.post(
+async def test_rest_has_no_batch_move(auth_client: AsyncClient) -> None:
+    """Интерфейс списком не переносит (TRK#53): пакет живёт в сервисе и в `move_task`."""
+    response = await auth_client.post(
         MOVE_BATCH,
-        json={
-            "keys": ["UI-1", "TRK-1", "NOPE-1"],
-            "project": "TRK",
-            "area": "TRK/core",
-            "reason": "r",
-        },
+        json={"keys": ["TRK-1"], "project": "TRK", "area": "TRK/core", "reason": "r"},
     )
-    too_long = await auth_client.post(
-        MOVE_BATCH,
-        json={
-            "keys": ["UI-1"] * (MAX_MOVE_KEYS + 1),
-            "project": "TRK",
-            "area": "TRK/core",
-            "reason": "r",
-        },
-    )
-    empty = await auth_client.post(
-        MOVE_BATCH, json={"keys": [], "project": "TRK", "area": "TRK/core", "reason": "r"}
-    )
-    read = await auth_client.get("/api/v1/tasks/UI-1")
 
-    assert moved.status_code == 200, moved.text
-    assert moved.json()["data"]["results"] == [
-        {"key": "UI-1", "outcome": "moved", "from_key": "UI-1", "to_key": "TRK-2", "no": 2},
-        {"key": "TRK-1", "outcome": "already", "to_key": "TRK-1"},
-        {
-            "key": "NOPE-1",
-            "outcome": "error",
-            "code": "task_not_found",
-            "message": "Task not found",
-            "details": {"key": "NOPE-1"},
-        },
-    ]
-    for refused in (too_long, empty):
-        assert (refused.status_code, refused.json()["error"]["code"]) == (
-            422,
-            "task_move_batch_size_invalid",
-        )
-    assert read.json()["data"]["task"]["key"] == "TRK-2"
+    assert response.status_code in (404, 405)
 
 
 # --- MCP -----------------------------------------------------------------------------------

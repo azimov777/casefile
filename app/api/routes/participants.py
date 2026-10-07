@@ -11,7 +11,7 @@ from fastapi import APIRouter, Path, status
 from app.api.deps import ActorDep, CursorQuery, LimitQuery, SessionDep
 from app.api.idempotency import OnceDep
 from app.api.schemas.common import CollectionResponse, DataResponse
-from app.api.schemas.participants import ParticipantCreate, ParticipantRead, ParticipantUpdate
+from app.api.schemas.participants import ParticipantCreate, ParticipantRead
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.services import participants as service
 
@@ -72,30 +72,3 @@ async def register_participant(
         return DataResponse[ParticipantRead](data=ParticipantRead.model_validate(participant))
 
     return await once.run(DataResponse[ParticipantRead], request=payload, build=register)
-
-
-@router.get("/{participant_name}", summary="Read a participant")
-async def read_participant(
-    participant_name: ParticipantNamePath,
-    session: SessionDep,
-    actor: ActorDep,
-) -> DataResponse[ParticipantRead]:
-    """Карточка участника по имени. Адресация мягкая: `Alice` находит `alice`."""
-    participant = await service.read_participant(session, participant_name, actor=actor)
-    return DataResponse[ParticipantRead](data=ParticipantRead.model_validate(participant))
-
-
-@router.patch("/{participant_name}", summary="Update a participant")
-async def update_participant(
-    participant_name: ParticipantNamePath,
-    payload: ParticipantUpdate,
-    session: SessionDep,
-    actor: ActorDep,
-) -> DataResponse[ParticipantRead]:
-    """Меняет описание участника; имя и род неизменяемы."""
-    participant = await service.get_participant(session, participant_name)
-    # `exclude_unset` — единственный фильтр: явный `null` схема уже отвергла,
-    # поэтому «не передано» здесь не может притвориться «передано как null».
-    changes = payload.model_dump(exclude_unset=True)
-    participant = await service.update_participant(session, participant, actor=actor, **changes)
-    return DataResponse[ParticipantRead](data=ParticipantRead.model_validate(participant))

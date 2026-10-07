@@ -104,6 +104,42 @@ export function grantAccess({ human, kind, client = '', agent = '', name }: Acce
 }
 
 /**
+ * Снятие связи между задачами. Ручки REST у него нет — интерфейс связей не снимает
+ * (TRK#53), — а запись `link_removed` ленте дела нужна: её рождает тот же сервис, что
+ * зовёт инструмент MCP `unlink`, и сценарий вызывает его так же, как `grantAccess`.
+ */
+const REMOVE_LINK = `
+import asyncio, sys
+from app.db.repositories import ParticipantRepository
+from app.db.session import dispose_engine, session_scope
+from app.domain.links import LinkKind
+from app.services import links, tasks
+from app.services.auth import Actor
+
+async def main(human, key, kind, other):
+    async with session_scope() as session:
+        issuer = await ParticipantRepository(session).get_by_name(human)
+        await links.remove_link(
+            session,
+            await tasks.get_task(session, key),
+            await tasks.get_task(session, other),
+            actor=Actor(author=issuer.author, participant=issuer),
+            kind=LinkKind(kind),
+        )
+    await dispose_engine()
+
+asyncio.run(main(*sys.argv[1:5]))
+`;
+
+/** Снимает связь `kind` задачи `key` с задачей `other` от имени человека. */
+export function removeLink(human: string, key: string, kind: string, other: string): void {
+  compose([
+    ...['run', '--rm', '--no-deps', 'api'],
+    ...['python', '-c', REMOVE_LINK, human, key, kind, other],
+  ]);
+}
+
+/**
  * Файл с ключом агента для запасного пути — входа на `/login`. Выпускается отдельно от
  * ключа установки (`e2e/global-setup.ts`): наборов у ключей больше нет (TRK-471), а
  * сценарию, проверяющему экран глазами агента, нужен именно ключ агента без учётной

@@ -258,6 +258,8 @@ async def _moved_ui_task(client: AsyncClient) -> dict[str, Any]:
 
 async def test_rest_reads_writes_links_and_refs_by_the_previous_key(
     auth_client: AsyncClient,
+    db_session: AsyncSession,
+    main_actor: Actor,
 ) -> None:
     card = await _moved_ui_task(auth_client)
     assert (card["key"], card["previous_keys"], card["project"]["key"]) == (
@@ -315,8 +317,15 @@ async def test_rest_reads_writes_links_and_refs_by_the_previous_key(
         f"/api/v1/tasks/{other_key}/links", json={"kind": "relates", "other": "UI-1"}
     )
     assert linked.status_code == 201, linked.text
-    unlinked = await auth_client.delete(f"/api/v1/tasks/UI-1/links/relates/{other_key}")
-    assert unlinked.status_code == 204, unlinked.text
+    # Снятия связи в REST нет (TRK#53): прежний ключ у сервиса читает так же, как у ручек.
+    await links_service.remove_link(
+        db_session,
+        await tasks_service.get_task(db_session, "UI-1"),
+        await tasks_service.get_task(db_session, other_key),
+        actor=main_actor,
+        kind=LinkKind.RELATES,
+    )
+    assert (await auth_client.get("/api/v1/tasks/UI-1")).json()["data"]["links"] == []
 
 
 async def test_search_finds_the_task_and_its_children_by_the_previous_key(
