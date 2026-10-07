@@ -41,7 +41,7 @@ from app.db.repositories.discussions import discussion_ids_of_tasks, unanswered_
 from app.db.repositories.projects import in_active_project
 from app.db.sql import ilike_contains
 from app.domain.areas import format_area_address
-from app.domain.authors import Author
+from app.domain.authors import Author, AuthorKind
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
     ATTACHMENT_ENTRY_TYPES,
@@ -73,7 +73,11 @@ from app.domain.case import (
     WarningFacts,
     answer_outcome,
 )
-from app.domain.discussions import DiscussionStatus, format_discussion_address
+from app.domain.discussions import (
+    DiscussionStatus,
+    format_discussion_address,
+    format_discussion_entry_ref,
+)
 from app.domain.links import LinkKind
 from app.domain.tasks import CLOSED_STATUSES, TaskField, TaskStatus
 
@@ -186,6 +190,12 @@ class EntryRepository:
         """
         return await self._session.scalar(
             select(func.max(Entry.no)).where(Entry.task_id == task_id)
+        )
+
+    async def latest_discussion_no(self, discussion_id: uuid.UUID) -> int | None:
+        """Номер последней записи дела обсуждения — по тому же правилу, что `latest_no`."""
+        return await self._session.scalar(
+            select(func.max(Entry.no)).where(Entry.discussion_id == discussion_id)
         )
 
     async def get_by_no(self, task_id: uuid.UUID, no: int) -> Entry | None:
@@ -332,15 +342,19 @@ class EntryRepository:
         *,
         nos: Sequence[int] | None = None,
         types: Sequence[EntryType] | None = None,
+        attribute: str | None = None,
+        text: str | None = None,
         after_no: int | None = None,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> Page[Entry]:
-        """Страница записей дела обсуждения — те же фильтры, что у дела задачи."""
+        """Страница записей дела обсуждения — те же фильтры, что у дела области."""
         return await self._list_page(
             Entry.discussion_id == discussion_id,
             nos=nos,
             types=types,
+            attribute=attribute,
+            text=text,
             after_no=after_no,
             limit=limit,
             cursor=cursor,
@@ -672,6 +686,70 @@ class EntryRepository:
             .limit(1)
         )
         return (await self._session.scalars(statement)).first()
+
+    async def last_conclusions(
+        self, discussion_ids: Collection[uuid.UUID]
+    ) -> dict[uuid.UUID, Entry]:
+        """Последний итог каждого из названных обсуждений одним запросом — для пакета
+        преемника, где обсуждений у задачи несколько (`last_conclusion` — одного)."""
+        if not discussion_ids:
+            return {}
+        statement = (
+            select(Entry)
+            .where(
+                Entry.discussion_id.in_(list(discussion_ids)),
+                Entry.type == EntryType.CONCLUSION,
+            )
+            .distinct(Entry.discussion_id)
+            .order_by(Entry.discussion_id, Entry.no.desc())
+        )
+        return {
+            entry.discussion_id: entry
+            for entry in await self._session.scalars(statement)
+            if entry.discussion_id is not None
+        }
+
+    async def discussion_entries_after_card(self, task_id: uuid.UUID) -> list[str]:
+        """Итоги и записи человека в обсуждениях задачи после последней правки её разделов
+        — ссылками `TRK~7#5`, по адресу и номеру (решение `TRK#51`, п. 5).
+
+        Граница — `seq` последней записи `created` или `section_changed` дела задачи, как
+        у `decisions_after_card` (`app/domain/state.py`): работу задают и обсуждения, и
+        итог, подшитый после постановки, она могла не учесть. Сравнение по `seq`, а не по
+        времени: записи одной транзакции делят `created_at`. Берутся привязанные сейчас
+        обсуждения, открытые и закрытые; записи человека — его записи агентских типов
+        (вопрос, ответ, заметка), служебные — нет.
+        """
+        cut = (
+            select(func.max(Entry.seq))
+            .where(
+                Entry.task_id == task_id,
+                Entry.type.in_([EntryType.CREATED, EntryType.SECTION_CHANGED]),
+            )
+            .scalar_subquery()
+        )
+        statement = (
+            select(Project.key, Discussion.number, Entry.no)
+            .join(DiscussionTask, DiscussionTask.discussion_id == Entry.discussion_id)
+            .join(Discussion, Discussion.id == Entry.discussion_id)
+            .join(Project, Project.id == Discussion.project_id)
+            .where(
+                DiscussionTask.task_id == task_id,
+                Entry.seq > func.coalesce(cut, 0),
+                or_(
+                    Entry.type == EntryType.CONCLUSION,
+                    and_(
+                        Entry.created_by_kind == AuthorKind.HUMAN,
+                        Entry.type.in_(sorted(AGENT_ENTRY_TYPES)),
+                    ),
+                ),
+            )
+            .order_by(Project.key, Discussion.number, Entry.no)
+        )
+        return [
+            format_discussion_entry_ref(format_discussion_address(key, number), no)
+            for key, number, no in await self._session.execute(statement)
+        ]
 
     async def open_discussion_questions_of_task(
         self, task_id: uuid.UUID

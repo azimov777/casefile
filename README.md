@@ -199,7 +199,7 @@ with copy buttons, on its `/start` page.
 Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 
 **Tasks**
-- `get_task` — returns everything about one task in a single call: card, parent and children, links, computed features, latest summary, open questions, unresolved remarks, case index and transition targets
+- `get_task` — returns everything about one task in a single call: card, parent and children, links, computed features, latest summary, open questions, unresolved remarks, its discussions, case index and transition targets
 - `search_tasks` — searches tasks by a query-language string, by separate conditions, or by both
 - `create_task` — creates a task in `backlog` in an area of its project (`area_required` without one), optionally as a child of a parent task
 - `update_task` — changes the given fields of a task; fields left out stay as they are
@@ -211,16 +211,20 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 - `read_entries` — returns entry bodies of one task's case, with payload, in number order
 - `add_summary` — files a summary: the handover note of a case, in four parts
 - `add_entry` — files an entry without payload: a decision, attempt, finding, artifact, remark or note
-- `ask` — files a question to registry participants
-- `answer` — answers a question of the same task, or closes one still unanswered as `withdrawn` or `replaced` by a later question, with a reason; an answered question cannot be withdrawn
+- `ask` — files a question to registry participants in a discussion; asked about a task, it opens the discussion and attaches the task in the same call
+- `answer` — answers a question of a discussion or of a task's case, or closes one still unanswered as `withdrawn` or `replaced` by a later question, with a reason; an answered question cannot be withdrawn
 - `resolve` — resolves a remark on a task: its outcome and where the work went
 - `add_verdict` — files the outcome of one review check
-- `read_project_entries` — returns entry bodies of one project's case, with payload, in number order; filters by number, type, status and a substring of the title or body
-- `add_project_entry` — files a decision, finding, artifact or note in a project's case
+- `read_project_entries` — returns entry bodies of one project's, area's or discussion's case, with payload, in number order; filters by number, type, status and a substring of the title or body
+- `add_project_entry` — files a decision, finding, artifact or note in a project's case, or a note in a discussion's case
+
+**Discussions**
+- `add_conclusion` — files a discussion's conclusion: what is decided, superseded and still open
+- `close_discussion` — closes a discussion with its final conclusion, in one transaction
 
 **Links**
-- `link` — links two tasks and files `link_added` in both cases
-- `unlink` — removes a link and files `link_removed` in both cases
+- `link` — links two tasks and files `link_added` in both cases, or attaches a task to a discussion
+- `unlink` — removes a link and files `link_removed` in both cases, or detaches a task from a discussion
 
 **Projects & participants**
 - `get_project` — returns one project by its key: key, title, description, current attribute values, the decisions and findings in force and the index of the rest of its case

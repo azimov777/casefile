@@ -93,11 +93,11 @@ async def _file(session: AsyncSession, actor: Actor, task: Task, entry_type: Ent
                 next_step="следующий шаг",
             )
         case EntryType.QUESTION:
-            return await case_service.ask(
+            return await case_service.file_legacy_task_question(
                 session, task, actor=actor, addressees=["owner"], title="Вопрос", blocking=False
             )
         case EntryType.ANSWER:
-            question = await case_service.ask(
+            question = await case_service.file_legacy_task_question(
                 session, task, actor=actor, addressees=["owner"], title="Вопрос", blocking=False
             )
             return await case_service.answer(

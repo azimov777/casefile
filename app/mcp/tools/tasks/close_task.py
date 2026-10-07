@@ -162,7 +162,8 @@ def register(tools: Toolset) -> None:
         A refusal of any part files nothing and leaves the status as it was. The exit
         conditions are checked after filing: a latest verdict other than `failed` on
         every review check within the current pass (`checks_not_passed`), closed
-        children (`task_has_unclosed_children`), the task in `in_progress`
+        children (`task_has_unclosed_children`), closed attached discussions
+        (`task_has_open_discussions`), the task in `in_progress`
         (`transition_not_allowed`). An empty summary part is refused with
         `entry_fields_invalid`.
 

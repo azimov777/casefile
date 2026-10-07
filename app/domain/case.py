@@ -68,6 +68,13 @@
 вопрос, и в нагрузке он всегда `true`, — а итог из трёх непустых частей бывает только
 здесь. Ссылка на обсуждение — `TRK~7`, на
 его запись — `TRK~7#3`: тильды нет ни в ключе задачи, ни в адресе области.
+
+## Вопрос — только в обсуждении
+
+Новый вопрос в деле задачи отвергается отдельным кодом `question_not_a_task_entry`
+(решение `TRK#51`, п. 6): вопросы человеку задают в обсуждениях, к которым задача
+привязана. Прежние вопросы дела задачи остаются записями, читаются тем же разбором
+нагрузки (`QuestionFacts`, `is_blocking_question`) и принимают ответ (`answer`).
 """
 
 import re
@@ -92,7 +99,11 @@ from app.domain.discussions import (
     is_discussion_address,
     parse_discussion_address,
 )
-from app.domain.errors import EntryFieldsInvalidError, InvalidTaskKeyError
+from app.domain.errors import (
+    EntryFieldsInvalidError,
+    InvalidTaskKeyError,
+    QuestionNotATaskEntryError,
+)
 from app.domain.fields import FieldProblem, FieldProblems
 from app.domain.links import LinkKind
 from app.domain.projects import PROJECT_KEY_PATTERN, normalize_project_key
@@ -300,8 +311,12 @@ DISCUSSION_ONLY_ENTRY_TYPES: frozenset[EntryType] = frozenset(
     {EntryType.CONCLUSION, EntryType.CLOSED}
 )
 
-#: Записи агента и человека в деле задачи: всё агентское, кроме итога обсуждения.
-TASK_ENTRY_TYPES: frozenset[EntryType] = AGENT_ENTRY_TYPES - DISCUSSION_ONLY_ENTRY_TYPES
+#: Записи агента и человека в деле задачи: всё агентское, кроме итога обсуждения и
+#: вопроса. Вопросы задают в обсуждениях (решение `TRK#51`, п. 6); вопрос, присланный в
+#: дело задачи, `build_entry` отвергает своим кодом, а не общим «тип не тот».
+TASK_ENTRY_TYPES: frozenset[EntryType] = (
+    AGENT_ENTRY_TYPES - DISCUSSION_ONLY_ENTRY_TYPES - {EntryType.QUESTION}
+)
 
 #: Записи агента и человека в деле проекта (`CONCEPT.md`, 3.4, «Дело проекта») и в деле
 #: области (3.7). Сводок, вопросов, вердиктов, замечаний и попыток у них нет: нет ни
@@ -953,7 +968,13 @@ def build_entry(
     Служебные типы (`created`, `status_changed`, ...) отвергаются здесь: их подшивает
     сценарий, выводя тип из действия, и принять такой тип снаружи значило бы позволить
     подделать историю задачи.
+
+    Вопрос в деле задачи — отказ `question_not_a_task_entry` сразу, до остальных
+    замечаний: это не ошибка формы, которую чинят правкой поля, а не то место (решение
+    `TRK#51`, п. 6).
     """
+    if not context.discussion and type == EntryType.QUESTION:
+        raise QuestionNotATaskEntryError(details={"key": context.task_key})
     problems = FieldProblems()
     entry_type = _entry_type(
         type, problems, DISCUSSION_ENTRY_TYPES if context.discussion else TASK_ENTRY_TYPES
@@ -1386,28 +1407,21 @@ def _summary_part(value: Any) -> str:
 def _question_payload(
     raw: dict[str, Any], context: EntryContext, problems: FieldProblems
 ) -> dict[str, Any]:
-    """Адресаты и признак `blocking`. Существование адресатов проверяет сценарий.
+    """Адресаты; признак `blocking` кладёт трекер. Существование адресатов проверяет
+    сценарий.
 
-    У вопроса обсуждения признак не выбирают (решение `TRK#51`, п. 2): любой вопрос
-    обсуждения держит привязанные задачи. Присланный `blocking` отвергается, а не
-    выбрасывается молча, и в нагрузку трекер кладёт `blocking: true` сам — так нагрузка
-    вопроса одной формы в любом деле и говорит правду: без ответа работа не идёт.
+    Вопрос бывает только в деле обсуждения (`build_entry` отвергает его в деле задачи), и
+    признак у него не выбирают (решение `TRK#51`, п. 2): любой вопрос обсуждения держит
+    привязанные задачи. Присланный `blocking` отвергается, а не выбрасывается молча, и в
+    нагрузку трекер кладёт `blocking: true` сам — так нагрузка вопроса одной формы в
+    любом деле, и прежние вопросы дела задачи читаются тем же разбором.
     """
-    allowed = ("addressees",) if context.discussion else ("addressees", "blocking")
-    _reject_extra(raw, allowed, problems)
+    del context
+    _reject_extra(raw, ("addressees",), problems)
     payload: dict[str, Any] = {}
     with problems.field("addressees"):
         payload["addressees"] = _addressees(raw.get("addressees"))
-    if context.discussion:
-        payload["blocking"] = True
-        return payload
-    with problems.field("blocking"):
-        blocking = raw.get("blocking")
-        if not isinstance(blocking, bool):
-            # Обязателен и без значения по умолчанию: «можно ли продолжать без ответа»
-            # знает только спрашивающий, а угаданное значение решает за него.
-            raise FieldProblem("required" if blocking is None else "not_a_boolean")
-        payload["blocking"] = blocking
+    payload["blocking"] = True
     return payload
 
 

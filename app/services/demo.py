@@ -22,7 +22,11 @@
   возвращается со своим ключом, а прежний ключ `LEGACY-1` остаётся в её карточке;
   опустевший `LEGACY` уходит в архив и в списке проектов не виден;
 - открытый блокирующий вопрос, адресованный человеку, — «входящая» и первый экран
-  без него пусты;
+  без него пусты. Он и отвеченный вопрос задачи в работе лежат в делах задач, как
+  вопросы, подшитые до обсуждений (`case.file_legacy_task_question`): новых вопросов в
+  деле задачи трекер не принимает (`TRK#51`, п. 6), а прежние экраны карточки и входящей
+  читают именно такие. Ожидание по вопросу обсуждения вместо них — после экранов
+  обсуждения (TRK-672);
 - обсуждения (решение `TRK#51`): закрытое с итогом — вопрос, ответ, итог, привязка и
   отвязка задачи; открытое с вопросом к человеку — входящая по обсуждениям; заведённое
   человеком запиской — ход за агентом;
@@ -649,7 +653,7 @@ async def _in_progress_task(
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
-    question = await case_service.ask(
+    question = await case_service.file_legacy_task_question(
         session,
         task,
         actor=agent,
@@ -724,7 +728,7 @@ async def _awaiting_answer_task(
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
-    question = await case_service.ask(
+    question = await case_service.file_legacy_task_question(
         session,
         task,
         actor=agent,

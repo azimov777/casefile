@@ -21,7 +21,7 @@ from app.domain.case import (
     read_payload,
     summary_title,
 )
-from app.domain.errors import EntryFieldsInvalidError
+from app.domain.errors import EntryFieldsInvalidError, QuestionNotATaskEntryError
 from app.domain.fields import FieldProblem
 
 CONTEXT = EntryContext(task_key="TRK-1", checks=("первая", "вторая", "третья"))
@@ -216,21 +216,40 @@ def test_a_too_long_unmeasured_part_is_refused() -> None:
 # --- Вопрос, ответ, вердикт ---------------------------------------------------------
 
 
-def test_a_question_needs_at_least_one_addressee_and_an_explicit_blocking() -> None:
+#: Владелец записи — обсуждение: вопрос бывает только в его деле (TRK#51, п. 6).
+DISCUSSION_CONTEXT = EntryContext(task_key="TRK~1", checks=(), discussion=True)
+
+
+@pytest.mark.parametrize("type", [EntryType.QUESTION, "question"])
+def test_a_question_in_a_task_case_is_refused_with_its_own_code(type: Any) -> None:
+    """TRK-671: вопрос в деле задачи — `question_not_a_task_entry` с ключом задачи, раньше
+    любых замечаний к форме: это не то место, а не ошибка поля."""
+    with pytest.raises(QuestionNotATaskEntryError) as error:
+        build_entry(CONTEXT, type=type, title="", payload={"addressees": []})
+
+    assert error.value.code == "question_not_a_task_entry"
+    assert error.value.details == {"key": "TRK-1"}
+
+
+def test_a_question_needs_at_least_one_addressee_and_takes_no_blocking() -> None:
+    """Признак `blocking` у вопроса обсуждения не выбирают: присланный отвергается."""
     with pytest.raises(EntryFieldsInvalidError) as error:
         build_entry(
-            CONTEXT, type=EntryType.QUESTION, title="Что делать?", payload={"addressees": []}
+            DISCUSSION_CONTEXT,
+            type=EntryType.QUESTION,
+            title="Что делать?",
+            payload={"addressees": [], "blocking": False},
         )
 
-    assert problems(error) == {"addressees": "required", "blocking": "required"}
+    assert problems(error) == {"addressees": "required", "blocking": "not_allowed"}
 
 
 def test_addressees_are_canonicalised_and_deduplicated() -> None:
     draft = build_entry(
-        CONTEXT,
+        DISCUSSION_CONTEXT,
         type=EntryType.QUESTION,
         title="Что делать?",
-        payload={"addressees": ["Owner", "owner", " OWNER "], "blocking": True},
+        payload={"addressees": ["Owner", "owner", " OWNER "]},
     )
 
     assert draft.payload == {"addressees": ["owner"], "blocking": True}

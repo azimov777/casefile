@@ -31,6 +31,7 @@ from app.domain.errors import (
 from app.domain.participants import ParticipantKind
 from app.domain.tasks import TaskStatus
 from app.services import case as service
+from app.services import discussions as discussions_service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
@@ -152,15 +153,15 @@ async def test_an_entry_is_filed_into_a_closed_task(
 async def test_an_unknown_addressee_is_named_in_the_details(
     db_session: AsyncSession, task: Task, task_actor: Actor
 ) -> None:
-    """Обзорная проверка 4: адресовать можно только участника реестра."""
+    """Обзорная проверка 4: адресовать можно только участника реестра — вопрос по задаче
+    уходит в обсуждение (TRK#51, п. 6), проверка адресатов та же."""
     with pytest.raises(EntryFieldsInvalidError) as error:
-        await service.ask(
+        await discussions_service.ask_about_task(
             db_session,
             task,
             actor=task_actor,
             addressees=["owner", "ghost"],
             title="Чей вердикт нужен?",
-            blocking=False,
         )
 
     assert error.value.details["fields"] == [
@@ -179,7 +180,7 @@ async def test_an_answer_points_at_a_question_of_the_same_task(
         title="Соседняя задача",
         description="Есть",
     )
-    await service.ask(
+    await service.file_legacy_task_question(
         db_session, other, actor=task_actor, addressees=["owner"], title="Как быть?", blocking=False
     )
 
@@ -208,10 +209,10 @@ async def test_an_answer_points_at_a_question_of_the_same_task(
 
 async def _two_questions(session: AsyncSession, task: Task, actor: Actor) -> tuple[int, int]:
     """Блокирующий вопрос и более поздний неблокирующий: снимаемый и заменивший."""
-    stale = await service.ask(
+    stale = await service.file_legacy_task_question(
         session, task, actor=actor, addressees=["owner"], title="Устаревший", blocking=True
     )
-    fresh = await service.ask(
+    fresh = await service.file_legacy_task_question(
         session, task, actor=actor, addressees=["owner"], title="Новый", blocking=False
     )
     return stale.no, fresh.no
@@ -680,7 +681,7 @@ async def test_the_package_carries_the_last_summary_and_the_open_questions_in_fu
     await service.add_summary(
         db_session, task, actor=task_actor, **{**SUMMARY, "next_step": "Последний шаг"}
     )
-    answered = await service.ask(
+    answered = await service.file_legacy_task_question(
         db_session,
         task,
         actor=task_actor,
@@ -688,7 +689,7 @@ async def test_the_package_carries_the_last_summary_and_the_open_questions_in_fu
         title="Первый вопрос",
         blocking=True,
     )
-    await service.ask(
+    await service.file_legacy_task_question(
         db_session,
         task,
         actor=task_actor,
@@ -712,10 +713,10 @@ async def test_the_package_carries_the_last_summary_and_the_open_questions_in_fu
 async def test_blocking_questions_are_counted_separately(
     db_session: AsyncSession, task: Task, task_actor: Actor
 ) -> None:
-    await service.ask(
+    await service.file_legacy_task_question(
         db_session, task, actor=task_actor, addressees=["owner"], title="Ждёт", blocking=True
     )
-    await service.ask(
+    await service.file_legacy_task_question(
         db_session,
         task,
         actor=task_actor,
@@ -778,10 +779,10 @@ async def test_the_inbox_keeps_only_open_questions_of_the_addressee(
         name="reviewer",
         description="Проверяющий",
     )
-    await service.ask(
+    await service.file_legacy_task_question(
         db_session, task, actor=task_actor, addressees=["owner"], title="Ждёт", blocking=True
     )
-    await service.ask(
+    await service.file_legacy_task_question(
         db_session,
         task,
         actor=task_actor,
@@ -789,7 +790,7 @@ async def test_the_inbox_keeps_only_open_questions_of_the_addressee(
         title="Ждать не нужно",
         blocking=False,
     )
-    mine = await service.ask(
+    mine = await service.file_legacy_task_question(
         db_session, task, actor=task_actor, addressees=["reviewer"], title="Чужой", blocking=True
     )
 
@@ -814,10 +815,10 @@ async def test_the_question_history_runs_newest_first_with_answers(
     db_session: AsyncSession, task: Task, task_actor: Actor
 ) -> None:
     """История вопросов: от свежих, с ответами, без условия адресата."""
-    older = await service.ask(
+    older = await service.file_legacy_task_question(
         db_session, task, actor=task_actor, addressees=["owner"], title="Раньше", blocking=False
     )
-    await service.ask(
+    await service.file_legacy_task_question(
         db_session, task, actor=task_actor, addressees=["owner"], title="Позже", blocking=False
     )
     answer = await service.answer(
@@ -867,7 +868,7 @@ async def test_the_inbox_is_filtered_by_project(
         title="Задача в другом проекте",
         description="Есть",
     )
-    await service.ask(
+    await service.file_legacy_task_question(
         db_session,
         task,
         actor=task_actor,
@@ -875,7 +876,7 @@ async def test_the_inbox_is_filtered_by_project(
         title="Вопрос в TRK",
         blocking=False,
     )
-    await service.ask(
+    await service.file_legacy_task_question(
         db_session,
         other,
         actor=task_actor,

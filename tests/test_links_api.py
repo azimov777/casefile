@@ -7,8 +7,12 @@
 from typing import Any
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.project import Project
+from app.services import discussions as discussions_service
+from app.services import tasks as tasks_service
+from app.services.auth import Actor
 
 READY = {
     "project": "trk",
@@ -347,26 +351,27 @@ async def test_a_parent_is_not_cancelled_while_a_child_is_open(
 
 async def test_a_waiting_child_holds_both_ways_of_closing_a_parent(
     auth_client: AsyncClient,
+    db_session: AsyncSession,
     project: Project,
+    task_actor: Actor,
 ) -> None:
     """Ребёнок, ждущий ответа, не закрыт: это незаконченная работа, а не отменённая.
 
-    Ждёт он в `open` с вопросом `blocking` — статуса ожидания нет с TRK-573. Проверяются
-    оба закрытия сразу — правило одно, и разойтись им нельзя.
+    Ждёт он в `open` с вопросом в обсуждении — статуса ожидания нет с TRK-573, вопрос в
+    деле задачи — с TRK-671. Проверяются оба закрытия сразу — правило одно, и разойтись
+    им нельзя.
     """
     parent = await create(auth_client, "родитель")
     child = await create(auth_client, "ребёнок")
     assert (await link(auth_client, parent, "parent", child)).status_code == 201
     assert (await move(auth_client, child, "open")).status_code == 200
-    asked = await auth_client.post(
-        f"/api/v1/tasks/{child}/entries",
-        json={
-            "type": "question",
-            "title": "Жду ответа",
-            "payload": {"addressees": ["owner"], "blocking": True},
-        },
+    await discussions_service.ask_about_task(
+        db_session,
+        await tasks_service.get_task(db_session, child),
+        actor=task_actor,
+        addressees=["owner"],
+        title="Жду ответа",
     )
-    assert asked.status_code == 201, asked.text
 
     assert (await move(auth_client, parent, "open")).status_code == 200
     assert (await move(auth_client, parent, "in_progress")).status_code == 200

@@ -62,7 +62,7 @@ async def written(
         title="Вторая задача проекта",
         description="Нужна, чтобы фильтр по задаче было чем провалить",
     )
-    question = await case_service.ask(
+    question = await case_service.file_legacy_task_question(
         db_session,
         task,
         actor=task_actor,
@@ -80,7 +80,7 @@ async def written(
         type=EntryType.NOTE,
         title="Заметка на полях",
     )
-    other_question = await case_service.ask(
+    other_question = await case_service.file_legacy_task_question(
         db_session,
         other_task,
         actor=task_actor,

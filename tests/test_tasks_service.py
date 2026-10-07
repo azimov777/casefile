@@ -253,7 +253,7 @@ async def test_a_waiting_task_goes_to_open_with_a_blocking_question_and_comes_ba
     ответ статус не меняет, а вход начинает новый заход — вердикты прошлого не в счёт.
     """
     await move(db_session, task, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)
-    question = await case_service.ask(
+    question = await case_service.file_legacy_task_question(
         db_session,
         task,
         actor=task_actor,

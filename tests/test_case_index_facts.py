@@ -38,7 +38,7 @@ from app.services import links as links_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.tasks import TaskChanges
-from conftest import make_task
+from conftest import legacy_question, make_task
 
 #: Сколько байт на строку описи считается дешёвым. Проверяется не ради красоты числа:
 #: опись входит в каждый пакет задачи, и строка, выросшая в разы, означает, что в неё
@@ -179,7 +179,7 @@ async def test_a_question_an_answer_and_a_verdict_are_nameable_from_the_index(
         db_session, task, actor=task_actor, to=TaskStatus.IN_PROGRESS, reason=None
     )
 
-    question = await case_service.ask(
+    question = await case_service.file_legacy_task_question(
         db_session,
         task,
         actor=task_actor,
@@ -355,7 +355,7 @@ def test_the_contract_declares_the_facts_of_every_entry_type(layer: str, union: 
 
 
 async def test_the_index_carries_only_the_fields_of_its_own_type(
-    auth_client: AsyncClient, project: Project, shared_secret: str
+    auth_client: AsyncClient, db_session: AsyncSession, project: Project, shared_secret: str
 ) -> None:
     """Проверка 6: в деле со **всеми** типами записей у каждой строки ровно свои ключи.
 
@@ -364,7 +364,7 @@ async def test_the_index_carries_only_the_fields_of_its_own_type(
     описи, и в конце сверяется, что нашлись все типы: пропущенный тип роняет проверку,
     а не тихо выпадает из перебора.
     """
-    key = await _case_with_every_entry_type(auth_client, project, shared_secret)
+    key = await _case_with_every_entry_type(auth_client, db_session, project, shared_secret)
 
     package = await auth_client.get(f"/api/v1/tasks/{key}")
     assert package.status_code == 200, package.text
@@ -390,9 +390,12 @@ async def test_the_index_carries_only_the_fields_of_its_own_type(
 
 
 async def _case_with_every_entry_type(
-    client: AsyncClient, project: Project, shared_secret: str
+    client: AsyncClient, session: AsyncSession, project: Project, shared_secret: str
 ) -> str:
     """Заводит задачу и подшивает в неё запись каждого типа `EntryType`. Возвращает ключ.
+
+    Вопрос в деле задачи — прежний, подшитый до обсуждений (`legacy_question`): новый
+    REST отвергает (`question_not_a_task_entry`, TRK-671), а прежние в делах остаются.
 
     `warning` и `acceptance` бывают только после закрытия с проверкой не целиком, и
     принимает предупреждение не закрывший (TRK-561): принятие идёт общим агентским
@@ -471,11 +474,7 @@ async def _case_with_every_entry_type(
     for entry_type in ("decision", "attempt", "finding", "artifact", "note"):
         await file(type=entry_type, title=f"a {entry_type}")
 
-    question_no = await file(
-        type="question",
-        title="a question",
-        payload={"addressees": ["owner"], "blocking": False},
-    )
+    question_no = (await legacy_question(session, key, title="a question")).no
     await file(type="answer", payload={"question_no": question_no}, body="yes")
     await file(type="verdict", payload={"check_no": 1, "outcome": "passed"}, body="green")
     remark_no = await file(type="remark", title="a remark")

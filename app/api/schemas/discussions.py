@@ -6,7 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.authors import AuthorRead
-from app.api.schemas.entries import ConclusionEntryRead, entry_read
+from app.api.schemas.entries import ConclusionEntryRead, QuestionEntryRead, entry_read
 from app.db.models.discussion import DiscussionTask
 from app.domain.case import MAX_ENTRY_BODY_LENGTH, MAX_REFS
 from app.domain.discussions import (
@@ -16,7 +16,7 @@ from app.domain.discussions import (
     DiscussionTurn,
 )
 from app.domain.tasks import TaskStatus
-from app.services.discussions import DiscussionDetail, DiscussionRow
+from app.services.discussions import DiscussionDetail, DiscussionRow, TaskDiscussion
 
 _ADDRESS_DESCRIPTION = (
     "Address of the discussion: the project key and its number, `TRK~7`. References to its "
@@ -99,6 +99,49 @@ def discussion_read(row: DiscussionRow) -> DiscussionRead:
         created_at=discussion.created_at,
         updated_at=discussion.updated_at,
         closed_at=discussion.closed_at,
+    )
+
+
+class TaskDiscussionRead(BaseModel):
+    """Обсуждение в пакете преемника задачи (решение `TRK#51`, п. 5): карточка без
+    служебных полей, чей ход, открытые вопросы и последний итог целиком."""
+
+    address: str = Field(examples=["TRK~7"], description=_ADDRESS_DESCRIPTION)
+    title: str = Field(examples=[_TITLE_EXAMPLE], description="The narrow question itself")
+    status: DiscussionStatus = Field(examples=[DiscussionStatus.OPEN])
+    turn: DiscussionTurn | None = Field(
+        examples=[DiscussionTurn.HUMAN], description=_TURN_DESCRIPTION
+    )
+    open_questions: list[QuestionEntryRead] = Field(
+        description=(
+            "Questions of the discussion with no answer yet, in full; each one keeps the "
+            "task out of `in_progress` until it is answered"
+        )
+    )
+    conclusion: ConclusionEntryRead | None = Field(
+        description=(
+            "The latest conclusion in full — decided, superseded, still open; it sets the "
+            "work of the task together with its sections. `null` until the first one"
+        )
+    )
+
+
+def task_discussion_read(item: TaskDiscussion) -> TaskDiscussionRead:
+    """Обсуждение в пакете задачи: записи собирает тот же `entry_read`, что любую запись."""
+    address = item.discussion.address
+    questions = [entry_read(question, discussion=address) for question in item.open_questions]
+    conclusion = (
+        None if item.conclusion is None else entry_read(item.conclusion, discussion=address)
+    )
+    assert all(isinstance(question, QuestionEntryRead) for question in questions)
+    assert conclusion is None or isinstance(conclusion, ConclusionEntryRead)
+    return TaskDiscussionRead(
+        address=address,
+        title=item.discussion.title,
+        status=item.discussion.status,
+        turn=item.turn,
+        open_questions=questions,  # type: ignore[arg-type]
+        conclusion=conclusion,
     )
 
 

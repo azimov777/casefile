@@ -244,26 +244,29 @@ async def test_a_task_goes_the_whole_way_through_mcp(
     assert package["summary"]["payload"] == CLOSING_SUMMARY
 
 
-# --- Ожидание ответа на блокирующий вопрос --------------------------------------------
+# --- Ожидание ответа на вопрос в обсуждении --------------------------------------------
 
 #: Запрос кандидатов назначателя — тот самый, что в `CONCEPT.md`, 4.3.
 CANDIDATES = "status: open and blocked: false and open_blocking_questions: 0"
 
 
-async def test_a_blocking_question_takes_the_task_out_of_the_candidates(
+async def test_a_question_in_a_discussion_takes_the_task_out_of_the_candidates(
     auth_client: AsyncClient,
     db_session: AsyncSession,
+    mcp_session: Connect,
+    task_secret: str,
     task_actor: Actor,
     owner: Participant,
     project: Project,
 ) -> None:
-    """Обзорная проверка 8: сценарий ожидания из `CONCEPT.md`, 4.6.
+    """Обзорная проверка 8: сценарий ожидания из `CONCEPT.md`, 4.6 — с TRK-671 вопрос
+    человеку живёт в обсуждении (решение TRK#51, пункты 4 и 6).
 
-    Статуса «жду» в трекере нет: агент задаёт блокирующий вопрос, пишет сводку и
-    возвращает задачу в `open`. Назначатель её не берёт, пока вопрос открыт, — не
-    потому, что трекер ему запретил, а потому, что его же запрос кандидатов её не
-    показывает. После ответа задача возвращается в выдачу сама: признак считается по
-    делу, а не хранится флагом.
+    Статуса «жду» в трекере нет: агент задаёт вопрос по задаче (`ask` заводит обсуждение и
+    привязывает задачу), пишет сводку и возвращает задачу в `open`. Назначатель её не
+    берёт, пока вопрос открыт, — его же запрос кандидатов её не показывает, а входящая
+    человека показывает обсуждение. После ответа задача возвращается в выдачу сама:
+    признак считается по делу, а не хранится флагом.
     """
     task = await make_task(
         db_session,
@@ -283,37 +286,41 @@ async def test_a_blocking_question_takes_the_task_out_of_the_candidates(
         assert response.status_code == 200, response.text
         return [item["key"] for item in response.json()["data"]]
 
-    asked = await auth_client.post(
-        f"/api/v1/tasks/{key}/entries",
-        json={
-            "type": "question",
-            "title": "Сколько храним дела отменённых задач?",
-            "payload": {"addressees": [owner.name], "blocking": True},
-        },
-    )
-    assert asked.status_code == 201, asked.text
-    question_no = asked.json()["data"]["no"]
+    async def inbox() -> list[str]:
+        response = await auth_client.get(
+            "/api/v1/discussions", params={"status": "open", "turn": "human"}
+        )
+        assert response.status_code == 200, response.text
+        return [item["address"] for item in response.json()["data"]]
+
+    async with mcp_session(task_secret) as session:
+        asked = await call(
+            session,
+            "ask",
+            key=key,
+            addressees=[owner.name],
+            title="Сколько храним дела отменённых задач?",
+        )
+    address, question_no = asked["discussion"], asked["no"]
 
     await auth_client.post(
         f"/api/v1/tasks/{key}/entries", json={"type": "summary", "payload": SUMMARY}
     )
     parked = await auth_client.post(
         f"/api/v1/tasks/{key}/transition",
-        json={"to": "open", "reason": "Задан блокирующий вопрос, ждать в работе нечего"},
+        json={"to": "open", "reason": f"Жду ответа на {address}#{question_no}"},
     )
     assert parked.status_code == 200, parked.text
     assert parked.json()["data"]["status"] == "open"
 
-    assert key not in await candidates(), "задача под блокирующим вопросом ушла в работу"
-
-    inbox = await auth_client.get("/api/v1/questions")
-    assert [item["no"] for item in inbox.json()["data"]] == [question_no]
+    assert key not in await candidates(), "задача под вопросом обсуждения ушла в работу"
+    assert await inbox() == [address]
 
     before = await case_service.list_entries(db_session, task, actor=task_actor, limit=100)
     last_seq = before.items[-1].seq
 
     answered = await auth_client.post(
-        f"/api/v1/tasks/{key}/entries",
+        f"/api/v1/discussions/{address}/entries",
         json={
             "type": "answer",
             "body": "Храним вечно: записи постоянны, это решение концепции",
@@ -323,13 +330,15 @@ async def test_a_blocking_question_takes_the_task_out_of_the_candidates(
     assert answered.status_code == 201, answered.text
 
     assert key in await candidates(), "ответ не вернул задачу в кандидаты"
-    assert (await auth_client.get("/api/v1/questions")).json()["data"] == []
+    assert await inbox() == []
 
-    # Лента отдаёт ответ по фильтру типа: именно так назначатель узнаёт, что пора
-    # пересчитывать кандидатов, не читая всё подряд.
-    feed = await auth_client.get("/api/v1/journal", params={"after": last_seq, "types": ["answer"]})
+    # Лента отдаёт ответ по фильтру типа и по задаче: так назначатель и ждущий агент узнают,
+    # что пора пересчитывать кандидатов, не читая всё подряд.
+    feed = await auth_client.get(
+        "/api/v1/journal", params={"after": last_seq, "types": ["answer"], "task": key}
+    )
     assert feed.status_code == 200, feed.text
     entries = feed.json()["data"]
     assert [item["type"] for item in entries] == ["answer"]
-    assert entries[0]["task_key"] == key
+    assert (entries[0]["discussion"], entries[0]["task_key"]) == (address, None)
     assert entries[0]["payload"]["question_no"] == question_no

@@ -55,6 +55,7 @@ class StateQuestionView(BaseModel):
     to: list[str]
     blocking: bool
     title: str
+    discussion: str | None
 
 
 class StateNoteView(BaseModel):
@@ -83,6 +84,7 @@ class TaskStateView(BaseModel):
     children: dict[str, int]
     children_unclosed: list[str]
     decisions_after_card: list[int]
+    discussions_after_card: list[str]
 
 
 def task_state(value: TaskState) -> TaskStateView:

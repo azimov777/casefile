@@ -104,7 +104,7 @@ async def board(db_session: AsyncSession, task_actor: Actor, project: Project) -
     blocked = await open_task(db_session, task_actor, blocked)
     asking = await make(db_session, task_actor, project, "вопрос без ответа")
     asking = await open_task(db_session, task_actor, asking)
-    await case_service.ask(
+    await case_service.file_legacy_task_question(
         db_session,
         asking,
         actor=task_actor,
@@ -903,7 +903,7 @@ async def test_an_answer_returns_a_waiting_task_to_the_candidates_without_a_move
     await tasks_service.transition_task(
         db_session, waiting, actor=task_actor, to=TaskStatus.IN_PROGRESS
     )
-    question = await case_service.ask(
+    question = await case_service.file_legacy_task_question(
         db_session,
         waiting,
         actor=task_actor,
@@ -999,7 +999,7 @@ async def test_an_answered_question_stops_being_counted(
 ) -> None:
     """Открытость вопроса считается запросом, а не колонкой: ответ закрывает его сразу."""
     task = await make(db_session, task_actor, project, "вопрос без ответа")
-    question = await case_service.ask(
+    question = await case_service.file_legacy_task_question(
         db_session, task, actor=task_actor, addressees=["owner"], title="Как быть?", blocking=True
     )
     assert await keys(db_session, task_actor, query="open_blocking_questions: > 0") == [task.key]
@@ -1013,7 +1013,7 @@ async def test_a_non_blocking_question_counts_only_in_the_wider_counter(
     db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
     task = await make(db_session, task_actor, project, "вопрос без ответа")
-    await case_service.ask(
+    await case_service.file_legacy_task_question(
         db_session, task, actor=task_actor, addressees=["owner"], title="Уточнение?", blocking=False
     )
 

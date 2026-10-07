@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
 from app.api.schemas.decisions import CitedDecisionRead
+from app.api.schemas.discussions import TaskDiscussionRead
 from app.api.schemas.entries import (
     ClosingEntryCreate,
     EntryHeadingRead,
@@ -314,14 +315,21 @@ class StateSummaryRead(BaseModel):
 
 
 class StateQuestionRead(BaseModel):
-    """Открытый вопрос: кого спросили и мешает ли он работе."""
+    """Открытый вопрос: кого спросили, мешает ли он работе и в каком обсуждении."""
 
     model_config = ConfigDict(from_attributes=True)
 
-    no: int
+    no: int = Field(description="Number in the case of the discussion, or of the task if none")
     to: list[str] = Field(description="Addressees")
     blocking: bool
     title: str
+    discussion: str | None = Field(
+        examples=["TRK~7"],
+        description=(
+            "Address of the discussion the question is in; `null` for an earlier question "
+            "of the task's own case"
+        ),
+    )
 
 
 class StateNoteRead(BaseModel):
@@ -368,6 +376,14 @@ class TaskStateRead(BaseModel):
             "Numbers of `decision` entries filed after the last edit of the sections: "
             "the statement may not account for them"
         )
+    )
+    discussions_after_card: list[str] = Field(
+        examples=[["TRK~7#5"]],
+        description=(
+            "Conclusions and entries of people in the task's discussions filed after the "
+            "last edit of the sections, as references `TRK~7#5`: they set the work too, "
+            "and the statement may not account for them"
+        ),
     )
 
 
@@ -455,6 +471,12 @@ class TaskPackageRead(BaseModel):
     )
     remarks: list[RemarkEntryRead] = Field(
         description="Every remark with no resolution yet, in full"
+    )
+    discussions: list[TaskDiscussionRead] = Field(
+        description=(
+            "Discussions the task is attached to, open and closed, by address: whose move "
+            "it is, open questions and the latest conclusion in full"
+        )
     )
     transitions: list[TaskStatus] = Field(
         examples=[[TaskStatus.OPEN, TaskStatus.CANCELLED]],

@@ -1,10 +1,14 @@
-"""Инструмент `unlink`: снятие связи и `link_removed` в обоих делах."""
+"""Инструмент `unlink`: снятие связи и `link_removed` в обоих делах — или отвязка задачи от
+обсуждения (`attached`) и `detached` в обоих делах."""
 
+from app.domain.links import LinkKind
 from app.mcp.arguments import TaskKeyArg
+from app.mcp.enums import LinkToolKind
 from app.mcp.tools.links.arguments import LinkKindArg, OtherTaskKeyArg
 from app.mcp.tools.links.views import LinkFilingView
 from app.mcp.toolset import FILING, Toolset
 from app.services import case as case_service
+from app.services import discussions as discussions_service
 from app.services import links as links_service
 from app.services import tasks as tasks_service
 
@@ -21,11 +25,24 @@ def register(tools: Toolset) -> None:
         from `TRK-1` to `TRK-7` and `blocked_by` from `TRK-7` to `TRK-1` are the same
         link. On a closed task `parent` and `blocks` stay (`task_closed`), `relates` is
         removed. A link that does not exist is refused with `link_not_found`.
+
+        `attached` detaches the task from the discussion `other` and files `detached` in
+        both cases; the task no longer waits for its outcome. A task that is not attached
+        is refused with `discussion_task_not_found`, a closed discussion with
+        `discussion_closed`.
         """
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
+            if kind is LinkToolKind.ATTACHED:
+                discussion = await discussions_service.get_discussion(session, other)
+                await discussions_service.detach_task(session, discussion, task, actor=actor)
+                entry = await case_service.latest_entry_no(session, task, actor=actor)
+                other_entry = await case_service.latest_discussion_entry_no(session, discussion)
+                return LinkFilingView(key=task.key, entry=entry, other_entry=other_entry)
             other_task = await tasks_service.get_task(session, other)
-            await links_service.remove_link(session, task, other_task, actor=actor, kind=kind)
+            await links_service.remove_link(
+                session, task, other_task, actor=actor, kind=LinkKind(kind)
+            )
             entry = await case_service.latest_entry_no(session, task, actor=actor)
             other_entry = await case_service.latest_entry_no(session, other_task, actor=actor)
             return LinkFilingView(key=task.key, entry=entry, other_entry=other_entry)

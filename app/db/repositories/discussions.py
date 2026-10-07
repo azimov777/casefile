@@ -192,6 +192,31 @@ class DiscussionRepository:
             open_questions=int(found.open_questions),
         )
 
+    async def of_task(self, task_id: uuid.UUID) -> list[DiscussionRow]:
+        """Обсуждения, к которым задача привязана сейчас, открытые и закрытые, с признаками
+        — по адресу. Для пакета преемника, поэтому без страниц и без отбора по архиву:
+        у задачи их единицы, и задача архивного проекта читается со своими обсуждениями
+        так же, как со своими связями."""
+        statement = (
+            select(
+                Discussion,
+                turn_of(Discussion).label("turn"),
+                open_question_count_of(Discussion).label("open_questions"),
+            )
+            .join(DiscussionTask, DiscussionTask.discussion_id == Discussion.id)
+            .join(Project, Project.id == Discussion.project_id)
+            .where(DiscussionTask.task_id == task_id)
+            .order_by(Project.key, Discussion.number)
+        )
+        return [
+            DiscussionRow(
+                discussion=item.Discussion,
+                turn=_turn(item.turn),
+                open_questions=int(item.open_questions),
+            )
+            for item in await self._session.execute(statement)
+        ]
+
     async def page(
         self,
         *,

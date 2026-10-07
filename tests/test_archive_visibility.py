@@ -60,7 +60,7 @@ async def world(db_session: AsyncSession, project: Project, task: Task, main_act
     )
     await links_service.add_link(db_session, outsider, child, actor=main_actor, kind="parent")
     for item in (task, outsider):
-        await case_service.ask(
+        await case_service.file_legacy_task_question(
             db_session, item, actor=main_actor, addressees=["owner"], title="Как?", blocking=True
         )
         await case_service.add_entry(
