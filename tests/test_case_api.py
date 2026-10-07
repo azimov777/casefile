@@ -20,6 +20,7 @@ from app.services import tasks as tasks_service
 
 READY = {
     "project": "trk",
+    "area": "TRK/core",
     "title": "Починить выдачу ключей",
     "description": "Ключ сгорает на неудачном запросе",
     "goal": "Ключи не сгорают",

@@ -32,7 +32,7 @@ from app.domain.case import SERVICE_ENTRY_TYPES, EntryType
 from app.services import case as case_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
-from conftest import Connect, call
+from conftest import Connect, call, make_task
 
 #: Опись задачи, прошедшей полный цикл. Порядок — часть проверки: преемник читает дело
 #: сверху вниз, и переставленные страницы означают другую историю.
@@ -112,6 +112,7 @@ async def test_a_task_goes_the_whole_way_through_rest(
         "/api/v1/tasks",
         json={
             "project": project.key,
+            "area": "TRK/core",
             "title": "Ключ задачи сгорает на отклонённом запросе",
             "description": "Номер выдаётся до валидации тела",
             "assignee": "owner",
@@ -196,6 +197,7 @@ async def test_a_task_goes_the_whole_way_through_mcp(
             session,
             "create_task",
             project=project_key,
+            area="TRK/core",
             title="Ключ задачи сгорает на отклонённом запросе",
             description="Номер выдаётся до валидации тела",
             assignee="owner",
@@ -263,7 +265,7 @@ async def test_a_blocking_question_takes_the_task_out_of_the_candidates(
     показывает. После ответа задача возвращается в выдачу сама: признак считается по
     делу, а не хранится флагом.
     """
-    task = await tasks_service.create_task(
+    task = await make_task(
         db_session,
         actor=task_actor,
         project=project,

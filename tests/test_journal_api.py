@@ -23,8 +23,8 @@ from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.journal import MAX_TASK_KEYS, MAX_WAIT_SECONDS
 from app.services import case as case_service
-from app.services import tasks as tasks_service
 from app.services.auth import Actor
+from conftest import make_task
 
 JOURNAL = "/api/v1/journal"
 
@@ -55,7 +55,7 @@ async def written(
     лежит строго после неё, а всё, что до, — чужое из общей последовательности.
     """
     created = await case_service.read_entry(db_session, task, 1, actor=task_actor)
-    other_task = await tasks_service.create_task(
+    other_task = await make_task(
         db_session,
         actor=task_actor,
         project=project,

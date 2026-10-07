@@ -12,6 +12,7 @@ from app.db.models.project import Project
 
 READY = {
     "project": "trk",
+    "area": "TRK/core",
     "title": "Починить выдачу ключей",
     "description": "Ключ сгорает на неудачном запросе",
     "goal": "Ключи не сгорают",

@@ -58,7 +58,7 @@ from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services import tokens as tokens_service
 from app.services.auth import TRACKER_ACTOR, Actor
-from conftest import Connect, call, refuse, tool_text, without_empty_standing
+from conftest import Connect, call, make_task, refuse, tool_text, without_empty_standing
 
 #: Инструменты рабочего цикла — ровно те, что перечислены в `CONCEPT.md`, 5.2.
 TASK_TOOLS = {
@@ -123,7 +123,12 @@ MAIN_TOOL_CALLS: dict[str, dict[str, Any]] = {
     "update_project": {"key": "TRK", "title": "Другое название"},
     "archive_project": {"key": "TRK", "reason": "Заброшен"},
     "restore_project": {"key": "TRK", "reason": "Снова нужен"},
-    "move_task": {"key": "TRK-1", "project": "OPS", "reason": "Проекты объединены"},
+    "move_task": {
+        "key": "TRK-1",
+        "project": "OPS",
+        "area": "OPS/core",
+        "reason": "Проекты объединены",
+    },
     "register_participant": {"kind": "agent", "name": "nightly_bot"},
     "update_participant": {"name": "owner", "description": "Другое описание"},
 }
@@ -169,6 +174,9 @@ async def test_an_agent_token_calls_every_tool_that_main_once_opened(
         assert {tool.name for tool in (await session.list_tools()).tools} >= MAIN_TOOLS
         for name, arguments in MAIN_TOOL_CALLS.items():
             await call(session, name, **arguments)
+            if name == "create_project":
+                # Область нового проекта: перенос ниже обязан назвать область целевого.
+                await call(session, "create_project", key="OPS/core", title="Основа")
 
 
 async def test_an_unknown_token_is_refused_before_the_list_is_built(
@@ -468,6 +476,7 @@ async def test_transitions_are_the_table_and_not_the_moves_that_would_pass_now(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Блокер",
             description="Пока не закрыт",
         )
@@ -603,14 +612,14 @@ async def test_search_tasks_asks_about_the_tasks_the_session_names(
     зависимости от того, как его задали. Третья задача в том же проекте нужна, чтобы
     отбор было чем провалить: без неё выдача «все задачи» совпала бы с названной парой.
     """
-    second = await tasks_service.create_task(
+    second = await make_task(
         db_session,
         actor=task_actor,
         project=project,
         title="Второе дело сессии",
         description="Есть",
     )
-    outsider = await tasks_service.create_task(
+    outsider = await make_task(
         db_session,
         actor=task_actor,
         project=project,
@@ -680,10 +689,10 @@ async def test_search_tasks_names_the_parent_and_leaves_it_out_when_not_asked(
     поиском видит программу каждой задачи (TRK-95#7). Прежнее имя `parents` в `fields` —
     отказ с перечнем, где стоит `parent`.
     """
-    program = await tasks_service.create_task(
+    program = await make_task(
         db_session, actor=task_actor, project=project, title="программа", description="описание"
     )
-    child = await tasks_service.create_task(
+    child = await make_task(
         db_session, actor=task_actor, project=project, title="ребёнок", description="описание"
     )
     await links_service.add_link(db_session, program, child, actor=task_actor, kind=LinkKind.PARENT)
@@ -727,7 +736,7 @@ async def test_search_tasks_selects_the_whole_subtree_with_under_and_rest_agrees
     `search_value_invalid`, а не пустая страница.
     """
     chain = [
-        await tasks_service.create_task(
+        await make_task(
             db_session, actor=task_actor, project=project, title=name, description="описание"
         )
         for name in ("корень", "ребёнок", "внук", "правнук")
@@ -768,7 +777,7 @@ async def test_get_task_shows_the_goal_of_the_parent_and_rest_agrees(
     цели длиннее потолка: обрезка одна на оба канала.
     """
     long_goal = "в" * (PARENT_GOAL_LIMIT + 10)
-    root = await tasks_service.create_task(
+    root = await make_task(
         db_session,
         actor=task_actor,
         project=project,
@@ -776,7 +785,7 @@ async def test_get_task_shows_the_goal_of_the_parent_and_rest_agrees(
         description="описание",
         goal=long_goal,
     )
-    child = await tasks_service.create_task(
+    child = await make_task(
         db_session, actor=task_actor, project=project, title="ребёнок", description="описание"
     )
     await links_service.add_link(db_session, root, child, actor=task_actor, kind=LinkKind.PARENT)
@@ -1022,7 +1031,7 @@ async def test_the_short_answer_is_an_order_of_magnitude_smaller(
     влияют и не влияли: он от длины дела не зависел никогда (`TRK-12#5`).
     """
     actor = Actor(author=task.created_by)
-    big = await tasks_service.create_task(
+    big = await make_task(
         db_session,
         actor=actor,
         project=project,
@@ -1142,6 +1151,7 @@ async def test_create_task_is_born_in_backlog_with_its_parent(
             session,
             "create_task",
             project="trk",
+            area="TRK/core",
             title="Выдать номера проектам",
             description="Счётчик номеров живёт в проекте",
             sections={
@@ -1204,13 +1214,19 @@ async def test_a_child_born_with_a_parent_takes_no_second_one(
     }
     async with mcp_session(task_secret) as session:
         other = await call(
-            session, "create_task", project="trk", title="Вторая программа", description="д"
+            session,
+            "create_task",
+            project="trk",
+            area="TRK/core",
+            title="Вторая программа",
+            description="д",
         )
         children = [
             await call(
                 session,
                 "create_task",
                 project="trk",
+                area="TRK/core",
                 title=f"Часть {n}",
                 description="д",
                 sections=sections,
@@ -1242,6 +1258,7 @@ async def test_a_repeated_create_task_answers_with_the_first_task(
     key = str(uuid.uuid4())
     arguments: dict[str, Any] = {
         "project": "TRK",
+        "area": "TRK/core",
         "title": "Починить выдачу ключей",
         "description": "Ключ сгорает",
         "idempotency_key": key,
@@ -1733,6 +1750,7 @@ async def test_a_verdict_gates_the_move_to_done(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Задача из двух проверок",
             assignee="owner",
             description="Проверки закрываются вердиктами",
@@ -1803,6 +1821,7 @@ async def closing_task(mcp_session: Connect, task_secret: str, project: Project)
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Задача под закрытие",
             assignee="owner",
             description="Две проверки, артефакт и сводка",
@@ -2007,6 +2026,7 @@ async def test_a_link_is_named_from_the_side_that_asks(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Блокер",
             description="Пока не закрыт",
         )
@@ -2035,7 +2055,9 @@ async def test_link_and_unlink_answer_with_the_filed_entry_numbers(
     del project
     key = task.key
     async with mcp_session(task_secret) as session:
-        other = await call(session, "create_task", project="TRK", title="Другая", description="д")
+        other = await call(
+            session, "create_task", project="TRK", area="TRK/core", title="Другая", description="д"
+        )
         other_key = other["key"]
 
         linked = await call(session, "link", key=key, kind="blocks", other=other_key)
@@ -2089,6 +2111,7 @@ async def test_a_closed_task_carries_its_continuation_but_takes_no_blocker(
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Продолжение",
             description="Выросло из отменённой",
         )
@@ -2114,7 +2137,7 @@ async def test_a_closed_task_carries_its_continuation_but_takes_no_blocker(
 
 
 async def test_get_project_carries_the_context_shared_by_its_tasks(
-    mcp_session: Connect, task_secret: str, project: Project
+    mcp_session: Connect, task_secret: str, bare_project: Project
 ) -> None:
     """В карточке задачи только ключ и название: описание запрашивают отдельно."""
     async with mcp_session(task_secret) as session:
@@ -2125,9 +2148,9 @@ async def test_get_project_carries_the_context_shared_by_its_tasks(
     # областей (TRK-555) тоже: списки пусты, а не пропущены, и число записей знания вне
     # описи — нули по обоим типам.
     assert read == {
-        "key": project.key,
-        "title": project.title,
-        "description": project.description,
+        "key": bare_project.key,
+        "title": bare_project.title,
+        "description": bare_project.description,
         "archived_at": None,
         "attributes": [],
         "decisions": [],

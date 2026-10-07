@@ -41,6 +41,7 @@ async def with_checks(mcp_session: Connect, task_secret: str, project: Project) 
             session,
             "create_task",
             project="TRK",
+            area="TRK/core",
             title="Правка проверки",
             description="Проверка сформулирована невыполнимо",
             assignee="owner",

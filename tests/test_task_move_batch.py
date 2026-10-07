@@ -26,7 +26,7 @@ from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
 from app.services.tasks import TaskAlreadyThere, TaskMoved, TaskMoveRefused
-from conftest import Connect, call, refuse
+from conftest import Connect, call, make_area, make_task, refuse
 
 MOVE_BATCH = "/api/v1/tasks/move"
 
@@ -34,8 +34,9 @@ MOVE_BATCH = "/api/v1/tasks/move"
 async def _ui_with_tasks(session: AsyncSession, actor: Actor, count: int) -> Project:
     """Проект UI с задачами UI-1 … UI-count."""
     ui = await projects_service.create_project(session, actor=actor, key="UI", title="Интерфейс")
+    await make_area(session, actor, "UI")
     for number in range(1, count + 1):
-        await tasks_service.create_task(
+        await make_task(
             session, actor=actor, project=ui, title=f"Экран {number}", description="Перенос"
         )
     return ui
@@ -62,6 +63,7 @@ async def test_a_batch_gives_one_outcome_per_key_in_list_order(
         ["ui-1", "TRK-1", "NOPE-9"],
         actor=main_actor,
         project_key="trk",
+        area="TRK/core",
         reason="  Репозиторий один  ",
     )
 
@@ -92,6 +94,7 @@ async def test_new_numbers_follow_the_list_order_and_repeats_answer_already(
         ["UI-3", "UI-1", "UI-2", "UI-3"],
         actor=main_actor,
         project_key="TRK",
+        area="TRK/core",
         reason="r",
     )
 
@@ -114,13 +117,16 @@ async def test_a_refused_task_leaves_the_rest_moved(
     """
     ui = await _ui_with_tasks(db_session, main_actor, 1)
     ops = await projects_service.create_project(db_session, actor=main_actor, key="OPS", title="O")
-    await tasks_service.create_task(
-        db_session, actor=main_actor, project=ops, title="Архивная", description="d"
-    )
+    await make_task(db_session, actor=main_actor, project=ops, title="Архивная", description="d")
     await projects_service.archive_project(db_session, ops, actor=main_actor, reason="Архив")
 
     outcomes = await tasks_service.move_tasks(
-        db_session, ["TRK-1", "OPS-1", "UI-1"], actor=main_actor, project_key="UI", reason="r"
+        db_session,
+        ["TRK-1", "OPS-1", "UI-1"],
+        actor=main_actor,
+        project_key="UI",
+        area="UI/core",
+        reason="r",
     )
 
     first, refused, last = outcomes
@@ -145,7 +151,7 @@ async def test_a_list_out_of_range_is_refused_before_any_move(
 
     with pytest.raises(TaskMoveBatchSizeInvalidError) as error:
         await tasks_service.move_tasks(
-            db_session, keys, actor=main_actor, project_key="UI", reason="r"
+            db_session, keys, actor=main_actor, project_key="UI", area="UI/core", reason="r"
         )
 
     assert error.value.details == {"tasks": count, "min": 1, "max": MAX_MOVE_KEYS}
@@ -160,7 +166,7 @@ async def test_an_archived_target_refuses_the_whole_call(
 
     with pytest.raises(ProjectArchivedError) as error:
         await tasks_service.move_tasks(
-            db_session, ["TRK-1"], actor=main_actor, project_key="UI", reason="r"
+            db_session, ["TRK-1"], actor=main_actor, project_key="UI", area="UI/core", reason="r"
         )
 
     assert error.value.details["key"] == "UI"
@@ -174,11 +180,16 @@ async def test_reason_and_unknown_project_refuse_the_whole_call(
 
     with pytest.raises(TaskMoveReasonRequiredError) as blank:
         await tasks_service.move_tasks(
-            db_session, ["TRK-1"], actor=main_actor, project_key="UI", reason=" "
+            db_session, ["TRK-1"], actor=main_actor, project_key="UI", area="UI/core", reason=" "
         )
     with pytest.raises(ProjectNotFoundError):
         await tasks_service.move_tasks(
-            db_session, ["TRK-1"], actor=main_actor, project_key="NOPE", reason="r"
+            db_session,
+            ["TRK-1"],
+            actor=main_actor,
+            project_key="NOPE",
+            area="NOPE/core",
+            reason="r",
         )
 
     assert blank.value.details == {}
@@ -194,19 +205,43 @@ async def test_rest_batch_answers_per_key_and_refuses_a_long_list(
     for key in ("TRK", "UI"):
         created = await auth_client.post("/api/v1/projects", json={"key": key, "title": key})
         assert created.status_code == 201, created.text
+        area = await auth_client.post(
+            f"/api/v1/projects/{key}/areas", json={"key": "core", "title": "Основа"}
+        )
+        assert area.status_code == 201, area.text
     for project in ("UI", "TRK"):
         created = await auth_client.post(
-            "/api/v1/tasks", json={"project": project, "title": "Задача", "description": "d"}
+            "/api/v1/tasks",
+            json={
+                "project": project,
+                "area": f"{project}/core",
+                "title": "Задача",
+                "description": "d",
+            },
         )
         assert created.status_code == 201, created.text
 
     moved = await auth_client.post(
-        MOVE_BATCH, json={"keys": ["UI-1", "TRK-1", "NOPE-1"], "project": "TRK", "reason": "r"}
+        MOVE_BATCH,
+        json={
+            "keys": ["UI-1", "TRK-1", "NOPE-1"],
+            "project": "TRK",
+            "area": "TRK/core",
+            "reason": "r",
+        },
     )
     too_long = await auth_client.post(
-        MOVE_BATCH, json={"keys": ["UI-1"] * (MAX_MOVE_KEYS + 1), "project": "TRK", "reason": "r"}
+        MOVE_BATCH,
+        json={
+            "keys": ["UI-1"] * (MAX_MOVE_KEYS + 1),
+            "project": "TRK",
+            "area": "TRK/core",
+            "reason": "r",
+        },
     )
-    empty = await auth_client.post(MOVE_BATCH, json={"keys": [], "project": "TRK", "reason": "r"})
+    empty = await auth_client.post(
+        MOVE_BATCH, json={"keys": [], "project": "TRK", "area": "TRK/core", "reason": "r"}
+    )
     read = await auth_client.get("/api/v1/tasks/UI-1")
 
     assert moved.status_code == 200, moved.text
@@ -237,14 +272,31 @@ async def test_mcp_moves_a_list_and_keeps_the_single_answer(
 ) -> None:
     async with mcp_session(main_secret) as session:
         await call(session, "create_project", key="UI", title="Интерфейс")
-        await call(session, "create_task", project="UI", title="Экран", description="d")
-        batch = await call(
-            session, "move_task", key=["UI-1", "TRK-1", "NOPE-1"], project="TRK", reason="r"
+        await call(session, "create_project", key="UI/core", title="Основа")
+        await call(
+            session, "create_task", project="UI", area="UI/core", title="Экран", description="d"
         )
-        single = await call(session, "move_task", key="TRK-2", project="UI", reason="Назад")
-        one = await call(session, "move_task", key=["UI-1"], project="UI", reason="r")
+        batch = await call(
+            session,
+            "move_task",
+            key=["UI-1", "TRK-1", "NOPE-1"],
+            project="TRK",
+            area="TRK/core",
+            reason="r",
+        )
+        single = await call(
+            session, "move_task", key="TRK-2", project="UI", area="UI/core", reason="Назад"
+        )
+        one = await call(
+            session, "move_task", key=["UI-1"], project="UI", area="UI/core", reason="r"
+        )
         too_long = await refuse(
-            session, "move_task", key=["UI-1"] * (MAX_MOVE_KEYS + 1), project="TRK", reason="r"
+            session,
+            "move_task",
+            key=["UI-1"] * (MAX_MOVE_KEYS + 1),
+            project="TRK",
+            area="TRK/core",
+            reason="r",
         )
         entries = await call(session, "read_entries", key="UI-1", types=["moved"])
 
@@ -261,7 +313,8 @@ async def test_mcp_moves_a_list_and_keeps_the_single_answer(
             },
         ]
     }
-    assert single == {"key": "UI-1", "previous_keys": ["TRK-2"], "version": 3, "no": 3}
+    # `no` 4: за `moved` первого переноса стоит `field_changed` области (запись 3).
+    assert single == {"key": "UI-1", "previous_keys": ["TRK-2"], "version": 3, "no": 4}
     assert one == {"results": [{"key": "UI-1", "outcome": "already", "to_key": "UI-1"}]}
     assert "task_move_batch_size_invalid" in too_long
     assert [entry["payload"]["reason"] for entry in entries["items"]] == ["r", "Назад"]

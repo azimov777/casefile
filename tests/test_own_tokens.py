@@ -182,7 +182,12 @@ async def test_an_agent_works_over_mcp_with_the_issued_token_until_it_is_revoked
 
     async with mcp_session(issued["secret"]) as session:
         created = await call(
-            session, "create_task", project=project.key, title="От агента", description="Проверка"
+            session,
+            "create_task",
+            project=project.key,
+            area="TRK/core",
+            title="От агента",
+            description="Проверка",
         )
         assert created["key"].startswith(project.key)
 

@@ -28,10 +28,11 @@ from app.services import case as case_service
 from app.services import search as search_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
-from conftest import Connect, call, refuse
+from conftest import Connect, call, make_task, refuse
 
 READY = {
     "project": "trk",
+    "area": "TRK/core",
     "title": "Починить выдачу ключей",
     "description": "Ключ сгорает на неудачном запросе",
     "goal": "Ключи не сгорают",
@@ -61,7 +62,7 @@ CLOSING_SUMMARY = {
 
 
 async def make(session: AsyncSession, actor: Actor, project: Project, title: str) -> Task:
-    return await tasks_service.create_task(
+    return await make_task(
         session,
         actor=actor,
         project=project,

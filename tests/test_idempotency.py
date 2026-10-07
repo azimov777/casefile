@@ -33,7 +33,12 @@ def with_key(key: str, *, secret: str | None = None) -> dict[str, str]:
 
 
 def task_body(project: Project, title: str = "Починить выдачу ключей") -> dict[str, Any]:
-    return {"project": project.key, "title": title, "description": "Ключ сгорает на отказе"}
+    return {
+        "project": project.key,
+        "area": "TRK/core",
+        "title": title,
+        "description": "Ключ сгорает на отказе",
+    }
 
 
 async def stored_keys(session: AsyncSession) -> int:

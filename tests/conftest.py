@@ -35,11 +35,13 @@ from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.session import get_session, transaction
 from app.domain.authors import ACTOR_LABEL_HEADER
+from app.domain.errors import AreaNotFoundError
 from app.domain.participants import ParticipantKind
 from app.domain.tokens import TokenKind
 from app.main import create_app
 from app.mcp.runtime import Runtime, SessionFactory
 from app.mcp.server import create_server
+from app.services import areas as areas_service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
@@ -392,9 +394,67 @@ async def auth_client(client: AsyncClient, main_secret: str) -> AsyncClient:
     return client
 
 
+#: Область проекта `TRK` из фикстуры `project`: задача без области не заводится
+#: (`area_required`), и тесты, которым область безразлична, называют эту.
+AREA = "TRK/core"
+
+
+async def make_area(
+    session: AsyncSession, actor: Actor, project_key: str, key: str = "core"
+) -> str:
+    """Заводит область проекта, если её ещё нет, и отдаёт адрес `ПРОЕКТ/ключ`.
+
+    Для проектов, заведённых тестом по ходу дела: задаче нужна область, а область —
+    проект. Повторный вызов с тем же ключом ничего не делает.
+    """
+    address = f"{project_key.upper()}/{key}"
+    try:
+        await areas_service.get_area(session, address)
+    except AreaNotFoundError:
+        await areas_service.create_area(session, actor=actor, address=address, title=key)
+    return address
+
+
+async def make_task(
+    session: AsyncSession, *, actor: Actor, project: Project, area: str | None = None, **fields: Any
+) -> Task:
+    """Заводит задачу сервисом, как `tasks_service.create_task`, но с областью.
+
+    Область обязательна (`area_required`), а большинству тестов она безразлична: без
+    `area` берётся область `core` проекта, которую помощник заводит, если её ещё нет.
+    Тесты самого правила зовут `tasks_service.create_task` напрямую.
+    """
+    if area is None:
+        area = await make_area(session, actor, project.key)
+    return await tasks_service.create_task(
+        session, actor=actor, project=project, area=area, **fields
+    )
+
+
+async def move_task(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    project: Project,
+    area: str | None = None,
+    **fields: Any,
+) -> Any:
+    """Переносит задачу сервисом, как `tasks_service.move_task`, но с областью целевого проекта.
+
+    Область обязательна (`area_required`): без `area` берётся область `core` целевого проекта,
+    которую помощник заводит, если её ещё нет.
+    """
+    if area is None:
+        area = await make_area(session, actor, project.key)
+    return await tasks_service.move_task(
+        session, task, actor=actor, project=project, area=area, **fields
+    )
+
+
 @pytest.fixture
-async def project(db_session: AsyncSession, main_actor: Actor) -> Project:
-    """Проект `TRK`: на нём проверяется всё, что требует существующего проекта."""
+async def bare_project(db_session: AsyncSession, main_actor: Actor) -> Project:
+    """Проект `TRK` без областей: для тестов, которым важно, что областей у проекта нет."""
     return await projects_service.create_project(
         db_session,
         actor=main_actor,
@@ -405,13 +465,22 @@ async def project(db_session: AsyncSession, main_actor: Actor) -> Project:
 
 
 @pytest.fixture
+async def project(db_session: AsyncSession, main_actor: Actor, bare_project: Project) -> Project:
+    """Проект `TRK` с областью `TRK/core`: на нём проверяется всё, что требует проекта."""
+    await areas_service.create_area(
+        db_session, actor=main_actor, address=AREA, title="Ядро", description=""
+    )
+    return bare_project
+
+
+@pytest.fixture
 async def task(db_session: AsyncSession, task_actor: Actor, project: Project) -> Task:
     """Задача `TRK-1` в `backlog` с заполненными разделами: готова к переходу в `open`.
 
     Заводится набором `task`, как это делает агент: автор её записей — владелец, но
     право на создание задачи не требует `main`.
     """
-    return await tasks_service.create_task(
+    return await make_task(
         db_session,
         actor=task_actor,
         project=project,
