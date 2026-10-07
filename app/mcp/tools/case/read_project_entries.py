@@ -1,25 +1,25 @@
-"""Инструмент `read_project_entries`: тела записей дела проекта или направления по номерам,
+"""Инструмент `read_project_entries`: тела записей дела проекта или области по номерам,
 типам, имени атрибута, статусу, подстроке и «после»."""
 
 from typing import Annotated
 
 from pydantic import Field
 
-from app.db.models.direction import Direction
+from app.db.models.area import Area
 from app.mcp.arguments import CaseOwnerKeyArg, CursorArg, LimitArg
 from app.mcp.tools.case.arguments import AfterNoArg, AttributeArg, EntryNosArg, EntryTypesArg
 from app.mcp.tools.case.views import EntryView, entry
 from app.mcp.toolset import READ_ONLY, Toolset
 from app.mcp.views import PageView, page
+from app.services import areas as areas_service
 from app.services import case as case_service
-from app.services import directions as directions_service
 
 InForceArg = Annotated[
     bool | None,
     Field(
         description=(
             "`true`: only the decisions and findings in force; `false`: only the superseded "
-            "ones. Entries without a status — other types and every entry of a direction's "
+            "ones. Entries without a status — other types and every entry of an area's "
             "case — match neither"
         )
     ),
@@ -54,7 +54,7 @@ def register(tools: Toolset) -> None:
         limit: LimitArg = None,
         cursor: CursorArg = None,
     ) -> PageView[EntryView]:
-        """Returns the entry bodies of a project's or direction's case, payload included,
+        """Returns the entry bodies of a project's or area's case, payload included,
         ordered by entry number.
 
         Such a case holds decisions, findings, artifacts and notes about its owner, and
@@ -67,10 +67,10 @@ def register(tools: Toolset) -> None:
 
         Decisions and findings of a project's case carry `status` and `superseded_by` on
         every read, numbers included; `superseded_by` is the direct successor's number.
-        Entries of a direction's case have none.
+        Entries of an area's case have none.
         """
         async with runtime.call() as (session, actor):
-            owner = await directions_service.get_owner(session, key)
+            owner = await areas_service.get_owner(session, key)
             listed = await case_service.list_project_entries(
                 session,
                 owner,
@@ -86,8 +86,8 @@ def register(tools: Toolset) -> None:
             )
             return page(
                 (
-                    entry(item, direction=owner.address)
-                    if isinstance(owner, Direction)
+                    entry(item, area=owner.address)
+                    if isinstance(owner, Area)
                     else entry(item, project_key=owner.key, standing=listed.standings.get(item.no))
                     for item in listed.items
                 ),

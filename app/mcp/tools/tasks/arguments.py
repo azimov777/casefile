@@ -1,6 +1,6 @@
-"""Аргументы, общие для нескольких инструментов задач: решения, направление и момент.
+"""Аргументы, общие для нескольких инструментов задач: решения, область и момент.
 
-Поля `decisions`, `direction` и `not_before` ставит `create_task` и меняет `update_task`
+Поля `decisions`, `area` и `not_before` ставит `create_task` и меняет `update_task`
 (`CONCEPT.md`, 3.3; решение проекта `TRK#47`), и правило у каждого одно на оба инструмента:
 какое значение принимается и какой ответит отказ.
 """
@@ -23,12 +23,12 @@ DECISIONS_RULE = (
     "successor in `details`"
 )
 
-#: Направление задачи (`CONCEPT.md`, 3.3, 3.7): адрес направления её проекта. Ставит
+#: Область задачи (`CONCEPT.md`, 3.3, 3.7): адрес области её проекта. Ставит
 #: `create_task`, меняет `update_task`; формулировка короткая намеренно — метадата
 #: инструментов держится в бюджете токенов (`docs/notes/mcp.md`).
-DIRECTION_RULE = "Direction address `PROJECT/key`"
+AREA_RULE = "Area address `PROJECT/key`"
 
-DirectionArg = Annotated[str | None, Field(description=DIRECTION_RULE)]
+AreaArg = Annotated[str | None, Field(description=AREA_RULE)]
 
 #: Момент «не раньше» (решение проекта `TRK#47`): поле, признак и отказ входа названы в
 #: одном месте, потому что агент ставит момент там же, где узнаёт, что он держит. Примера

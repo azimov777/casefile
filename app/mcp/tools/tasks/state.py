@@ -100,6 +100,6 @@ class TaskBriefCardView(BaseModel):
     status: str
     assignee: str | None
     priority: str
-    direction: str | None
+    area: str | None
     version: int
     updated_at: datetime

@@ -17,7 +17,7 @@ from app.core.sentinels import unset_field
 from app.domain.tasks import FIRST_CHECK_NUMBER, MAX_CHECK_LENGTH, CheckEdit
 from app.mcp.arguments import TaskKeyArg
 from app.mcp.enums import TaskPrioritySchema
-from app.mcp.tools.tasks.arguments import DECISIONS_RULE, DIRECTION_RULE, NOT_BEFORE_RULE
+from app.mcp.tools.tasks.arguments import AREA_RULE, DECISIONS_RULE, NOT_BEFORE_RULE
 from app.mcp.tools.tasks.views import MutationView, mutation
 from app.mcp.toolset import IDEMPOTENT_TASK_UPDATE, Toolset
 from app.services import tasks as tasks_service
@@ -50,7 +50,7 @@ class CheckEditArg(BaseModel):
     )
 
 
-# `null` осмыслен только у `assignee`, `direction` и `not_before`: он снимает значение. У
+# `null` осмыслен только у `assignee`, `area` и `not_before`: он снимает значение. У
 # остальных полей `null` смысла не имеет, и схема его не пропустит. Статуса здесь нет — он меняется
 # `transition`; ключа нет — он меняется только переносом (`move_task`).
 class TaskChanges(BaseModel):
@@ -93,8 +93,8 @@ class TaskChanges(BaseModel):
         )
     )
     priority: TaskPrioritySchema = unset_field(description="Task priority")
-    direction: str | None = unset_field(
-        description=f"{DIRECTION_RULE}; `null` clears",
+    area: str | None = unset_field(
+        description=f"{AREA_RULE}; `null` clears",
     )
     not_before: str | None = unset_field(
         description=(

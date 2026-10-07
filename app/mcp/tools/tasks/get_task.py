@@ -125,7 +125,7 @@ class TaskPackageView(BaseModel):
     state: TaskStateView
     task: TaskView | TaskBriefCardView
     #: Родитель и дети — полями, а не видами в `links` (TRK-135): имя поля и есть ответ
-    #: на «кто родитель», направление разбирать не нужно.
+    #: на «кто родитель», область разбирать не нужно.
     parent: ParentCardView | LinkOtherView | None
     #: Поля ниже в кратком ответе отсутствуют (`brief=true`), поэтому в схеме не обязательны.
     children: list[LinkOtherView] = Field(default=None)  # type: ignore[assignment]
@@ -187,7 +187,7 @@ def brief_package(package: TaskPackage) -> CallToolResult:
             status=item.status,
             assignee=item.assignee,
             priority=item.priority,
-            direction=None if item.direction is None else item.direction.address,
+            area=None if item.area is None else item.area.address,
             version=item.version,
             updated_at=item.updated_at,
         ),

@@ -1,4 +1,4 @@
-"""Инструмент `remove_attribute`: снять атрибут проекта или направления с причиной."""
+"""Инструмент `remove_attribute`: снять атрибут проекта или области с причиной."""
 
 from typing import Annotated
 
@@ -9,8 +9,8 @@ from app.mcp.arguments import CaseOwnerKeyArg, IdempotencyKeyArg
 from app.mcp.idempotency import Once
 from app.mcp.tools.registries.arguments import AttributeNameArg
 from app.mcp.toolset import FILING, Toolset
+from app.services import areas as areas_service
 from app.services import attributes as attributes_service
-from app.services import directions as directions_service
 from app.services.case import owner_name
 
 AttributeRemovalReasonArg = Annotated[
@@ -30,7 +30,7 @@ class AttributeRemovedView(BaseModel):
     returned by `read_project_entries`.
     """
 
-    project_key: str = Field(description="Project key or direction address")
+    project_key: str = Field(description="Project key or area address")
     name: str = Field(description="Name as it was stored")
     no: int = Field(description="Number of the `attribute_removed` entry in its case")
 
@@ -59,7 +59,7 @@ def register(tools: Toolset) -> None:
         `task` token removes attributes.
         """
         async with runtime.call() as (session, actor):
-            owner = await directions_service.get_owner(session, key)
+            owner = await areas_service.get_owner(session, key)
 
             async def remove() -> AttributeRemovedView:
                 entry = await attributes_service.remove_attribute(
