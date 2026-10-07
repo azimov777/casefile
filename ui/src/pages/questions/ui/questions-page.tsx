@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
@@ -10,7 +10,6 @@ import {
   EntryHeadline,
   factsOfEntry,
   questionHistoryQueryOptions,
-  questionsQueryOptions,
   remarksQueryOptions,
   type Question,
   type QuestionAnswer,
@@ -18,13 +17,6 @@ import {
 } from '@/entities/entry';
 import { bootstrapQueryOptions } from '@/entities/session';
 import { attentionQueryOptions, type Task } from '@/entities/task';
-import {
-  AnswerForm,
-  AnswerReceipt,
-  useAnswering,
-  withHeld,
-  type Answering,
-} from '@/features/answer-question';
 import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import {
   Badge,
@@ -53,12 +45,12 @@ export function QuestionsPage() {
 }
 
 /**
- * Входящая: две половины одной картины — вопросы, которых ждут от человека, и
+ * Входящая: то, чего ждут от человека (обсуждения, задачи, закрытые не целиком), и
  * замечания, которых человек ждёт от агентов.
  *
- * Адресата в запрос вопросов не кладём — бэкенд подставляет владельца токена сам
- * (`docs/FRONTEND.md`): «моя входящая» не должна знать своего имени. У
- * замечаний адресата нет вовсе, поэтому «мои» здесь означает «мной оставленные», и
+ * Прежнего раздела вопросов в делах задач здесь больше нет (TRK-683): вопрос человеку
+ * задаётся только в обсуждении, а миграция выпуска закрыла прежние открытые вопросы.
+ * У замечаний адресата нет вовсе, поэтому «мои» здесь означает «мной оставленные», и
  * подпись берётся из первого кадра: страница знает, кто вошёл, а бэкенд по замечанию
  * не догадывается.
  */
@@ -67,18 +59,6 @@ function Inbox() {
   const bootstrap = useQuery(bootstrapQueryOptions());
 
   const project = searchParams.get('project') ?? '';
-  const blocking = searchParams.get('blocking') === 'true';
-
-  const params = useMemo(
-    () => ({
-      ...(project === '' ? {} : { project }),
-      ...(blocking ? { blocking: true } : {}),
-    }),
-    [project, blocking],
-  );
-
-  const questions = useInfiniteQuery(questionsQueryOptions(params));
-  const loaded = questions.data?.pages.flatMap((page) => page.items) ?? [];
 
   const author = bootstrap.data?.participant?.name ?? '';
   const remarks = useInfiniteQuery({
@@ -94,33 +74,14 @@ function Inbox() {
   const attention = useInfiniteQuery(attentionQueryOptions(project));
   const attentionTasks = attention.data?.pages.flatMap((page) => page.items) ?? [];
 
-  // Вопросы, по которым отправка уже пошла, остаются на экране вместе со своим
-  // подтверждением, даже когда выдача их больше не содержит: удачный ответ убирает
-  // вопрос из входящей, а человеку надо увидеть, чем всё кончилось.
-  const answering = useAnswering<Question>();
-  const items = withHeld(loaded, answering.held, questionId);
   const { t } = useTranslation('questions');
   const { t: brick } = useTranslation('ui');
 
-  /**
-   * Условия, действующие на вопросы. Нужны, чтобы отличить «ничего нет» от «ничего
-   * не нашлось»: из пустого ответа отобранной выдачи не следует, что агенты вообще
-   * ни о чём не спрашивают, — а прежний текст утверждал именно это.
-   */
-  const questionConditions = [
-    ...(project === '' ? [] : [t('condition.project', { project })]),
-    ...(blocking ? [t('condition.blocking')] : []),
-  ];
-
-  function apply(changes: { project?: string; blocking?: boolean }) {
+  function apply(changes: { project?: string }) {
     const updated = new URLSearchParams(searchParams);
     if (changes.project !== undefined) {
       if (changes.project === '') updated.delete('project');
       else updated.set('project', changes.project);
-    }
-    if (changes.blocking !== undefined) {
-      if (changes.blocking) updated.set('blocking', 'true');
-      else updated.delete('blocking');
     }
     setSearchParams(updated, { replace: true });
   }
@@ -183,22 +144,6 @@ function Inbox() {
       <DiscussionsInbox project={project} />
 
       {/*
-       * Два списка рядом (решение Д16): на 1440 половина экрана перестаёт пустовать,
-       * а вопросы и замечания перестают выглядеть продолжением друг друга. На узком
-       * экране сетка складывается в одну колонку в порядке разметки — вопросы первыми.
-       *
-       * Точка остановки названа решением, а не размером экрана: `wide` — это «входящая
-       * встаёт в две колонки». `grid-cols-2` разворачивается в `repeat(2, minmax(0, 1fr))`,
-       * то есть половина вправе стать уже своего содержимого: без нижней границы `0`
-       * длинное тело вопроса раздвинуло бы колонку и увело страницу вбок.
-       *
-       * Выравнивание написано свойством, а не утилитой `items-start`: та даёт
-       * `align-items: flex-start`, а здесь сетка, и её значение — `start`. Рисуется
-       * это одинаково (в сеточном контексте `flex-start` ведёт себя как `start`), но
-       * вычисленный стиль расходится, а вместе с ним и слепок, которым доказывают,
-       * что вид не изменился.
-       */}
-      {/*
        * «Требуют внимания» — над двумя половинами, на всю ширину (TRK-561): задачи,
        * которые агент закрыл не целиком и которые ждут решения человека — принять или
        * вернуть на доработку. Решают на карточке задачи, здесь только список и переход.
@@ -243,108 +188,49 @@ function Inbox() {
         ) : null}
       </section>
 
-      <div className="grid gap-4 [align-items:start] wide:grid-cols-2">
-        <section aria-labelledby="questions-section" className="flex flex-col gap-3">
-          <h2 className="text-screen" id="questions-section">
-            {t('questionsTitle')}
-          </h2>
-          <p className="m-0 text-meta text-muted">{t('questionsIntro')}</p>
+      {/*
+       * Вторая половина: что человек сказал агентам и на что ему ещё не ответили.
+       * Здесь только чтение — замечание оставляют на карточке задачи, глядя на то,
+       * о чём оно.
+       */}
+      <section aria-labelledby="remarks-section" className="flex flex-col gap-3">
+        <h2 className="text-screen" id="remarks-section">
+          {t('remarksTitle')}
+        </h2>
 
-          {/*
-           * Флажок принадлежит вопросам и стоит у них: блокирующих замечаний не бывает,
-           * и в общей форме он обещал бы отбор, которого нет. Под заголовком, а не в
-           * одной строке с ним: в строке он поднимал заголовок левой половины на два
-           * пикселя относительно правой, и колонки переставали начинаться на одной линии.
-           */}
-          {/* Минимум высоты только на телефоне (`max-fold:`): подпись кликабельна,
-              но и вся строка label на 390 px не дотягивала до 24px (UI-154). */}
-          <label className="inline-flex cursor-pointer items-center gap-2 max-fold:min-h-(--ui-tap)">
-            <input
-              type="checkbox"
-              checked={blocking}
-              onChange={(event) => apply({ blocking: event.target.checked })}
-            />
-            {t('blockingOnly')}
-          </label>
+        <QueryState
+          query={remarks}
+          loading={t('loadingRemarks')}
+          empty={
+            myRemarks.length === 0
+              ? project === ''
+                ? t('noRemarks')
+                : emptyByFilter(
+                    [t('condition.project', { project })],
+                    () => apply({ project: '' }),
+                    t,
+                  )
+              : undefined
+          }
+        />
 
-          <QueryState
-            query={questions}
-            loading={t('loadingQuestions')}
-            empty={
-              items.length === 0
-                ? questionConditions.length === 0
-                  ? t('noQuestions')
-                  : emptyByFilter(
-                      questionConditions,
-                      () => apply({ project: '', blocking: false }),
-                      t,
-                    )
-                : undefined
-            }
-          />
+        <ul className="flex list-none flex-col gap-3 p-0">
+          {myRemarks.map((remark) => (
+            <li key={`${remark.task_key}#${remark.no}`}>
+              <RemarkRow remark={remark} />
+            </li>
+          ))}
+        </ul>
 
-          <ul className="flex list-none flex-col gap-3 p-0">
-            {items.map((question, at) => (
-              <li key={questionId(question)}>
-                <QuestionRow question={question} at={at} answering={answering} />
-              </li>
-            ))}
-          </ul>
-
-          {questions.hasNextPage ? (
-            <Button
-              onClick={() => void questions.fetchNextPage()}
-              disabled={questions.isFetchingNextPage}
-            >
-              {questions.isFetchingNextPage ? t('loadingMore') : t('more')}
-            </Button>
-          ) : null}
-        </section>
-
-        {/*
-         * Вторая половина: что человек сказал агентам и на что ему ещё не ответили.
-         * Здесь только чтение — замечание оставляют на карточке задачи, глядя на то,
-         * о чём оно.
-         */}
-        <section aria-labelledby="remarks-section" className="flex flex-col gap-3">
-          <h2 className="text-screen" id="remarks-section">
-            {t('remarksTitle')}
-          </h2>
-
-          <QueryState
-            query={remarks}
-            loading={t('loadingRemarks')}
-            empty={
-              myRemarks.length === 0
-                ? project === ''
-                  ? t('noRemarks')
-                  : emptyByFilter(
-                      [t('condition.project', { project })],
-                      () => apply({ project: '' }),
-                      t,
-                    )
-                : undefined
-            }
-          />
-
-          <ul className="flex list-none flex-col gap-3 p-0">
-            {myRemarks.map((remark) => (
-              <li key={`${remark.task_key}#${remark.no}`}>
-                <RemarkRow remark={remark} />
-              </li>
-            ))}
-          </ul>
-
-          {remarks.hasNextPage ? (
-            <Button
-              onClick={() => void remarks.fetchNextPage()}
-              disabled={remarks.isFetchingNextPage}
-            >
-              {remarks.isFetchingNextPage ? t('loadingMore') : t('more')}
-            </Button>
-          ) : null}
-        </section>
-      </div>
+        {remarks.hasNextPage ? (
+          <Button
+            onClick={() => void remarks.fetchNextPage()}
+            disabled={remarks.isFetchingNextPage}
+          >
+            {remarks.isFetchingNextPage ? t('loadingMore') : t('more')}
+          </Button>
+        ) : null}
+      </section>
     </main>
   );
 }
@@ -435,13 +321,6 @@ function questionId(question: Question): string {
   return `${question.task_key}#${question.no}`;
 }
 
-interface QuestionRowProps {
-  question: Question;
-  /** Место в списке: закреплённый вопрос вернётся именно сюда. */
-  at: number;
-  answering: Answering<Question>;
-}
-
 /** Карточка вопроса: у блокирующего и обычного она одна и та же, кроме левой кромки. */
 const QUESTION_CARD = 'flex flex-col gap-2 rounded-control border border-line bg-surface p-4';
 
@@ -463,74 +342,6 @@ const QUESTION_CARD = 'flex flex-col gap-2 rounded-control border border-line bg
  * диктором, ни глазом, который его не различает.
  */
 const BLOCKING_EDGE = 'border-l-3 border-l-danger';
-
-/** Вопрос во входящей: откуда он, о чём и чем на него ответить. */
-function QuestionRow({ question, at, answering }: QuestionRowProps) {
-  const id = questionId(question);
-  const [open, setOpen] = useState(false);
-  const answered = answering.answerOf(id);
-  const { t } = useTranslation('questions');
-  const { t: brick } = useTranslation('ui');
-
-  const blocking = question.payload.blocking;
-
-  return (
-    <article
-      className={blocking ? `${QUESTION_CARD} ${BLOCKING_EDGE}` : QUESTION_CARD}
-      // Признак виден разметке, а не только глазу: сквозной тест ищет блокирующий
-      // вопрос по нему, а не по цвету кромки и не по тексту плашки.
-      data-blocking={blocking ? 'true' : undefined}
-      aria-label={
-        blocking
-          ? t('blockingQuestionLabel', { reference: id })
-          : t('questionLabel', { reference: id })
-      }
-    >
-      <header className="flex flex-wrap items-center gap-3 text-meta text-muted">
-        <Link
-          className="font-mono whitespace-nowrap"
-          to={taskRefHref({ key: question.task_key, entryNo: question.no })}
-        >
-          {question.task_key}#{question.no}
-        </Link>
-        {/* Плашка остаётся рядом с признаком: цвет не единственный носитель смысла. */}
-        {blocking ? <Badge tone="danger">{brick('entry.blocking')}</Badge> : null}
-        <RelativeTime value={question.created_at} />
-      </header>
-
-      <h2 className="text-screen">{question.title}</h2>
-
-      {/* Тело без обёртки записи: адресат здесь всегда один и тот же — тот, кто смотрит
-          входящую, — и повторять «Кому: owner» у каждого вопроса незачем. */}
-      <Markdown>{question.body}</Markdown>
-
-      {answered !== undefined ? (
-        <AnswerReceipt
-          taskKey={question.task_key}
-          questionNo={question.no}
-          answered={answered}
-          onClose={() => {
-            answering.close(id);
-            setOpen(false);
-          }}
-        />
-      ) : open || answering.isHeld(id) ? (
-        <AnswerForm
-          taskKey={question.task_key}
-          questionNo={question.no}
-          onBegin={() => answering.begin(id, question, at)}
-          onFailed={() => answering.fail(id)}
-          onAnswered={(result) => answering.complete(id, result)}
-          onCancel={() => setOpen(false)}
-        />
-      ) : (
-        <div>
-          <Button onClick={() => setOpen(true)}>{brick('answer.open')}</Button>
-        </div>
-      )}
-    </article>
-  );
-}
 
 /** Вид экрана вопросов: входящая или история. */
 type QuestionsView = 'inbox' | 'history';

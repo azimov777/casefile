@@ -18,7 +18,10 @@ async function answersOf(request: APIRequestContext, key: string): Promise<numbe
  * проект Playwright, который зависит от читающих: тем нужен ещё открытый вопрос
  * (`playwright.config.ts`, проект «ответ»).
  */
-test('ответ на вопрос из входящей закрывает его на всех экранах', async ({ page, request }) => {
+test('ответ на вопрос с карточки задачи закрывает его на всех экранах', async ({
+  page,
+  request,
+}) => {
   const before = await answersOf(request, 'DEMO-4');
   expect(before).toBe(0);
 
@@ -29,39 +32,29 @@ test('ответ на вопрос из входящей закрывает ег
     }
   });
 
-  await page.goto('/questions');
+  // Адрес называет вопрос — форма раскрыта сразу. Отвечать из входящей больше нельзя:
+  // прежний раздел вопросов в делах оттуда снят (TRK-683).
+  await page.goto('/tasks/DEMO-4?entry=4');
 
   // Счётчик в панели — то же число, что показывает `bootstrap`. Пишущие сценарии идут
   // по одному и убирают за собой, поэтому здесь открыт ровно вопрос демо.
   await expect(side(page).getByText('1 открытый вопрос')).toBeVisible();
 
-  const question = page.getByRole('article').filter({ hasText: 'DEMO-4#4' });
-  await expect(question.getByText('блокирующий')).toBeVisible();
-
-  await question.getByRole('button', { name: 'Ответить' }).click();
   await page
     .getByLabel(/^Ответ$/)
     .fill('Храним вечно: записи дела неизменяемы, срок хранения не вводим.');
   await page.getByRole('button', { name: 'Ответить' }).click();
 
-  // Ответ подшит, и это сказано словами с номером записи: раньше здесь исчезал весь
-  // блок, а единственным признаком, что что-то произошло, был счётчик в шапке.
+  // Ответ подшит, и это сказано словами с номером записи.
   const receipt = page.getByRole('region', { name: 'Ответ на DEMO-4#4 подшит' });
   await expect(receipt).toBeVisible();
   const entry = receipt.getByRole('link', { name: /^DEMO-4#\d+$/ });
   const href = await entry.getAttribute('href');
   expect(href).toMatch(/^\/tasks\/DEMO-4\?entry=\d+$/);
 
-  // Вопрос при этом никуда не делся, а счётчик всё равно перечитан у бэкенда.
-  await expect(page.getByRole('article').filter({ hasText: 'DEMO-4#4' })).toHaveCount(1);
-  // Ноль называется словами, а не числом: «0 открытых вопросов» человек читает
-  // как счётчик, который надо расшифровать, а «вопросов нет» — как ответ.
+  // Счётчик перечитан у бэкенда. Ноль называется словами, а не числом: «0 открытых
+  // вопросов» человек читает как счётчик, который надо расшифровать.
   await expect(side(page).getByText('Открытых вопросов нет')).toBeVisible();
-
-  // Подтверждение закрывает человек, а не таймер, — и только после этого вопрос
-  // уходит с экрана.
-  await receipt.getByRole('button', { name: 'Закрыть' }).click();
-  await expect(page.getByRole('article').filter({ hasText: 'DEMO-4#4' })).toHaveCount(0);
 
   // Номер из подтверждения ведёт к самому ответу в ленте дела. Отдельным переходом,
   // а не «туда и обратно»: подтверждение живёт в состоянии страницы, и уход с неё —
@@ -251,13 +244,13 @@ test('ответ не схлопывает блок открытых вопро�
 });
 
 /**
- * История вопросов (UI-147): отвеченный вопрос уходит из входящей, но не пропадает —
+ * История вопросов (UI-147): отвеченный вопрос во входящей не показывается, но не пропадает —
  * в истории он стоит вместе с ответом и ссылкой `KEY#N` на запись ответа.
  *
  * Свой вопрос, а не демонстрационный, по той же причине, что и у замеров выше; ответ
- * на него даётся формой входящей, то есть он же и убирает за собой.
+ * на него даётся формой карточки, то есть он же и убирает за собой.
  */
-test('отвеченный вопрос уходит из входящей и виден в истории с ответом', async ({
+test('отвеченный на карточке вопрос виден в истории с ответом, а во входящей его нет', async ({
   page,
   request,
 }) => {
@@ -266,24 +259,20 @@ test('отвеченный вопрос уходит из входящей и в
   const reference = `DEMO-3#${question.no}`;
   const answer = 'Ответ, который обязан найтись в истории.';
 
-  await page.goto('/questions');
-  const inInbox = page.getByRole('article', { name: `Вопрос ${reference}` });
-  await expect(inInbox).toBeVisible();
-  await inInbox.getByRole('button', { name: 'Ответить' }).click();
-  await inInbox.getByLabel(/^Ответ$/).fill(answer);
-  await inInbox.getByRole('button', { name: 'Ответить' }).click();
+  await page.goto(`/tasks/DEMO-3?entry=${question.no}`);
+  await page.getByLabel(/^Ответ$/).fill(answer);
+  await page.getByRole('button', { name: 'Ответить' }).click();
   const receipt = page.getByRole('region', { name: `Ответ на ${reference} подшит` });
   await expect(receipt).toBeVisible();
   const answerHref = await receipt.getByRole('link', { name: /^DEMO-3#\d+$/ }).getAttribute('href');
   const answerNo = /entry=(\d+)/.exec(answerHref ?? '')?.[1] ?? '';
   expect(answerNo).not.toBe('');
 
-  // Входящая, прочитанная заново, вопроса больше не знает.
-  await page.reload();
-  await expect(page.getByRole('heading', { name: 'Вопросы ко мне' })).toBeVisible();
+  // Входящая вопросов из дел не показывает вовсе (TRK-683); история — одним действием
+  // с того же экрана, и её вид живёт в адресе.
+  await page.goto('/questions');
+  await expect(page.getByRole('heading', { name: 'Мои замечания без разбора' })).toBeVisible();
   await expect(page.getByRole('article', { name: `Вопрос ${reference}` })).toHaveCount(0);
-
-  // История — одним действием с того же экрана, и её вид живёт в адресе.
   await page.getByRole('link', { name: 'История вопросов' }).click();
   await expect(page).toHaveURL(/\/questions\?view=history$/);
 

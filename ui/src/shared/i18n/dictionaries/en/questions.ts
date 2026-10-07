@@ -2,7 +2,7 @@ import type { components } from '@/shared/api';
 
 type AnswerOutcome = components['schemas']['AnswerOutcome'];
 
-/** Экран входящей: вопросы ко мне, мои замечания без разбора и история вопросов (`src/pages/questions`). */
+/** Экран входящей: обсуждения, задачи, закрытые не целиком, мои замечания без разбора и история вопросов (`src/pages/questions`). */
 export const questions = {
   /** Пояснение экрана (`features/manage-onboarding`, `ExplanationPanel`, `TRK-362`). */
   explanation: {
@@ -15,14 +15,7 @@ export const questions = {
   allProjects: 'every project',
   projectNote: 'The project filters every part of the inbox.',
 
-  questionsTitle: 'Questions for me',
-  questionsIntro:
-    'Earlier questions asked in task cases. New questions are asked in discussions (above).',
-  blockingOnly: 'blocking only',
-  loadingQuestions: 'Reading the inbox…',
-  noQuestions: 'There are no questions without an answer: no agent is waiting on you.',
   questionLabel: 'Question {{reference}}',
-  blockingQuestionLabel: 'Blocking question {{reference}}',
 
   attentionTitle: 'Need attention',
   attentionIntro:
@@ -68,6 +61,5 @@ export const questions = {
   resetFilter: 'Reset the selection',
   condition: {
     project: 'project {{project}}',
-    blocking: 'blocking only',
   },
 } as const;

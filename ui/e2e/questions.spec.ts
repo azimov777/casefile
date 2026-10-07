@@ -22,14 +22,14 @@ test('доступность истории вопросов', async ({ page }) 
 test('без параметров экран показывает входящую, а история — второй вид', async ({ page }) => {
   await page.goto('/questions');
 
-  // Первый экран — прежняя входящая: открытые вопросы ко мне и мои замечания.
+  // Первый экран — входящая: обсуждения, задачи, закрытые не целиком, и мои замечания.
   const views = page.getByRole('navigation', { name: 'Вид входящей' });
   await expect(views.getByRole('link', { name: 'Ждут ответа' })).toHaveAttribute(
     'aria-current',
     'true',
   );
-  await expect(page.getByRole('heading', { name: 'Вопросы ко мне' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Мои замечания без разбора' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Вопросы ко мне' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Вопросы и ответы' })).toHaveCount(0);
   // Во входящей только открытые: отмеченных отвеченными строк здесь нет.
   await expect(page.locator('article[data-answered="true"]')).toHaveCount(0);
@@ -38,28 +38,21 @@ test('без параметров экран показывает входящу
   await views.getByRole('link', { name: 'История вопросов' }).click();
   await expect(page.getByRole('heading', { name: 'Вопросы и ответы' })).toBeVisible();
   await page.goBack();
-  await expect(page.getByRole('heading', { name: 'Вопросы ко мне' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Мои замечания без разбора' })).toBeVisible();
 });
 
-test('входящая показывает адресованный вопрос и отбирает блокирующие', async ({ page }) => {
+test('во входящей нет раздела прежних вопросов в делах (TRK-683)', async ({ page }) => {
   await page.goto('/questions');
+  await expect(page.getByRole('heading', { name: 'Мои замечания без разбора' })).toBeVisible();
 
-  // Счётчик переехал из шапки в боковую панель (UI-38) и подписан там числом.
+  // Счётчик в боковой панели остаётся: открытый вопрос в деле виден на карточке задачи.
   await expect(
     side(page).getByText(/^\d+ открыт(ый вопрос|ых вопроса|ых вопросов)$/),
   ).toBeVisible();
 
-  const question = page.getByRole('article').filter({ hasText: 'DEMO-4#4' });
-  await expect(question).toBeVisible();
-  await expect(question.getByText('блокирующий')).toBeVisible();
-  await expect(question).toContainText('Сколько храним?');
-
-  // Отбор живёт в адресе: ссылку на «только блокирующие» можно переслать, и она
-  // открывает то же самое. Сам клик по флажку проверяет страничный тест — здесь важно,
-  // что состояние читается из адреса, а не из памяти вкладки.
-  await page.goto('/questions?blocking=true');
-  await expect(page.getByRole('checkbox', { name: 'только блокирующие' })).toBeChecked();
-  await expect(page.getByRole('article').filter({ hasText: 'DEMO-4#4' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Вопросы ко мне' })).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'только блокирующие' })).toHaveCount(0);
+  await expect(page.getByRole('article').filter({ hasText: 'DEMO-4#4' })).toHaveCount(0);
 });
 
 /**
@@ -74,9 +67,10 @@ test('входящая показывает адресованный вопро�
  * значением токена в текущей теме, поэтому ночной красный проверяется тем же кодом.
  */
 test('блокирующий вопрос отмечен красной кромкой, а не только плашкой', async ({ page }) => {
-  await page.goto('/questions');
+  // Открытый блокирующий вопрос виден в истории: во входящей вопросов из дел нет (TRK-683).
+  await page.goto('/questions?view=history');
 
-  const question = page.getByRole('article').filter({ hasText: 'DEMO-4#4' });
+  const question = page.getByRole('article', { name: 'Вопрос DEMO-4#4' });
   await expect(question).toBeVisible();
 
   const edge = await question.evaluate((node) => {
@@ -121,7 +115,7 @@ test('блокирующий вопрос отмечен красной кром
 });
 
 test('ссылка вопроса ведёт в саму запись, а не только в задачу', async ({ page }) => {
-  await page.goto('/questions');
+  await page.goto('/questions?view=history');
 
   const link = page.getByRole('link', { name: 'DEMO-4#4' });
   await expect(link).toHaveAttribute('href', '/tasks/DEMO-4?entry=4');
@@ -146,71 +140,29 @@ test('проект отбирает все части входящей, и эт�
   await page.goto('/questions');
   await expect(page.getByRole('main')).toBeVisible();
 
-  // Область действия названа у самого поля: проект общий, «только блокирующие» —
-  // условие вопросов и стоит внутри их половины.
+  // Область действия названа у самого поля; флажка «только блокирующие» больше нет.
   await expect(page.getByText('Проект отбирает все части входящей.')).toBeVisible();
-  const questions = page.getByRole('region').filter({ hasText: 'Вопросы ко мне' });
-  await expect(page.getByRole('checkbox', { name: 'только блокирующие' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'только блокирующие' })).toHaveCount(0);
 
-  // Отбор по проекту уходит в адрес и держится в обеих половинах.
+  // Отбор по проекту уходит в адрес и держится.
   await page.goto('/questions?project=DEMO');
   await expect(page.getByRole('combobox', { name: 'Проект' })).toHaveValue('DEMO');
-  await expect(questions.getByRole('article').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Мои замечания без разбора' })).toBeVisible();
 });
-
-/** Ширина широкого замера: та же, что в `test.use` ниже. */
-const WIDE = 1440;
 
 test.describe('раскладка входящей', () => {
-  test.use({ viewport: { width: WIDE, height: 900 } });
+  for (const width of [390, 900, 1440]) {
+    test(`входящая в одну колонку не уезжает вбок на ширине ${width} px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/questions');
+      await expect(page.getByRole('heading', { name: 'Мои замечания без разбора' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Требуют внимания' })).toBeVisible();
+      await fontsReady(page);
 
-  test('на широком экране оба списка видны рядом, а не под экраном', async ({ page }) => {
-    await page.goto('/questions');
-    await expect(page.getByRole('heading', { name: 'Вопросы ко мне' })).toBeVisible();
-    await fontsReady(page);
-
-    const questions = page.getByRole('heading', { name: 'Вопросы ко мне' });
-    const remarks = page.getByRole('heading', { name: 'Мои замечания без разбора' });
-
-    // Списки стоят рядом (решение Д16): у заголовков совпадает верх, а левые края
-    // разные — значит это две колонки, а не одна под другой.
-    const [first, second] = await Promise.all([questions.boundingBox(), remarks.boundingBox()]);
-    expect(Math.abs((first?.y ?? 0) - (second?.y ?? 0))).toBeLessThanOrEqual(2);
-    expect(second?.x ?? 0).toBeGreaterThan((first?.x ?? 0) + 100);
-
-    // Оба видны без прокрутки, и справа от содержания не пустует половина экрана.
-    await expect(questions).toBeInViewport();
-    await expect(remarks).toBeInViewport();
-
-    const free = await page.evaluate(() => {
-      const main = document.querySelector('main');
-      if (main === null) return Number.POSITIVE_INFINITY;
-      const box = main.getBoundingClientRect();
-      return window.innerWidth - box.right;
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBe(0);
     });
-    expect(free).toBeLessThan(WIDE / 4);
-  });
-});
-
-test.describe('входящая на узком экране', () => {
-  test.use({ viewport: { width: 900, height: 900 } });
-
-  test('складывается в одну колонку: вопросы выше замечаний', async ({ page }) => {
-    await page.goto('/questions');
-    await expect(page.getByRole('heading', { name: 'Вопросы ко мне' })).toBeVisible();
-    await fontsReady(page);
-
-    const questions = await page.getByRole('heading', { name: 'Вопросы ко мне' }).boundingBox();
-    const remarks = await page
-      .getByRole('heading', { name: 'Мои замечания без разбора' })
-      .boundingBox();
-
-    // Порядок разметки и есть порядок чтения: вопросы первыми.
-    expect(remarks?.y ?? 0).toBeGreaterThan(questions?.y ?? 0);
-
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow).toBe(0);
-  });
+  }
 });

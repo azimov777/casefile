@@ -170,7 +170,8 @@ test('входящая: разделы английские, вопросы ру
   await page.goto('/questions');
 
   await expect(page.getByRole('heading', { name: 'Inbox', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Questions for me' })).toBeVisible();
+  // Раздела прежних вопросов в делах больше нет (TRK-683).
+  await expect(page.getByRole('heading', { name: 'Questions for me' })).toHaveCount(0);
   await expect(
     page.getByRole('heading', { name: 'My remarks without a resolution' }),
   ).toBeVisible();
@@ -182,9 +183,9 @@ test('входящая: разделы английские, вопросы ру
   await expect(filter).toContainText('The project filters every part of the inbox.');
 
   /*
-   * Текст вопроса пишет агент. Явное ожидание, а не «кириллица где-нибудь на
-   * странице»: вопрос — это заголовок второго уровня внутри своей карточки.
+   * Текст пишет агент. Явное ожидание, а не «кириллица где-нибудь на странице»:
+   * замечание — заголовок третьего уровня внутри своей карточки.
    */
-  const question = page.getByRole('heading', { level: 2 }).filter({ hasText: /[А-Яа-яЁё]/ });
+  const question = page.getByRole('heading', { level: 3 }).filter({ hasText: /[А-Яа-яЁё]/ });
   await expect(question.first()).toBeVisible();
 });
