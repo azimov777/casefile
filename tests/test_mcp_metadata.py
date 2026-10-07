@@ -438,3 +438,9 @@ async def test_search_tasks_query_lists_the_operators_each_field_takes(tools: li
     assert Operator.CONTAINS not in by_field["parent"]
     assert Operator.GTE not in by_field["key"]
     assert Operator.CONTAINS in by_field["text"]
+
+
+async def test_add_entry_refs_names_the_area_entry_form(tools: list[Tool]) -> None:
+    """TRK-644: описание `refs` называет и записи области, как их принимает REST."""
+    add = next(tool for tool in tools if tool.name == "add_entry")
+    assert "area entries `TRK/promotion#3`" in add.input_schema["properties"]["refs"]["description"]
