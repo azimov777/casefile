@@ -275,6 +275,19 @@ async def call(session: ClientSession, tool: str, /, **arguments: Any) -> dict[s
     return result.structured_content
 
 
+def without_empty_standing(value: Any) -> Any:
+    """Ответ REST в форме MCP: у записи без статуса `status` и `superseded_by` в REST —
+    `null`, а MCP их не отдаёт вовсе (TRK-665). Остальное не трогает."""
+    if isinstance(value, list):
+        return [without_empty_standing(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    kept = {key: without_empty_standing(item) for key, item in value.items()}
+    if "status" in kept and "superseded_by" in kept and kept["status"] is None:
+        del kept["status"], kept["superseded_by"]
+    return kept
+
+
 async def refuse(session: ClientSession, tool: str, /, **arguments: Any) -> str:
     """Вызов, который обязан отказать. Возвращает текст отказа с кодом и подробностями."""
     result = await session.call_tool(tool, arguments)
