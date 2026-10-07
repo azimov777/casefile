@@ -58,10 +58,10 @@ _ASSIGNEE_DESCRIPTION = (
 )
 _CHECKS_EXAMPLE = ["docker compose run --rm test: the whole suite is green"]
 _AREA_DESCRIPTION = (
-    "Address `PROJECT/key` of an area of the task's own project, or null for none. "
+    "Address `PROJECT/key` of an area of the task's own project. "
     "Another project's area answers `area_project_mismatch`, an unknown one "
-    "`area_not_found`, an archived one `area_archived` (taking the task out of "
-    "it is always allowed). Not inherited from the parent; set in any status but `done` "
+    "`area_not_found`, an archived one `area_archived` (a task in an archived area can "
+    "move to another one). Not inherited from the parent; set in any status but `done` "
     "and `cancelled`"
 )
 _NOT_BEFORE_EXAMPLE = "2026-10-08T09:00:00+02:00"
@@ -504,7 +504,10 @@ class TaskCreate(BaseModel):
     area: str | None = Field(
         default=None,
         examples=["TRK/promotion"],
-        description=_AREA_DESCRIPTION,
+        description=(
+            f"{_AREA_DESCRIPTION}. Required: without it `422 area_required`, with the "
+            "project's areas in `details.areas`"
+        ),
     )
     # Строка, а не `datetime`: форму момента разбирает домен, как и у MCP, и отказ на
     # время без пояса один на оба канала — `task_fields_invalid`, а не `validation_error`.
@@ -592,7 +595,10 @@ class TaskUpdate(BaseModel):
     priority: TaskPriority = unset_field(examples=[TaskPriority.HIGH])
     area: str | None = unset_field(
         examples=["TRK/promotion"],
-        description=f"{_AREA_DESCRIPTION}. Pass null to take the task out of its area",
+        description=(
+            f"{_AREA_DESCRIPTION}. Null is refused with `422 area_required`: an area can be "
+            "changed, not taken off"
+        ),
     )
     not_before: str | None = unset_field(
         examples=[_NOT_BEFORE_EXAMPLE],
@@ -740,6 +746,15 @@ class TaskMove(BaseModel):
             "Filed in the `moved` entry"
         ),
     )
+    area: str | None = Field(
+        default=None,
+        examples=["TRK/promotion"],
+        description=(
+            "Address `PROJECT/key` of an area of the target project; required: without it "
+            "`422 area_required`, with the target project's areas in `details.areas`. "
+            "Replaces the old area, which stays in the old project"
+        ),
+    )
     version: int | None = Field(
         default=None,
         ge=1,
@@ -773,6 +788,14 @@ class TaskMoveBatch(BaseModel):
         description=(
             "Why the tasks move, one for the whole list; a blank one answers `422 "
             "task_move_reason_required`. Filed in the `moved` entry of each moved task"
+        ),
+    )
+    area: str | None = Field(
+        default=None,
+        examples=["TRK/promotion"],
+        description=(
+            "Address `PROJECT/key` of an area of the target project, put on every task of "
+            "the list; required: without it each task is refused with `area_required`"
         ),
     )
 
