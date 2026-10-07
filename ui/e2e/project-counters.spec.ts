@@ -3,11 +3,11 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { fontsReady, readAgentKey, readE2eToken, silenceJournal } from './contour';
 
 /*
- * Счётчики задач в шапке экрана проекта и страницы направления (TRK-619, TRK#46):
+ * Счётчики задач в шапке экрана проекта и страницы области (TRK-619, TRK#46):
  * «В работе», «Открыто», «Ждут ответа», «Закрыты не целиком». Число каждого равно числу
- * в заголовке списка по его ссылке — на экране проекта и на странице направления.
+ * в заголовке списка по его ссылке — на экране проекта и на странице области.
  *
- * Сценарий пишущий — заводит проект, направление и задачи — и идёт в проекте «запись».
+ * Сценарий пишущий — заводит проект, область и задачи — и идёт в проекте «запись».
  * Ключ проекта несёт метку прогона: чужие задачи в его выдачу не попадают, и числа
  * известны наперёд.
  */
@@ -47,9 +47,9 @@ interface Seeded {
 let ready: Promise<Seeded> | null = null;
 
 /**
- * Проект с направлением `promo` и пятью задачами: в работе — две (одна в направлении),
- * открыта одна (в направлении), в черновиках одна с открытым вопросом `blocking`, закрыта
- * не целиком одна (в направлении).
+ * Проект с областью `promo` и пятью задачами: в работе — две (одна в области),
+ * открыта одна (в области), в черновиках одна с открытым вопросом `blocking`, закрыта
+ * не целиком одна (в области).
  *
  * Ждущая задача лежит в `backlog`: ждёт ответа и она (`HELD_STATUSES`), а открытых
  * ей не нужны разделы.
@@ -61,12 +61,12 @@ function seed(request: APIRequestContext): Promise<Seeded> {
 
 async function seedOnce(request: APIRequestContext): Promise<Seeded> {
   await api(request, 'post', '/api/v1/projects', { key: KEY, title: `Счётчики ${RUN}` });
-  await api(request, 'post', `/api/v1/projects/${KEY}/directions`, {
+  await api(request, 'post', `/api/v1/projects/${KEY}/areas`, {
     key: 'promo',
     title: `Продвижение ${RUN}`,
   });
 
-  const create = async (title: string, direction: string | null) =>
+  const create = async (title: string, area: string | null) =>
     (
       await api(
         request,
@@ -82,7 +82,7 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
           output: 'Число в шапке',
           checks: ['Число равно заголовку списка'],
           assignee: 'demo_agent',
-          ...(direction === null ? {} : { direction }),
+          ...(area === null ? {} : { area }),
         },
         agent,
       )
@@ -93,11 +93,11 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
     }
   };
 
-  await move(await create('В работе, в направлении', ADDRESS), ['open', 'in_progress']);
-  await move(await create('В работе, без направления', null), ['open', 'in_progress']);
-  await move(await create('Открыта, в направлении', ADDRESS), ['open']);
+  await move(await create('В работе, в области', ADDRESS), ['open', 'in_progress']);
+  await move(await create('В работе, без области', null), ['open', 'in_progress']);
+  await move(await create('Открыта, в области', ADDRESS), ['open']);
 
-  const waiting = await create('Ждёт ответа, без направления', null);
+  const waiting = await create('Ждёт ответа, без области', null);
   const asked = await api(
     request,
     'post',
@@ -111,7 +111,7 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
     agent,
   );
 
-  const gaps = await create('Закрыта не целиком, в направлении', ADDRESS);
+  const gaps = await create('Закрыта не целиком, в области', ADDRESS);
   await move(gaps, ['open', 'in_progress']);
   await api(
     request,
@@ -175,12 +175,12 @@ test('числа счётчиков проекта равны числам в з
   await checkCounters(page, `/projects/${KEY}`, [2, 1, 1, 1]);
 });
 
-test('числа счётчиков направления равны числам в заголовке списка по их ссылкам', async ({
+test('числа счётчиков области равны числам в заголовке списка по их ссылкам', async ({
   page,
   request,
 }) => {
   await seed(request);
-  await checkCounters(page, `/projects/${KEY}/directions/promo`, [1, 1, 0, 1]);
+  await checkCounters(page, `/projects/${KEY}/areas/promo`, [1, 1, 0, 1]);
 });
 
 test('счётчики читают по четыре запроса с limit=1, не прокручивают вбок на телефоне и проходят axe', async ({

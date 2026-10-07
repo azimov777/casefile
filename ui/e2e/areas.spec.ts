@@ -3,12 +3,12 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { fontsReady, motionSettled, readE2eToken } from './contour';
 
 /*
- * Направления в интерфейсе (TRK-557, TRK#16, ч. 4): человек заводит направление на
- * экране проекта, ставит его задаче в карточке, и отбор `direction` в списке задач
- * показывает эту задачу и не показывает задачу без направления; «без направления» —
- * наоборот. Тем же условием `direction` отбирает агент.
+ * Области в интерфейсе (TRK-557, TRK#16, ч. 4): человек заводит область на
+ * экране проекта, ставит её задаче в карточке, и отбор `area` в списке задач
+ * показывает эту задачу и не показывает задачу без области; «без области» —
+ * наоборот. Тем же условием `area` отбирает агент.
  *
- * Сценарий пишущий — заводит проект, задачи и направления — и идёт в проекте «запись».
+ * Сценарий пишущий — заводит проект, задачи и области — и идёт в проекте «запись».
  * Ключ проекта несёт метку прогона: на той же базе повторный прогон заводит свой проект,
  * и чужие задачи в его выдачу не попадают.
  */
@@ -17,7 +17,7 @@ const token = readE2eToken();
 const RUN = Date.now().toString(36).toUpperCase();
 /** Ключ проекта прогона: буква и латиница с цифрами, не длиннее 16 знаков. */
 const KEY = `D${RUN}`.slice(0, 16);
-const DIRECTION_TITLE = `Продвижение прогона ${RUN}`;
+const AREA_TITLE = `Продвижение прогона ${RUN}`;
 const ADDRESS = `${KEY}/promo`;
 
 async function api(
@@ -36,11 +36,11 @@ async function api(
 }
 
 interface Seeded {
-  /** Задача, которой человек поставит направление. */
+  /** Задача, которой человек поставит область. */
   chosen: string;
-  /** Задача без направления: отбор по направлению её не показывает. */
+  /** Задача без области: отбор по области её не показывает. */
   other: string;
-  /** Задача для замеров доступности: ей направление ставится запросом. */
+  /** Задача для замеров доступности: ей область ставится запросом. */
   measured: string;
 }
 
@@ -53,18 +53,18 @@ function seed(request: APIRequestContext): Promise<Seeded> {
 }
 
 async function seedOnce(request: APIRequestContext): Promise<Seeded> {
-  await api(request, 'post', '/api/v1/projects', { key: KEY, title: `Направления ${RUN}` });
+  await api(request, 'post', '/api/v1/projects', { key: KEY, title: `Области ${RUN}` });
   const task = async (title: string) =>
     (
       await api(request, 'post', '/api/v1/tasks', {
         project: KEY,
         title,
-        description: 'Заведена сквозным тестом направлений.',
+        description: 'Заведена сквозным тестом областей.',
       })
     ).key as string;
   return {
-    chosen: await task(`Задача в направлении ${RUN}`),
-    other: await task(`Задача без направления ${RUN}`),
+    chosen: await task(`Задача в области ${RUN}`),
+    other: await task(`Задача без области ${RUN}`),
     measured: await task(`Задача для замеров ${RUN}`),
   };
 }
@@ -74,97 +74,97 @@ function rowKey(page: Page, key: string) {
   return page.getByRole('table').getByText(key, { exact: true });
 }
 
-test('направление заводится на экране проекта, ставится задаче, отбор в списке по нему', async ({
+test('область заводится на экране проекта, ставится задаче, отбор в списке по ней', async ({
   page,
   request,
 }) => {
   const { chosen, other } = await seed(request);
 
-  // 1. Завести направление на экране проекта, вкладка «Направления».
-  await page.goto(`/projects/${KEY}?tab=directions`);
-  const section = page.getByRole('region', { name: 'Направления', exact: true });
-  await expect(section.getByText('Направлений у проекта пока нет.')).toBeVisible();
-  await section.getByRole('button', { name: 'Новое направление' }).click();
-  const create = page.getByRole('dialog', { name: `Новое направление в ${KEY}` });
+  // 1. Завести область на экране проекта, вкладка «Области».
+  await page.goto(`/projects/${KEY}?tab=areas`);
+  const section = page.getByRole('region', { name: 'Области', exact: true });
+  await expect(section.getByText('Областей у проекта пока нет.')).toBeVisible();
+  await section.getByRole('button', { name: 'Новая область' }).click();
+  const create = page.getByRole('dialog', { name: `Новая область в ${KEY}` });
   await create.getByLabel('Ключ').fill('promo');
-  await create.getByLabel('Название').fill(DIRECTION_TITLE);
+  await create.getByLabel('Название').fill(AREA_TITLE);
   await create.getByLabel('Описание').fill('Каталоги, публикации и день запуска.');
-  await create.getByRole('button', { name: 'Завести направление' }).click();
+  await create.getByRole('button', { name: 'Завести область' }).click();
 
-  // Заведённое открывается своей страницей, и проект называет его в разделе.
-  await expect(page).toHaveURL(new RegExp(`/projects/${KEY}/directions/promo$`));
+  // Заведённая открывается своей страницей, и проект называет её в разделе.
+  await expect(page).toHaveURL(new RegExp(`/projects/${KEY}/areas/promo$`));
   await expect(page.getByRole('heading', { level: 1 })).toContainText(ADDRESS);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(DIRECTION_TITLE);
-  await page.goto(`/projects/${KEY}?tab=directions`);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(AREA_TITLE);
+  await page.goto(`/projects/${KEY}?tab=areas`);
   await expect(section.getByText(ADDRESS, { exact: true })).toBeVisible();
   // «Обзор» называет его тоже: название ссылкой на страницу и адрес.
   await page.goto(`/projects/${KEY}`);
-  const overview = page.locator(`li[data-overview-direction="${ADDRESS}"]`);
-  await expect(overview.getByRole('link', { name: new RegExp(DIRECTION_TITLE) })).toHaveAttribute(
+  const overview = page.locator(`li[data-overview-area="${ADDRESS}"]`);
+  await expect(overview.getByRole('link', { name: new RegExp(AREA_TITLE) })).toHaveAttribute(
     'href',
-    `/projects/${KEY}/directions/promo`,
+    `/projects/${KEY}/areas/promo`,
   );
 
   // 2. Поставить его задаче в карточке — там же, где приоритет.
   await page.goto(`/tasks/${chosen}`);
-  await page.getByRole('button', { name: `Изменить направление ${chosen}` }).click();
-  const change = page.getByRole('dialog', { name: `Направление ${chosen}` });
-  await expect(change.getByRole('radio', { name: /Без направления/ })).toBeChecked();
-  await change.getByRole('radio', { name: new RegExp(DIRECTION_TITLE) }).check();
+  await page.getByRole('button', { name: `Изменить область ${chosen}` }).click();
+  const change = page.getByRole('dialog', { name: `Область ${chosen}` });
+  await expect(change.getByRole('radio', { name: /Без области/ })).toBeChecked();
+  await change.getByRole('radio', { name: new RegExp(AREA_TITLE) }).check();
   await change.getByRole('button', { name: 'Сохранить' }).click();
   await expect(change).toBeHidden();
 
-  // Название — рядом с проектом ссылкой на страницу направления, адрес — в полосе.
-  const where = page.getByRole('link', { name: new RegExp(DIRECTION_TITLE) });
-  await expect(where).toHaveAttribute('href', `/projects/${KEY}/directions/promo`);
+  // Название — рядом с проектом ссылкой на страницу области, адрес — в полосе.
+  const where = page.getByRole('link', { name: new RegExp(AREA_TITLE) });
+  await expect(where).toHaveAttribute('href', `/projects/${KEY}/areas/promo`);
   await expect(page.getByText(ADDRESS, { exact: true })).toBeVisible();
 
-  // Бэкенд держит то же самое: поле задачи — адрес направления.
+  // Бэкенд держит то же самое: поле задачи — адрес области.
   const card = await request.get(`/api/v1/tasks/${chosen}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const pkg = (await card.json()) as { data: { task: { direction: { address: string } | null } } };
-  expect(pkg.data.task.direction?.address).toBe(ADDRESS);
+  const pkg = (await card.json()) as { data: { task: { area: { address: string } | null } } };
+  expect(pkg.data.task.area?.address).toBe(ADDRESS);
 
-  // 3. Отбор в списке задач: по направлению — эта задача есть, задачи без направления нет.
+  // 3. Отбор в списке задач: по области — эта задача есть, задачи без области нет.
   await page.goto(`/tasks?project=${KEY}`);
   await expect(rowKey(page, chosen)).toBeVisible();
   await expect(rowKey(page, other)).toBeVisible();
 
   await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
-  const field = page.getByLabel('Направление', { exact: true });
+  const field = page.getByLabel('Область', { exact: true });
   await field.selectOption(ADDRESS);
-  await expect(page).toHaveURL(new RegExp(`[?&]direction=${encodeURIComponent(ADDRESS)}(&|$)`));
+  await expect(page).toHaveURL(new RegExp(`[?&]area=${encodeURIComponent(ADDRESS)}(&|$)`));
   await expect(rowKey(page, chosen)).toBeVisible();
   await expect(rowKey(page, other)).toHaveCount(0);
-  await expect(page.getByText(`направление ${ADDRESS}`)).toBeVisible();
+  await expect(page.getByText(`область ${ADDRESS}`)).toBeVisible();
 
-  // «Без направления» — наоборот: та же выдача условием `direction: empty()`.
+  // «Без области» — наоборот: та же выдача условием `area: empty()`.
   await field.selectOption('empty()');
-  await expect(page).toHaveURL(/[?&]direction=empty%28%29(&|$)/);
+  await expect(page).toHaveURL(/[?&]area=empty%28%29(&|$)/);
   await expect(rowKey(page, other)).toBeVisible();
   await expect(rowKey(page, chosen)).toHaveCount(0);
 
   // Отбор держится в адресе: перезагрузка и пересланная ссылка показывают то же.
-  await page.goto(`/tasks?project=${KEY}&direction=${encodeURIComponent(ADDRESS)}`);
+  await page.goto(`/tasks?project=${KEY}&area=${encodeURIComponent(ADDRESS)}`);
   await expect(rowKey(page, chosen)).toBeVisible();
   await expect(rowKey(page, other)).toHaveCount(0);
 });
 
 for (const colorScheme of ['light', 'dark'] as const) {
-  test(`доступность направлений: ${colorScheme}, 390px`, async ({ page, request }) => {
+  test(`доступность областей: ${colorScheme}, 390px`, async ({ page, request }) => {
     const { measured } = await seed(request);
-    // Своё направление замеров: сценарий выше мог не пройти, а этот от него не зависит.
+    // Своя область замеров: сценарий выше мог не пройти, а этот от него не зависит.
     await api(
       request,
       'post',
-      `/api/v1/projects/${KEY}/directions`,
-      { key: 'measure', title: `Замеры ${RUN}`, description: 'Направление для замеров.' },
+      `/api/v1/projects/${KEY}/areas`,
+      { key: 'measure', title: `Замеры ${RUN}`, description: 'Область для замеров.' },
       [201, 409],
     );
-    await api(request, 'patch', `/api/v1/tasks/${measured}`, { direction: `${KEY}/measure` });
+    await api(request, 'patch', `/api/v1/tasks/${measured}`, { area: `${KEY}/measure` });
     // Атрибут — чтобы замер видел и строку атрибута; то же значение повторно ничего не меняет.
-    await api(request, 'put', `/api/v1/projects/${KEY}/directions/measure/attributes/channel`, {
+    await api(request, 'put', `/api/v1/projects/${KEY}/areas/measure/attributes/channel`, {
       value: 'reddit',
     });
     await page.emulateMedia({ colorScheme });
@@ -172,12 +172,12 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
     const pages = [
       {
-        path: `/projects/${KEY}?tab=directions`,
-        ready: page.getByRole('region', { name: 'Направления', exact: true }),
+        path: `/projects/${KEY}?tab=areas`,
+        ready: page.getByRole('region', { name: 'Области', exact: true }),
       },
       {
-        path: `/projects/${KEY}/directions/measure`,
-        ready: page.getByRole('region', { name: 'Дело направления' }),
+        path: `/projects/${KEY}/areas/measure`,
+        ready: page.getByRole('region', { name: 'Дело области' }),
       },
       { path: `/tasks/${measured}`, ready: page.getByText(`${KEY}/measure`, { exact: true }) },
     ];
@@ -194,9 +194,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
       ).toBeLessThanOrEqual(0);
     }
 
-    // Окно выбора направления в карточке — тоже без нарушений.
-    await page.getByRole('button', { name: `Изменить направление ${measured}` }).click();
-    const dialog = page.getByRole('dialog', { name: `Направление ${measured}` });
+    // Окно выбора области в карточке — тоже без нарушений.
+    await page.getByRole('button', { name: `Изменить область ${measured}` }).click();
+    const dialog = page.getByRole('dialog', { name: `Область ${measured}` });
     await expect(dialog.getByRole('radio', { name: new RegExp(`Замеры ${RUN}`) })).toBeChecked();
     // Окно выезжает с переходом: замер контраста посреди него мерил бы смешанные цвета.
     await motionSettled(dialog);
@@ -204,7 +204,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
   });
 }
 
-test('атрибут направления: «Изменить» и «Снять» — в открытой истории, с причиной', async ({
+test('атрибут области: «Изменить» и «Снять» — в открытой истории, с причиной', async ({
   page,
   request,
 }) => {
@@ -212,14 +212,14 @@ test('атрибут направления: «Изменить» и «Снят�
   await api(
     request,
     'post',
-    `/api/v1/projects/${KEY}/directions`,
-    { key: 'history', title: `История ${RUN}`, description: 'Направление для правки атрибута.' },
+    `/api/v1/projects/${KEY}/areas`,
+    { key: 'history', title: `История ${RUN}`, description: 'Область для правки атрибута.' },
     [201, 409],
   );
-  await api(request, 'put', `/api/v1/projects/${KEY}/directions/history/attributes/channel`, {
+  await api(request, 'put', `/api/v1/projects/${KEY}/areas/history/attributes/channel`, {
     value: 'reddit',
   });
-  await page.goto(`/projects/${KEY}/directions/history?tab=attributes`);
+  await page.goto(`/projects/${KEY}/areas/history?tab=attributes`);
   const attributes = page.getByRole('region', { name: 'Атрибуты' });
   await expect(attributes.getByText('reddit')).toBeVisible();
 

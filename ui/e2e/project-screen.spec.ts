@@ -4,10 +4,10 @@ import { fontsReady, readE2eToken, side } from './contour';
 
 /*
  * Экран проекта на чтение (UI-174; вкладки — TRK-618, решение TRK#46): вход из панели,
- * шапка, вкладки «Обзор», «Решения», «Атрибуты», «Направления», «Дело» в адресе `?tab=`,
+ * шапка, вкладки «Обзор», «Решения», «Атрибуты», «Области», «Дело» в адресе `?tab=`,
  * атрибуты с историей, опись дела проекта с телом по клику и ссылка `TRK#7` из записи
  * задачи, которая открывает «Дело» сама. «Назад» браузера ходит по вкладкам; на каждой
- * вкладке — `axe` и отсутствие прокрутки вбок на двух ширинах, у страницы направления тоже.
+ * вкладке — `axe` и отсутствие прокрутки вбок на двух ширинах, у страницы области тоже.
  *
  * Сценарий пишущий — заводит проект `TRK`, его атрибуты и записи, задачу в нём — и
  * потому идёт в проекте «запись», после читающих, которые считают проекты панели.
@@ -26,10 +26,10 @@ const DECISION = `Главная ветка — main, прогон ${RUN}`;
  */
 const REPO_TOGGLE = new RegExp(`^[▸▾] ${REPO}$`);
 const DESCRIPTION = 'Бэкенд трекера: REST для человека и MCP для агентов.';
-/** Направление проекта `TRK` для замеров его страницы на тех же ширинах. */
-const DIRECTION = 'TRK/screen';
+/** Область проекта `TRK` для замеров его страницы на тех же ширинах. */
+const AREA = 'TRK/screen';
 
-/** Полоса вкладок экрана проекта или страницы направления. */
+/** Полоса вкладок экрана проекта или страницы области. */
 function tabs(page: Page, name = 'Разделы проекта'): Locator {
   return page.getByRole('navigation', { name });
 }
@@ -100,23 +100,18 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
     title: `Ссылка на решение проекта, прогон ${RUN}`,
     body: `Опираюсь на решение TRK#${decisionNo}.`,
   });
-  // Направление — чтобы «Обзор» и вкладка «Направления» замерялись не пустыми, а его
+  // Область — чтобы «Обзор» и вкладка «Области» замерялись не пустыми, а её
   // страница — с атрибутом и записью в деле.
   await api(
     request,
     'post',
-    '/api/v1/projects/TRK/directions',
-    { key: 'screen', title: 'Экран проекта', description: 'Направление сквозного теста экрана.' },
+    '/api/v1/projects/TRK/areas',
+    { key: 'screen', title: 'Экран проекта', description: 'Область сквозного теста экрана.' },
     [201, 409],
   );
-  await api(
-    request,
-    'put',
-    `/api/v1/projects/${DIRECTION.replace('/', '/directions/')}/attributes/channel`,
-    {
-      value: 'reddit',
-    },
-  );
+  await api(request, 'put', `/api/v1/projects/${AREA.replace('/', '/areas/')}/attributes/channel`, {
+    value: 'reddit',
+  });
   return { decisionNo, taskKey };
 }
 
@@ -223,7 +218,7 @@ test('«Назад» браузера после смены вкладки во�
   await expect(tab(page, 'Решения')).toHaveAttribute('aria-current', 'true');
 });
 
-/** Вкладки экрана проекта и страницы направления: адрес и то, что на ней дорисовано. */
+/** Вкладки экрана проекта и страницы области: адрес и то, что на ней дорисовано. */
 function screens(page: Page, decisionNo: number): { name: string; path: string; ready: Locator }[] {
   return [
     {
@@ -246,9 +241,9 @@ function screens(page: Page, decisionNo: number): { name: string; path: string; 
         .nth(1),
     },
     {
-      name: 'Направления',
-      path: '/projects/TRK?tab=directions',
-      ready: page.locator(`li[data-direction-row="${DIRECTION}"]`),
+      name: 'Области',
+      path: '/projects/TRK?tab=areas',
+      ready: page.locator(`li[data-area-row="${AREA}"]`),
     },
     {
       // Запись раскрыта адресом — замер видит и тело.
@@ -257,13 +252,13 @@ function screens(page: Page, decisionNo: number): { name: string; path: string; 
       ready: page.getByText('расходится с'),
     },
     {
-      name: 'направление: Дело',
-      path: '/projects/TRK/directions/screen',
-      ready: page.getByRole('region', { name: 'Дело направления' }).getByRole('table'),
+      name: 'область: Дело',
+      path: '/projects/TRK/areas/screen',
+      ready: page.getByRole('region', { name: 'Дело области' }).getByRole('table'),
     },
     {
-      name: 'направление: Атрибуты',
-      path: '/projects/TRK/directions/screen?tab=attributes',
+      name: 'область: Атрибуты',
+      path: '/projects/TRK/areas/screen?tab=attributes',
       ready: page.getByRole('region', { name: 'Атрибуты' }).getByText('reddit'),
     },
   ];
