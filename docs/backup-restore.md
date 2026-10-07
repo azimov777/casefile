@@ -125,9 +125,14 @@ backup" above — and keeps it in a Docker volume. So after such an update there
 of the database as it was just before it, whether the update went well or was rolled back
 by itself (the rollback uses this same file; see "Updates" in the root `README.md`).
 
-- **One copy.** The next snapshot, taken before the next release that changes the schema,
-  replaces it. A release that does not change the schema leaves it alone, and so does a
-  snapshot that fails: the earlier file is replaced only once the new one is complete.
+- **Two files.** The volume holds the last snapshot, `before-update.dump`, and the one
+  before it, `before-update.previous.dump`. The next snapshot, taken before the next
+  release that changes the schema, becomes `before-update.dump`; the file that was there
+  becomes `before-update.previous.dump`, and the older `previous` is dropped. The update
+  and the rollback use only `before-update.dump`; `previous` is there for the case where
+  corruption is noticed later. A release that does not change the schema leaves both
+  alone. A new snapshot must be non-empty and readable by `pg_restore --list`, or the
+  release is not installed that time and both files stay as they were.
 - **It stays.** Neither a successful update nor a rollback deletes it. `docker compose
   down -v` does, together with every other volume of the installation.
 - **Only from the updater that has it.** An update done by an older updater keeps no
