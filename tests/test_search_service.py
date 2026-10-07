@@ -1275,6 +1275,36 @@ async def test_an_operator_the_field_does_not_support_is_refused(
     assert "=" in raised.value.details["allowed"]
 
 
+@pytest.mark.parametrize(
+    ("query", "hint_part"),
+    [
+        # Ряды 45 и 49 таблицы TRK-674#8: диапазон по ключу.
+        ("key: >= TRK-524 and key: <= TRK-531", 'sort ["-key"]'),
+        ("key: >= TRK-555", "key: in TRK-1, TRK-2"),
+        # Ряд 39: подстрока у родителя.
+        ("parent: ~ UI", "work on `text` and `assignee`"),
+    ],
+)
+async def test_an_unsupported_operator_hints_at_what_the_agent_wanted(
+    db_session: AsyncSession, task_actor: Actor, query: str, hint_part: str
+) -> None:
+    """TRK-676: отказ по рядам 39, 45, 49 разбора TRK-674 называет рабочую форму."""
+    with pytest.raises(SearchOperatorNotSupportedError) as raised:
+        await service.search_tasks(db_session, actor=task_actor, query=query)
+
+    assert hint_part in raised.value.details["hint"]
+    assert raised.value.details["allowed"]
+
+
+async def test_an_unsupported_operator_without_a_known_misuse_has_no_hint(
+    db_session: AsyncSession, task_actor: Actor
+) -> None:
+    with pytest.raises(SearchOperatorNotSupportedError) as raised:
+        await service.search_tasks(db_session, actor=task_actor, query="status: > open")
+
+    assert "hint" not in raised.value.details
+
+
 async def test_empty_is_refused_where_a_value_always_exists(
     db_session: AsyncSession, task_actor: Actor
 ) -> None:

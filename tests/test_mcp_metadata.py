@@ -30,6 +30,7 @@ from mcp_types import Tool
 
 from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_SIZE
 from app.domain.query_language import QUERY_EXAMPLES
+from app.domain.search import Operator, operators_by_field
 from app.domain.tasks import TaskStatus
 from conftest import Connect
 
@@ -422,3 +423,18 @@ async def test_search_tasks_names_the_quotes_and_the_not_empty_form_and_the_page
     assert 'text: ~ "two words"' in query
     assert "!= empty()" in query
     assert f"from {MIN_PAGE_SIZE} to {MAX_PAGE_SIZE}" in properties["limit"]["description"]
+
+
+async def test_search_tasks_query_lists_the_operators_each_field_takes(tools: list[Tool]) -> None:
+    """TRK-676: описание `query` называет операторы по полям, как их разрешает `SEARCH_FIELDS`."""
+    search = next(tool for tool in tools if tool.name == "search_tasks")
+    query = search.input_schema["properties"]["query"]["description"]
+
+    for operators, names in operators_by_field():
+        line = " ".join(f"`{operator.value}`" for operator in operators)
+        assert f"{line} for " + ", ".join(f"`{name}`" for name in names) in query
+    # Ряды 39, 45, 49 разбора: `~` не у `parent`, диапазона нет у `key`.
+    by_field = {name: operators for operators, names in operators_by_field() for name in names}
+    assert Operator.CONTAINS not in by_field["parent"]
+    assert Operator.GTE not in by_field["key"]
+    assert Operator.CONTAINS in by_field["text"]

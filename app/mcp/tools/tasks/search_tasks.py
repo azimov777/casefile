@@ -22,7 +22,7 @@ from app.domain.search import (
     MANDATORY_FIELD,
     PARENT_FIELD,
     Operator,
-    searchable_names,
+    operators_by_field,
     selectable_names,
     sortable_names,
 )
@@ -67,9 +67,14 @@ QueryArg = Annotated[
             "Without an operator a condition means equality, and comma-separated values "
             "mean membership: `status: open, in_progress` equals "
             f"`{QUERY_RIGHT_SHAPE}`.\n\n"
-            "Fields: " + ", ".join(f"`{name}`" for name in searchable_names()) + ". "
-            "Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (substring), `!~`, `in`, "
-            "`not in`; `empty()` matches tasks without a value. Conditions combine with "
+            "Fields, each with the operators it takes (`~` is substring): "
+            + "; ".join(
+                " ".join(f"`{operator.value}`" for operator in operators)
+                + " for "
+                + ", ".join(f"`{name}`" for name in names)
+                for operators, names in operators_by_field()
+            )
+            + ". `empty()` matches tasks without a value. Conditions combine with "
             "`and` and `or`.\n\n"
             "A value with a space or a colon goes in double quotes: "
             'text: ~ "two words", last_entry_at: >= "2026-10-01T00:00:00Z". '

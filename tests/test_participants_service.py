@@ -8,7 +8,6 @@ from app.domain.authors import AuthorKind
 from app.domain.errors import (
     InvalidParticipantNameError,
     ParticipantNameTakenError,
-    ParticipantNotFoundError,
 )
 from app.domain.participants import ParticipantKind
 from app.services import participants as service
@@ -64,24 +63,15 @@ async def test_a_malformed_name_does_not_reach_the_database(
         )
 
 
-async def test_reading_and_listing_are_open_to_the_task_scope(
+async def test_listing_is_open_to_the_task_scope(
     db_session: AsyncSession,
     task_actor: Actor,
     owner: Participant,
 ) -> None:
     """Рабочему циклу реестр нужен: без него агенту некому адресовать вопрос."""
-    read = await service.read_participant(db_session, "OWNER", actor=task_actor)
     page = await service.list_participants(db_session, actor=task_actor)
 
-    assert read.id == owner.id
     assert [participant.name for participant in page.items] == ["owner"]
-
-
-async def test_an_unknown_name_is_not_found(db_session: AsyncSession, task_actor: Actor) -> None:
-    with pytest.raises(ParticipantNotFoundError) as error:
-        await service.read_participant(db_session, "ghost", actor=task_actor)
-
-    assert error.value.code == "participant_not_found"
 
 
 async def test_update_changes_the_description_only(

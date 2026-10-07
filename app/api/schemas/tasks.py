@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,7 +35,6 @@ from app.domain.tasks import (
     MAX_CHECK_LENGTH,
     MAX_CHECKS,
     MAX_DECISIONS,
-    MAX_MOVE_KEYS,
     MAX_TEXT_LENGTH,
     MAX_TITLE_LENGTH,
     PARENT_GOAL_LIMIT,
@@ -782,85 +780,4 @@ class TaskMove(BaseModel):
         ge=1,
         examples=[3],
         description="Version the client last saw; omit it to skip the check",
-    )
-
-
-class TaskMoveBatch(BaseModel):
-    """Перенос списка задач в один проект, каждой отдельно (TRK-309)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    keys: list[str] = Field(
-        examples=[["UI-1", "UI-2"]],
-        description=(
-            f"Task keys, 1 to {MAX_MOVE_KEYS}, moved one by one in list order; a previous "
-            "key addresses its task as well. Repeats are kept, each one gets its own "
-            "outcome. A list out of range answers `422 task_move_batch_size_invalid` "
-            "before any move"
-        ),
-    )
-    project: str = Field(
-        min_length=1,
-        examples=["TRK"],
-        description="Key of the project the tasks move to, case-insensitive",
-    )
-    reason: str = Field(
-        max_length=MAX_TEXT_LENGTH,
-        examples=["Репозиторий один, задачи интерфейса ведутся в TRK"],
-        description=(
-            "Why the tasks move, one for the whole list; a blank one answers `422 "
-            "task_move_reason_required`. Filed in the `moved` entry of each moved task"
-        ),
-    )
-    area: str | None = Field(
-        default=None,
-        examples=["TRK/promotion"],
-        description=(
-            "Address `PROJECT/key` of an area of the target project, put on every task of "
-            "the list; required: without it each task is refused with `area_required`"
-        ),
-    )
-
-
-class TaskMovedRead(BaseModel):
-    """Задача списка перенесена."""
-
-    key: str = Field(description="The key as listed")
-    outcome: Literal["moved"]
-    from_key: str = Field(description="Key the task left")
-    to_key: str = Field(description="Key the task got in the new project")
-    no: int = Field(description="Number of the `moved` entry in the task's case")
-
-
-class TaskAlreadyThereRead(BaseModel):
-    """Задача списка уже лежит в целевом проекте: `task_already_in_project`, записи нет."""
-
-    key: str = Field(description="The key as listed")
-    outcome: Literal["already"]
-    to_key: str = Field(description="Key the task holds in the target project")
-
-
-class TaskMoveRefusedRead(BaseModel):
-    """Задача списка не перенесена: отказ по ней одной, в форме оболочки ошибки."""
-
-    key: str = Field(description="The key as listed")
-    outcome: Literal["error"]
-    code: str = Field(
-        examples=["task_not_found"], description="Error code a single move would answer"
-    )
-    message: str = Field(description="Error message, in English")
-    details: dict[str, Any] = Field(description="Error details, as in the error envelope")
-
-
-TaskMoveOutcomeRead = Annotated[
-    TaskMovedRead | TaskAlreadyThereRead | TaskMoveRefusedRead,
-    Field(discriminator="outcome"),
-]
-
-
-class TaskMoveBatchRead(BaseModel):
-    """Итог пакетного переноса: по одному на каждый элемент списка, в его порядке."""
-
-    results: list[TaskMoveOutcomeRead] = Field(
-        description="One outcome per listed key, in list order"
     )

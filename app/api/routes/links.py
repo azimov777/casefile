@@ -77,27 +77,3 @@ async def create_task_link(
         request={"task": task.key, "other": other.key, "kind": payload.kind},
         build=link,
     )
-
-
-@router.delete(
-    "/{task_key}/links/{kind}/{other_key}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Remove a link between two tasks",
-)
-async def delete_task_link(
-    task_key: TaskKeyPath,
-    kind: LinkKindPath,
-    other_key: OtherTaskKeyPath,
-    session: SessionDep,
-    actor: ActorDep,
-) -> None:
-    """Снимает связь и подшивает `link_removed` в дела обеих задач.
-
-    Адресуется связь так же, как ставилась, — видом со стороны задачи из пути. Снять её
-    можно с любой стороны: `blocks` у одной и `blocked_by` у другой — одна строка.
-    Связи нет — `404 link_not_found`; `parent` или `blocks` у закрытой задачи —
-    `409 task_closed`, `relates` снимается и у закрытой.
-    """
-    task = await tasks_service.get_task(session, task_key)
-    other = await tasks_service.get_task(session, other_key)
-    await service.remove_link(session, task, other, actor=actor, kind=kind)

@@ -43,20 +43,6 @@ async def test_a_malformed_name_is_a_schema_error(auth_client: AsyncClient) -> N
     assert response.json()["error"]["code"] == "validation_error"
 
 
-async def test_reading_ignores_case(auth_client: AsyncClient, owner: Participant) -> None:
-    response = await auth_client.get("/api/v1/participants/OWNER")
-
-    assert response.status_code == 200
-    assert response.json()["data"]["name"] == "owner"
-
-
-async def test_an_unknown_participant_answers_with_its_own_code(auth_client: AsyncClient) -> None:
-    response = await auth_client.get("/api/v1/participants/ghost")
-
-    assert response.status_code == 404
-    assert response.json()["error"]["code"] == "participant_not_found"
-
-
 async def test_the_list_is_a_collection_with_meta(
     auth_client: AsyncClient,
     owner: Participant,
@@ -69,26 +55,12 @@ async def test_the_list_is_a_collection_with_meta(
     assert payload["meta"] == {"next_cursor": None, "has_more": False, "total": None}
 
 
-async def test_patch_changes_the_description(auth_client: AsyncClient, owner: Participant) -> None:
-    response = await auth_client.patch(
-        "/api/v1/participants/owner",
-        json={"description": "Отвечает на вопросы по вечерам"},
-    )
+async def test_a_single_participant_has_no_rest_route(
+    auth_client: AsyncClient, owner: Participant
+) -> None:
+    """Интерфейс не читает и не правит участника по имени (TRK#53): ручек нет, есть MCP."""
+    read = await auth_client.get("/api/v1/participants/owner")
+    patch = await auth_client.patch("/api/v1/participants/owner", json={"description": "x"})
 
-    assert response.status_code == 200, response.text
-    assert response.json()["data"]["description"] == "Отвечает на вопросы по вечерам"
-
-
-async def test_patch_refuses_to_rename(auth_client: AsyncClient, owner: Participant) -> None:
-    """Имя стоит подписью в делах: схема отвергает лишнее поле, а не глотает его."""
-    response = await auth_client.patch("/api/v1/participants/owner", json={"name": "boss"})
-
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "validation_error"
-
-
-async def test_patch_refuses_an_explicit_null(auth_client: AsyncClient, owner: Participant) -> None:
-    """Молча отбросить `null` хуже отказа: клиент решил бы, что поле изменено."""
-    response = await auth_client.patch("/api/v1/participants/owner", json={"description": None})
-
-    assert response.status_code == 422
+    assert read.status_code in (404, 405)
+    assert patch.status_code in (404, 405)

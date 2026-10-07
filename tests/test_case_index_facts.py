@@ -355,7 +355,11 @@ def test_the_contract_declares_the_facts_of_every_entry_type(layer: str, union: 
 
 
 async def test_the_index_carries_only_the_fields_of_its_own_type(
-    auth_client: AsyncClient, db_session: AsyncSession, project: Project, shared_secret: str
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    main_actor: Actor,
+    project: Project,
+    shared_secret: str,
 ) -> None:
     """Проверка 6: в деле со **всеми** типами записей у каждой строки ровно свои ключи.
 
@@ -364,7 +368,9 @@ async def test_the_index_carries_only_the_fields_of_its_own_type(
     описи, и в конце сверяется, что нашлись все типы: пропущенный тип роняет проверку,
     а не тихо выпадает из перебора.
     """
-    key = await _case_with_every_entry_type(auth_client, db_session, project, shared_secret)
+    key = await _case_with_every_entry_type(
+        auth_client, db_session, main_actor, project, shared_secret
+    )
 
     package = await auth_client.get(f"/api/v1/tasks/{key}")
     assert package.status_code == 200, package.text
@@ -390,7 +396,11 @@ async def test_the_index_carries_only_the_fields_of_its_own_type(
 
 
 async def _case_with_every_entry_type(
-    client: AsyncClient, session: AsyncSession, project: Project, shared_secret: str
+    client: AsyncClient,
+    session: AsyncSession,
+    actor: Actor,
+    project: Project,
+    shared_secret: str,
 ) -> str:
     """Заводит задачу и подшивает в неё запись каждого типа `EntryType`. Возвращает ключ.
 
@@ -457,8 +467,14 @@ async def _case_with_every_entry_type(
         f"/api/v1/tasks/{key}/links", json={"kind": "relates", "other": other_key}
     )
     assert linked.status_code == 201, linked.text
-    unlinked = await client.delete(f"/api/v1/tasks/{key}/links/relates/{other_key}")
-    assert unlinked.status_code == 204, unlinked.text
+    # Снятие связи в REST нет (TRK#53): `link_removed` рождает сервис, как и инструмент `unlink`.
+    await links_service.remove_link(
+        session,
+        await tasks_service.get_task(session, key),
+        await tasks_service.get_task(session, other_key),
+        actor=actor,
+        kind=LinkKind.RELATES,
+    )
 
     # `attached` и `detached` — привязкой к обсуждению и её снятием (TRK-669): после
     # снятия задача обсуждения не ждёт, и закрытие ниже проходит.
