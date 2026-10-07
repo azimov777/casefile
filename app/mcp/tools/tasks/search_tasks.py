@@ -71,6 +71,9 @@ QueryArg = Annotated[
             "Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (substring), `!~`, `in`, "
             "`not in`; `empty()` matches tasks without a value. Conditions combine with "
             "`and` and `or`.\n\n"
+            "A value with a space or a colon goes in double quotes: "
+            'text: ~ "two words", last_entry_at: >= "2026-10-01T00:00:00Z". '
+            '"Has a value" is != empty().\n\n'
             "Examples:\n"
             + "\n".join(f"- `{example}`" for example in QUERY_EXAMPLES)
             + "\n\nA string that does not parse is refused with `invalid_search_query` "
