@@ -28,10 +28,10 @@ EntryRefsArg = Annotated[
     list[str] | None,
     Field(
         description=(
-            "References: task entries `TRK-42#12`, project entries `TRK#7`, tasks `TRK-7`, "
-            "or a URL with a scheme (`https://…`, `file://…`). Anything else (`7`, `#7`, "
-            "`docs/x.md`) is refused with `entry_fields_invalid`, as is an entry, task or "
-            "project that does not exist; URLs are not checked"
+            "References: task entries `TRK-42#12`, project entries `TRK#7`, area entries "
+            "`TRK/promotion#3`, tasks `TRK-7`, or a URL with a scheme (`https://…`, `file://…`). "
+            "Anything else (`7`, `#7`, `docs/x.md`) is refused with `entry_fields_invalid`, as is "
+            "an entry, task or project that does not exist; URLs are not checked"
         ),
         examples=[["TRK-42#12"]],
     ),
