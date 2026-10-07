@@ -61,6 +61,7 @@ from app.domain.search import (
     MAX_CONDITIONS,
     MAX_GROUP_DEPTH,
     MAX_VALUES_PER_CONDITION,
+    ORDER_OPERATORS,
     SELECTABLE_FIELDS,
     SINGLE_VALUE_OPERATORS,
     Condition,
@@ -72,6 +73,7 @@ from app.domain.search import (
     Operator,
     ResolvedFilter,
     ResolvedSort,
+    SearchField,
     SearchFieldSpec,
     SearchFilter,
     SearchTerm,
@@ -405,14 +407,33 @@ async def _resolve_condition(session: AsyncSession, condition: Condition) -> Sea
 
 def _ensure_operator(condition: Condition, spec: SearchFieldSpec) -> None:
     if condition.operator not in spec.operators:
-        raise SearchOperatorNotSupportedError(
-            details={
-                "field": condition.name,
-                "position": condition.position,
-                "operator": condition.operator.value,
-                "allowed": sorted(operator.value for operator in spec.operators),
-            },
+        details: dict[str, Any] = {
+            "field": condition.name,
+            "position": condition.position,
+            "operator": condition.operator.value,
+            "allowed": sorted(operator.value for operator in spec.operators),
+        }
+        hint = _operator_hint(condition.operator, spec)
+        if hint is not None:
+            details["hint"] = hint
+        raise SearchOperatorNotSupportedError(details=details)
+
+
+def _operator_hint(operator: Operator, spec: SearchFieldSpec) -> str | None:
+    """Что писать вместо неприменимого оператора там, где запрос агента понятен (TRK-676).
+
+    Два настоящих случая из разбора отказов (TRK-674#8): диапазон по ключу (`key: >= TRK-5`,
+    ряды 45 и 49 — на деле «самые свежие») и подстрока `~` у поля, которое её не знает
+    (ряд 39). Остальным сочетаниям достаточно `allowed`.
+    """
+    if spec.field is SearchField.KEY and operator in ORDER_OPERATORS:
+        return (
+            "ranges over keys are not supported: name the keys with `key: in TRK-1, TRK-2`, "
+            'or take the newest with sort ["-key"] and limit'
         )
+    if operator in (Operator.CONTAINS, Operator.NOT_CONTAINS):
+        return "`~` and `!~` work on `text` and `assignee`; here use `=` or `in`"
+    return None
 
 
 def _ensure_single_for_order(condition: Condition, count: int) -> None:
