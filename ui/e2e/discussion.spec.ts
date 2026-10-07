@@ -163,7 +163,7 @@ test('у закрытого обсуждения нет форм и кнопок
   await silenceJournal(page);
   await page.goto('/discussions/DEMO~1');
 
-  await expect(page.getByText(/Обсуждение закрыто/)).toBeVisible();
+  await expect(page.getByText(/Обсуждение закрыто .*Закрывает его агент/)).toBeVisible();
   const conclusion = page.getByRole('region', { name: 'Итог', exact: true });
   await expect(conclusion.getByText('Решено')).toBeVisible();
   await expect(
