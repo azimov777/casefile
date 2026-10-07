@@ -594,3 +594,43 @@ async def test_mcp_decisions_from_filing_to_history(
 
     rest = await auth_client.get(f"/api/v1/tasks/{key}")
     assert rest.json()["data"]["decisions"] == package["decisions"]
+
+
+# --- Решения проекта после правки разделов: `state.project_decisions_after_card` ---------
+
+
+async def test_state_names_the_project_decisions_filed_after_the_last_section_edit(
+    db_session: AsyncSession,
+    auth_client: AsyncClient,
+    project: Project,
+    main_actor: Actor,
+) -> None:
+    """Решение A подшито до задачи, B и C — после; C заменено решением D. Поле называет
+    B и D (заменённое C не входит), правка раздела очищает его, а решение после правки
+    возвращается в список. То же поле — в REST."""
+    await _decision(db_session, project, main_actor, "A: до задачи")
+    task = await _task(db_session, project, main_actor, "Задача", [])
+    b = await _decision(db_session, project, main_actor, "B")
+    c = await _decision(db_session, project, main_actor, "C")
+    d = await _decision(db_session, project, main_actor, "D вместо C", supersedes=[c])
+
+    package = await tasks_service.read_task_package(db_session, task.key, actor=main_actor)
+    assert package.state.project_decisions_after_card == [f"TRK#{b}", f"TRK#{d}"]
+    response = await auth_client.get(f"/api/v1/tasks/{task.key}")
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["state"]["project_decisions_after_card"] == [
+        f"TRK#{b}",
+        f"TRK#{d}",
+    ]
+
+    await tasks_service.update_task(
+        db_session, task, actor=main_actor, changes=TaskChanges(goal="Новая цель")
+    )
+    package = await tasks_service.read_task_package(db_session, task.key, actor=main_actor)
+    assert package.state.project_decisions_after_card == []
+
+    e = await _decision(db_session, project, main_actor, "E после правки")
+    package = await tasks_service.read_task_package(db_session, task.key, actor=main_actor)
+    assert package.state.project_decisions_after_card == [f"TRK#{e}"]
+    response = await auth_client.get(f"/api/v1/tasks/{task.key}")
+    assert response.json()["data"]["state"]["project_decisions_after_card"] == [f"TRK#{e}"]
