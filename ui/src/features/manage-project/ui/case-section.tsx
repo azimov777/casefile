@@ -24,7 +24,7 @@ const LIST_BLOCK = 'flex flex-col gap-0 rounded-control border border-line bg-su
 const BLOCK_HEAD = 'flex flex-wrap items-baseline gap-3 border-b border-b-line px-3 pt-3 pb-2';
 
 interface CaseSectionProps {
-  /** Чьё дело: проекта или его направления (TRK-557). */
+  /** Чьё дело: проекта или его области (TRK-557). */
   holder: Holder;
   /** Писать записи в дело: запись открыта всем (`useProjectRights`). */
   canWrite: boolean;
@@ -34,8 +34,8 @@ interface CaseSectionProps {
 }
 
 /**
- * Дело проекта или направления описью: та же `EntryIndex`, что у карточки задачи, с
- * владельцем-проектом или владельцем-направлением. Раздел живёт в действиях по той же
+ * Дело проекта или области описью: та же `EntryIndex`, что у карточки задачи, с
+ * владельцем-проектом или владельцем-областью. Раздел живёт в действиях по той же
  * причине, что атрибуты (`AttributesSection`): его рисуют два экрана.
  *
  * Описи в ответе проекта нет — строки собираются из записей дела (`headingOfEntry`), а
@@ -56,8 +56,8 @@ export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSect
   const formPlace = useRef<HTMLDivElement>(null);
   const opened = useRef(false);
   const { t } = useTranslation('project');
-  const { t: tDirection } = useTranslation('direction');
-  const direction = holder.kind === 'direction';
+  const { t: tArea } = useTranslation('area');
+  const area = holder.kind === 'area';
   const headingId = `${holder.kind}-case`;
 
   /*
@@ -111,7 +111,7 @@ export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSect
     <section className={LIST_BLOCK} aria-labelledby={headingId}>
       <div className={BLOCK_HEAD}>
         <h2 className="text-screen" id={headingId}>
-          {direction ? tDirection('case.title') : t('case')}
+          {area ? tArea('case.title') : t('case')}
         </h2>
         {/* Число — только у дочитанного дела: у недочитанного оно было бы числом
             подгруженных страниц, а не записей, и врало бы тихо. */}
@@ -123,7 +123,7 @@ export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSect
         {canWrite && !writing ? (
           <Button ref={noteButton} size="sm" className="ml-auto" onClick={() => setWriting(true)}>
             <NotebookPen className="size-(--ui-mark)" aria-hidden="true" />
-            {direction ? tDirection('entry.open') : t('note.open')}
+            {area ? tArea('entry.open') : t('note.open')}
           </Button>
         ) : null}
       </div>
@@ -148,10 +148,7 @@ export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSect
 
       {feed.data === undefined ? (
         <div className="px-3 py-2">
-          <QueryState
-            query={feed}
-            loading={direction ? tDirection('case.loading') : t('caseLoading')}
-          />
+          <QueryState query={feed} loading={area ? tArea('case.loading') : t('caseLoading')} />
         </div>
       ) : (
         <>

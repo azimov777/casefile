@@ -467,10 +467,21 @@ async def test_an_archive_from_a_newer_casefile_is_refused(
 #: людей, и следующая миграция не должна подменить его другим.
 V0_3_REVISION = "7f4089f291b8"
 
-#: Имена v0.3, которые ревизия `3b8e6d2f9a41` переименовала (`CONCEPT.md`, «Архив v0.3»).
-#: Старое имя — как оно лежит в архиве, новое — как его читать из нынешней базы.
-RENAMED_TABLES = {"queues": "projects"}
-RENAMED_COLUMNS = {("tasks", "queue_id"): "project_id"}
+#: Имена старых ревизий, которые переименовали позже: очередь — проект (ревизия
+#: `3b8e6d2f9a41`, `CONCEPT.md`, «Архив v0.3»), направление — область (ревизия
+#: `ed61a83a9be0`, решение TRK#57, TRK-675). Старое имя — как оно лежит в архиве, новое —
+#: как его читать из нынешней базы.
+RENAMED_TABLES = {
+    "queues": "projects",
+    "directions": "areas",
+    "direction_attributes": "area_attributes",
+}
+RENAMED_COLUMNS = {
+    ("tasks", "queue_id"): "project_id",
+    ("tasks", "direction_id"): "area_id",
+    ("entries", "direction_id"): "area_id",
+    ("direction_attributes", "direction_id"): "area_id",
+}
 #: Колонки, снятые после той ревизии: в нынешней базе их нет, в архив они уходят значением
 #: из старой схемы (набор токена до TRK-471).
 DROPPED_COLUMNS = {("tokens", "scope"): "task"}

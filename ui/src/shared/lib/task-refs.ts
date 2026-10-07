@@ -1,6 +1,6 @@
 /**
  * Ссылки на задачи и записи в свободном тексте: `TRK-42`, `TRK-42#12`, запись дела
- * проекта `TRK#7` и запись дела направления `TRK/promotion#3`.
+ * проекта `TRK#7` и запись дела области `TRK/promotion#3`.
  *
  * Такие ссылки агенты пишут руками в телах записей, заголовках и разделах, а бэкенд
  * их не размечает: в контракте это просто текст (`refs` рядом — отдельный список,
@@ -30,10 +30,10 @@ export type TextPart =
  * только в ключе задачи. Сам ключ проекта без номера записи (`TRK`) ссылкой не
  * становится: в прозе это обычное слово заглавными.
  *
- * Третья ветка — запись дела направления `TRK/promotion#3` (TRK-557, `../docs/CONCEPT.md`,
- * 3.7): ключ проекта, косая черта, ключ направления по образцу бэкенда
- * (`../app/domain/directions.py`, `DIRECTION_KEY_PATTERN`) и номер. Адрес направления без
- * номера (`TRK/promotion`) ссылкой не становится: `API/v1` в прозе — путь, а не направление.
+ * Третья ветка — запись дела области `TRK/promotion#3` (TRK-557, `../docs/CONCEPT.md`,
+ * 3.7): ключ проекта, косая черта, ключ области по образцу бэкенда
+ * (`../app/domain/areas.py`, `AREA_KEY_PATTERN`) и номер. Адрес области без
+ * номера (`TRK/promotion`) ссылкой не становится: `API/v1` в прозе — путь, а не область.
  */
 const TASK_REF =
   /\b([A-Z][A-Z0-9]{1,15})(?:-(\d+)(?:#(\d+))?|#(\d+)|\/([a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?)#(\d+))\b/g;
@@ -47,13 +47,13 @@ export function splitTaskRefs(text: string): TextPart[] {
     const at = match.index;
     if (at > last) parts.push({ kind: 'text', value: text.slice(last, at) });
 
-    const [value, project = '', number, entry, projectEntry, direction, directionEntry] = match;
+    const [value, project = '', number, entry, projectEntry, area, areaEntry] = match;
     parts.push({
       kind: 'ref',
       value,
       href:
-        direction !== undefined
-          ? directionHref(`${project}/${direction}`, Number(directionEntry))
+        area !== undefined
+          ? areaHref(`${project}/${area}`, Number(areaEntry))
           : number === undefined
             ? projectHref(project, Number(projectEntry))
             : taskRefHref({
@@ -80,36 +80,36 @@ export function projectHref(key: string, entryNo: number | null = null): string 
   return entryNo === null ? path : `${path}?entry=${entryNo}`;
 }
 
-/** Направление по адресу `TRK/promotion`: ключ проекта и ключ направления. */
-export interface DirectionPath {
+/** Область по адресу `TRK/promotion`: ключ проекта и ключ области. */
+export interface AreaPath {
   projectKey: string;
-  directionKey: string;
+  areaKey: string;
 }
 
 /**
- * Адрес направления на две части: проект и ключ внутри него (`../docs/CONCEPT.md`, 3.7).
+ * Адрес области на две части: проект и ключ внутри него (`../docs/CONCEPT.md`, 3.7).
  *
  * Разбор адреса, а не вычисление за бэкенд: адрес по контракту и есть «проект / ключ»,
  * а путь API и экрана собран из этих двух сегментов, потому что косая черта внутри
- * сегмента потребовала бы экранирования (`../app/api/routes/directions.py`). Строка без
- * косой черты — не адрес: ключ направления тогда пуст, и запрос по нему ответит
- * `direction_not_found`, как ответил бы на опечатку.
+ * сегмента потребовала бы экранирования (`../app/api/routes/areas.py`). Строка без
+ * косой черты — не адрес: ключ области тогда пуст, и запрос по нему ответит
+ * `area_not_found`, как ответил бы на опечатку.
  */
-export function splitDirectionAddress(address: string): DirectionPath {
+export function splitAreaAddress(address: string): AreaPath {
   const slash = address.indexOf('/');
   return slash < 0
-    ? { projectKey: address, directionKey: '' }
-    : { projectKey: address.slice(0, slash), directionKey: address.slice(slash + 1) };
+    ? { projectKey: address, areaKey: '' }
+    : { projectKey: address.slice(0, slash), areaKey: address.slice(slash + 1) };
 }
 
 /**
- * Адрес страницы направления (TRK-557); с номером записи — страница с раскрытой записью
- * его дела, тем же параметром `entry`, что у проекта и задачи. Путь — под проектом, как у
- * API: `/projects/TRK/directions/promotion`.
+ * Адрес страницы области (TRK-557); с номером записи — страница с раскрытой записью
+ * её дела, тем же параметром `entry`, что у проекта и задачи. Путь — под проектом, как у
+ * API: `/projects/TRK/areas/promotion`.
  */
-export function directionHref(address: string, entryNo: number | null = null): string {
-  const { projectKey, directionKey } = splitDirectionAddress(address);
-  const path = `/projects/${projectKey}/directions/${directionKey}`;
+export function areaHref(address: string, entryNo: number | null = null): string {
+  const { projectKey, areaKey } = splitAreaAddress(address);
+  const path = `/projects/${projectKey}/areas/${areaKey}`;
   return entryNo === null ? path : `${path}?entry=${entryNo}`;
 }
 

@@ -66,15 +66,15 @@ from app.domain.tasks import FIRST_CHECK_NUMBER, TaskField, TaskStatus
 from app.services.decisions import Standing
 
 _REFS_DESCRIPTION = (
-    "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries "
-    "`KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string "
+    "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries "
+    "`KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string "
     "is refused; entry and task references must exist, URLs are not checked"
 )
 _TITLE_DESCRIPTION = "One line; this is what the case index shows"
 _BODY_DESCRIPTION = "Markdown; empty for service entries, whose content is the payload"
 _NO_DESCRIPTION = (
-    "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task "
-    "entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry"
+    "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task "
+    "entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry"
 )
 _ACTION_ID_DESCRIPTION = (
     "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this "
@@ -337,7 +337,7 @@ class SupersedesPayload(BaseModel):
     """Нагрузка решения и заметки: какие записи того же типа и того же дела проекта эта
     заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2).
 
-    Список со значением по умолчанию: записи задач и направлений, решения проекта,
+    Список со значением по умолчанию: записи задач и областей, решения проекта,
     подшитые до замены (`TRK-554`), и заметки проекта до TRK-656 ключа не несут, а ответ
     несёт его всегда — форма записи одна.
     """
@@ -349,7 +349,7 @@ class SupersedesPayload(BaseModel):
         examples=[[12]],
         description=(
             "Numbers of the earlier entries of the same type in the same project's case "
-            "that this decision or finding superseded; empty in a task's or a direction's "
+            "that this decision or finding superseded; empty in a task's or an area's "
             "case"
         ),
     )
@@ -775,10 +775,10 @@ class _EntryReadBase(BaseModel):
     # вызовов, сохранённых ключами идемпотентности до этого поля: повтор отвечает ими же
     # сутки и поднимается этой моделью (`docs/notes/mcp.md`, «Сузить форму ответа
     # создающего инструмента можно, расширить — нельзя»). Так же `action_id`.
-    direction: None = Field(
+    area: None = Field(
         default=None,
         examples=[None],
-        description="Always `null`: entries of this type belong to a task, never to a direction",
+        description="Always `null`: entries of this type belong to a task, never to an area",
     )
     author: AuthorRead
     title: str = Field(examples=["Status changed: backlog -> open"], description=_TITLE_DESCRIPTION)
@@ -793,7 +793,7 @@ class _EntryReadBase(BaseModel):
     # Статус есть только у решения и заметки дела проекта (`_ReplaceableEntryRead`); у
     # остальных типов поле стоит, чтобы форма записи была одна в REST и MCP, и всегда
     # `null`. Умолчание — для ответов подшивки, сохранённых ключами идемпотентности до
-    # этих полей, как у `direction`.
+    # этих полей, как у `area`.
     status: None = Field(
         default=None,
         examples=[None],
@@ -806,28 +806,28 @@ class _EntryReadBase(BaseModel):
     )
 
 
-_DIRECTION_OWNER_DESCRIPTION = (
-    "Address of the owning direction for an entry of a direction's case "
+_AREA_OWNER_DESCRIPTION = (
+    "Address of the owning area for an entry of an area's case "
     "(`TRK/promotion#3`); `null` for a task or project entry"
 )
 
 
 class _ProjectOwnableEntryRead(_EntryReadBase):
-    """Общие поля записи, которая бывает и в деле задачи, и в деле проекта или направления.
+    """Общие поля записи, которая бывает и в деле задачи, и в деле проекта или области.
 
-    Владелец записи — задача, проект или направление, и непуст ровно один ключ, как колонки
+    Владелец записи — задача, проект или область, и непуст ровно один ключ, как колонки
     владельца в базе (`ck_entries_one_owner`). Все три поля обязательны в схеме, а не
     пропускаются при `null`: форма записи одна в любом ответе (`docs/notes/api.md`).
     Сужение только у этих вариантов: типы, которых в деле проекта не бывает (сводка, вопрос,
     вердикт, переход и прочие), всегда принадлежат задаче — их `task_key` остаётся строкой,
-    а `project_key` и `direction` всегда `null`, и клиенту не нужно проверять на `null`
+    а `project_key` и `area` всегда `null`, и клиенту не нужно проверять на `null`
     ключ, который `null` быть не может.
     """
 
     task_key: str | None = Field(  # type: ignore[assignment]
         examples=["TRK-42"],
         description=(
-            "Key of the owning task; `null` for an entry of a project's or a direction's case"
+            "Key of the owning task; `null` for an entry of a project's or an area's case"
         ),
     )
     project_key: str | None = Field(  # type: ignore[assignment]
@@ -835,38 +835,37 @@ class _ProjectOwnableEntryRead(_EntryReadBase):
         description=(
             "Key of the owning project for an entry of a project's case (`TRK#7`); "
             "`null` for a task entry, whose project is part of `task_key`, and for a "
-            "direction entry"
+            "area entry"
         ),
     )
-    direction: str | None = Field(  # type: ignore[assignment]
-        default=None, examples=[None], description=_DIRECTION_OWNER_DESCRIPTION
+    area: str | None = Field(  # type: ignore[assignment]
+        default=None, examples=[None], description=_AREA_OWNER_DESCRIPTION
     )
 
 
 class _ProjectEntryRead(_EntryReadBase):
-    """Общие поля записи, которая бывает только в деле проекта или направления: об
+    """Общие поля записи, которая бывает только в деле проекта или области: об
     атрибутах и архиве.
 
     Сужение в обратную сторону от задачных типов: `task_key` всегда `null` — атрибутов и
-    архива у задач нет (`CONCEPT.md`, 3.2). Владелец — проект или направление, и непуст
-    ровно один из `project_key` и `direction`.
+    архива у задач нет (`CONCEPT.md`, 3.2). Владелец — проект или область, и непуст
+    ровно один из `project_key` и `area`.
     """
 
     task_key: None = Field(  # type: ignore[assignment]
         examples=[None],
         description=(
-            "Always `null`: entries of this type belong to a project or a direction, "
-            "never to a task"
+            "Always `null`: entries of this type belong to a project or an area, never to a task"
         ),
     )
     project_key: str | None = Field(  # type: ignore[assignment]
         examples=["TRK"],
         description=(
-            "Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry"
+            "Key of the owning project; the entry address is `TRK#7`. `null` for an area entry"
         ),
     )
-    direction: str | None = Field(  # type: ignore[assignment]
-        default=None, examples=[None], description=_DIRECTION_OWNER_DESCRIPTION
+    area: str | None = Field(  # type: ignore[assignment]
+        default=None, examples=[None], description=_AREA_OWNER_DESCRIPTION
     )
 
 
@@ -876,7 +875,7 @@ class _ReplaceableEntryRead(_ProjectOwnableEntryRead):
     Нагрузка одна на все дела: `supersedes` — номера записей того же типа и того же дела
     проекта, которые эта заменила. Статус и прямой преемник считаются при чтении дела
     проекта — `GET /projects/{key}/entries` и `.../entries/{no}` (`CONCEPT.md`, 4.3).
-    Везде ещё они `null`: в деле задачи и направления замены нет, а лента и ответ
+    Везде ещё они `null`: в деле задачи и области замены нет, а лента и ответ
     подшивки статус не считают — он меняется без записи в этом деле, и кадр ленты или
     сохранённый ответ с ним устаревали бы.
     """
@@ -888,7 +887,7 @@ class _ReplaceableEntryRead(_ProjectOwnableEntryRead):
         description=(
             "Computed on read of a project's case: `superseded` once a later entry of the "
             "same type in the case names this one in `supersedes`, `in_force` until then. "
-            "`null` in a task's or a direction's case, in the journal and in the answer "
+            "`null` in a task's or an area's case, in the journal and in the answer "
             "that files the entry"
         ),
     )
@@ -1160,15 +1159,15 @@ def entry_read(
     *,
     task_key: str | None = None,
     project_key: str | None = None,
-    direction: str | None = None,
+    area: str | None = None,
     standing: Standing | None = None,
 ) -> EntryRead:
     """Собирает вариант ответа по типу записи.
 
     Ключ владельца приходит от вызывающего: у записи связи с задачей, проектом и
-    направлением нет, только `task_id`, `project_id` или `direction_id`. Передаётся ровно
+    областью нет, только `task_id`, `project_id` или `area_id`. Передаётся ровно
     один — ключ задачи для записи задачи, ключ проекта для записи дела проекта, адрес
-    направления для записи дела направления.
+    области для записи дела области.
 
     `standing` — статус решения или заметки, посчитанный чтением дела проекта
     (`app/services/decisions.py`); без него `status` и `superseded_by` — `null`.
@@ -1177,7 +1176,7 @@ def entry_read(
     объединения, а не рабочее состояние: `KeyError` здесь честнее молчаливого
     возврата записи со свободным `payload`, который фронт не разберёт.
     """
-    owners = [key for key in (task_key, project_key, direction) if key is not None]
+    owners = [key for key in (task_key, project_key, area) if key is not None]
     assert len(owners) == 1, "entry owner is exactly one key"
     return _READ_MODELS.get(entry.type, PlainEntryRead)(
         id=entry.id,
@@ -1185,7 +1184,7 @@ def entry_read(
         no=entry.no,
         task_key=task_key,
         project_key=project_key,
-        direction=direction,
+        area=area,
         type=entry.type,
         author=AuthorRead.model_validate(entry.author),
         title=entry.title,
@@ -1350,11 +1349,11 @@ class ProjectEntryCreate(_TitledEntryCreate):
     )
 
 
-class DirectionEntryCreate(_TitledEntryCreate):
-    """Запись агента или человека в деле направления: заметка, решение, находка, артефакт.
+class AreaEntryCreate(_TitledEntryCreate):
+    """Запись агента или человека в деле области: заметка, решение, находка, артефакт.
 
     Те же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: механики
-    решений проекта у дела направления нет, и лишнее поле схема отвергает до сценария.
+    решений проекта у дела области нет, и лишнее поле схема отвергает до сценария.
     """
 
     type: Literal[

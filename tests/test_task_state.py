@@ -243,7 +243,7 @@ async def test_brief_has_only_the_header_state_features_and_transitions(
         "status",
         "assignee",
         "priority",
-        "direction",
+        "area",
         "version",
         "updated_at",
     }

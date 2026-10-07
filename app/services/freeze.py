@@ -1,14 +1,14 @@
-"""Заморозка архива: единственное место, где возникают отказы архива проекта и направления.
+"""Заморозка архива: единственное место, где возникают отказы архива проекта и области.
 
-Архивный проект заморожен целиком вместе с задачами и направлениями (`CONCEPT.md`, 3.2 и
-3.7): ни новой задачи, ни записи в дело проекта, его задач или направлений, ни перехода,
-ни правки, ни атрибута, ни новой связи. Архивное направление заморожено так же, но только
-само: карточка, атрибуты и дело. Правило одно, и проверка у него одна — `ensure_unfrozen`.
+Архивный проект заморожен целиком вместе с задачами и областями (`CONCEPT.md`, 3.2 и
+3.7): ни новой задачи, ни записи в дело проекта, его задач или областей, ни перехода,
+ни правки, ни атрибута, ни новой связи. Архивная область заморожена так же, но только
+сама: карточка, атрибуты и дело. Правило одно, и проверка у него одна — `ensure_unfrozen`.
 Россыпь проверок по сценариям пропустила бы следующее новое действие молча: забытая
 строка в сценарии не видна ни тестом, ни чтением.
 
-Архив проекта называется раньше архива направления: восстановить направление в архивном
-проекте всё равно нельзя, и агент, получивший `direction_archived`, чинил бы не то.
+Архив проекта называется раньше архива области: восстановить область в архивном
+проекте всё равно нельзя, и агент, получивший `area_archived`, чинил бы не то.
 
 ## Две опоры, одна проверка
 
@@ -47,13 +47,13 @@ from collections.abc import Iterable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.locks import lock_changes
-from app.db.models.direction import Direction
+from app.db.models.area import Area
 from app.db.models.project import Project
 from app.db.models.task import Task
-from app.db.repositories import DirectionRepository, ProjectRepository
+from app.db.repositories import AreaRepository, ProjectRepository
+from app.domain.areas import format_area_address
 from app.domain.case import EntryType
-from app.domain.directions import format_direction_address
-from app.domain.errors import DirectionArchivedError, ProjectArchivedError
+from app.domain.errors import AreaArchivedError, ProjectArchivedError
 
 #: Записи, которые ложатся в дело архивного проекта и его задач: сами действия архива и
 #: снятие связи. Всё остальное архив отклоняет.
@@ -67,20 +67,20 @@ async def ensure_unfrozen(
     *,
     tasks: Iterable[Task] = (),
     projects: Iterable[Project] = (),
-    directions: Iterable[Direction] = (),
+    areas: Iterable[Area] = (),
 ) -> None:
-    """Отказывает, если названный проект, проект задачи или направления в архиве
-    (`ProjectArchivedError`), а затем — если названное направление в архиве
-    (`DirectionArchivedError`).
+    """Отказывает, если названный проект, проект задачи или области в архиве
+    (`ProjectArchivedError`), а затем — если названная область в архиве
+    (`AreaArchivedError`).
 
     Звать под очередью изменений: архивирование и восстановление тоже её занимают, и
     состояние, прочитанное под ней, не изменится до конца транзакции.
     """
-    directions = tuple(directions)
+    areas = tuple(areas)
     project_ids = (
         {task.project_id for task in tasks}
         | {project.id for project in projects}
-        | {direction.project_id for direction in directions}
+        | {area.project_id for area in areas}
     )
     archived = await ProjectRepository(session).first_archived(project_ids)
     if archived is not None:
@@ -89,16 +89,14 @@ async def ensure_unfrozen(
         # его коду в `app/services` находит только строку `raise` ниже.
         refusal = ProjectArchivedError(details={"key": key, "archived_at": archived_at.isoformat()})
         raise refusal  # project_archived
-    archived_direction = await DirectionRepository(session).first_archived(
-        {direction.id for direction in directions}
-    )
-    if archived_direction is not None:
-        project_key, direction_key, direction_archived_at = archived_direction
-        # Так же единственная точка отказа архива направления.
-        raise DirectionArchivedError(
+    archived_area = await AreaRepository(session).first_archived({area.id for area in areas})
+    if archived_area is not None:
+        project_key, area_key, area_archived_at = archived_area
+        # Так же единственная точка отказа архива области.
+        raise AreaArchivedError(
             details={
-                "key": format_direction_address(project_key, direction_key),
-                "archived_at": direction_archived_at.isoformat(),
+                "key": format_area_address(project_key, area_key),
+                "archived_at": area_archived_at.isoformat(),
             }
         )
 
@@ -107,17 +105,17 @@ async def lock_unfrozen(
     session: AsyncSession,
     *tasks: Task,
     project: Project | None = None,
-    direction: Direction | None = None,
+    area: Area | None = None,
 ) -> None:
     """Очередь изменений и проверка заморозки — первым шагом мутирующего сценария.
 
     То же, что `lock_changes` (задачи перечитываются под очередью), и сразу после неё
-    `ensure_unfrozen` по названным задачам, проекту и направлению.
+    `ensure_unfrozen` по названным задачам, проекту и области.
     """
     await lock_changes(session, *tasks)
     await ensure_unfrozen(
         session,
         tasks=tasks,
         projects=() if project is None else (project,),
-        directions=() if direction is None else (direction,),
+        areas=() if area is None else (area,),
     )

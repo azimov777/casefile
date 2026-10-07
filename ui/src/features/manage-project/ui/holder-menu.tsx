@@ -4,12 +4,12 @@ import { Archive, ArchiveRestore, Pencil } from 'lucide-react';
 import type { ProjectDetail } from '@/entities/project';
 import { ActionMenu, type ActionMenuItem } from '@/shared/ui';
 import { ProjectArchiving } from './archive-project';
-import { directionMenuActions, projectMenuActions, type MenuAction } from '../model/menu-actions';
-import { DirectionArchivingDialog, EditDirectionDialog } from './direction-dialogs';
+import { areaMenuActions, projectMenuActions, type MenuAction } from '../model/menu-actions';
+import { AreaArchivingDialog, EditAreaDialog } from './area-dialogs';
 import { EditProject } from './edit-project';
 
 /*
- * Меню «⋯» в шапке экрана проекта и страницы направления (TRK-618, решение TRK#46):
+ * Меню «⋯» в шапке экрана проекта и страницы области (TRK-618, решение TRK#46):
  * «Изменить» и «В архив», у архивного — только «Восстановить». Действий не прибавилось и
  * не убавилось — они переехали из строки шапки, где стояли посреди чтения.
  *
@@ -73,33 +73,33 @@ export function ProjectMenu({ project, archived }: { project: ProjectDetail; arc
   );
 }
 
-/** Что меню знает о направлении: адрес и то, что правит окно «Изменить». */
-interface MenuDirection {
+/** Что меню знает об области: адрес и то, что правит окно «Изменить». */
+interface MenuArea {
   address: string;
   title: string;
   description: string;
 }
 
 /**
- * Меню направления. Права решает страница, пункты — `directionMenuActions`. Без пунктов
+ * Меню области. Права решает страница, пункты — `areaMenuActions`. Без пунктов
  * меню нет вовсе.
  */
-export function DirectionMenu({
-  direction,
+export function AreaMenu({
+  area,
   canEdit,
   canArchive,
   archived,
 }: {
-  direction: MenuDirection;
+  area: MenuArea;
   canEdit: boolean;
   canArchive: boolean;
   archived: boolean;
 }) {
   const [dialog, setDialog] = useState<MenuDialog>(null);
   const menu = useRef<HTMLButtonElement>(null);
-  const { t } = useTranslation('direction');
+  const { t } = useTranslation('area');
 
-  const items: ActionMenuItem[] = directionMenuActions({ canEdit, canArchive, archived }).map(
+  const items: ActionMenuItem[] = areaMenuActions({ canEdit, canArchive, archived }).map(
     (action) => ({
       id: action,
       label: t(`${action}.open`),
@@ -114,14 +114,10 @@ export function DirectionMenu({
 
   return (
     <>
-      <ActionMenu
-        ref={menu}
-        label={t('menu.label', { address: direction.address })}
-        items={items}
-      />
-      {canEdit ? <EditDirectionDialog direction={direction} {...editing} /> : null}
+      <ActionMenu ref={menu} label={t('menu.label', { address: area.address })} items={items} />
+      {canEdit ? <EditAreaDialog area={area} {...editing} /> : null}
       {canArchive ? (
-        <DirectionArchivingDialog address={direction.address} archived={archived} {...archiving} />
+        <AreaArchivingDialog address={area.address} archived={archived} {...archiving} />
       ) : null}
     </>
   );

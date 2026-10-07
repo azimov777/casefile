@@ -44,7 +44,7 @@ from app.domain.query_language import (
     QUERY_WRONG_SHAPE,
 )
 from app.domain.search import (
-    DIRECTION_FIELD,
+    AREA_FIELD,
     FEATURES_FIELD,
     MAX_QUERY_LENGTH,
     MAX_SORT_TERMS,
@@ -87,7 +87,7 @@ _FIELDS_DESCRIPTION = (
     + ", ".join(f"`{name}`" for name in feature_names())
     + "; a single feature is not a field of the answer, and asking for one answers 422 "
     "`search_field_unknown` with the selectable names. `parent` brings the parent of the "
-    "task, key and title, or `null` for a top-level task. `direction` brings the direction "
+    "task, key and title, or `null` for a top-level task. `area` brings the area "
     "of the task, address and title, or `null`"
 )
 QueryParam = Annotated[
@@ -171,15 +171,15 @@ class TaskFilters:
             ),
         ),
     ] = None
-    direction: Annotated[
+    area: Annotated[
         list[str] | None,
         Query(
             max_length=MAX_VALUES_PER_CONDITION,
             examples=[["TRK/promotion"]],
             description=(
-                "Direction addresses `PROJECT/key`: the tasks whose own `direction` field "
+                "Area addresses `PROJECT/key`: the tasks whose own `area` field "
                 "names one of them, parents and subtrees not followed. `empty()` finds "
-                "tasks with no direction. An unknown address answers 422 instead of an "
+                "tasks with no area. An unknown address answers 422 instead of an "
                 "empty page"
             ),
         ),
@@ -299,7 +299,7 @@ class TaskFilters:
                 ("project", self.project),
                 ("parent", self.parent),
                 ("decision", self.decision),
-                ("direction", self.direction),
+                ("area", self.area),
                 ("under", self.under),
                 ("status", None if self.status is None else [item.value for item in self.status]),
                 ("assignee", self.assignee),
@@ -346,11 +346,11 @@ class TaskParentRead(BaseModel):
     title: str = Field(examples=["Популяризация Casefile: выпуск v0.1.0 и один день запуска"])
 
 
-class TaskDirectionRowRead(BaseModel):
-    """Направление задачи в строке выдачи: адрес и название (`CONCEPT.md`, 4.4).
+class TaskAreaRowRead(BaseModel):
+    """Область задачи в строке выдачи: адрес и название (`CONCEPT.md`, 4.4).
 
     Описания и признака архива нет намеренно: строка называет, куда задача входит, а
-    остальное несёт карточка (`TaskDirectionRead`) и само направление.
+    остальное несёт карточка (`TaskAreaRead`) и сама область.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -414,11 +414,11 @@ class TaskSearchRead(BaseModel):
         ),
     )
 
-    direction: TaskDirectionRowRead | None = Field(
+    area: TaskAreaRowRead | None = Field(
         default=None,
         description=(
-            "The direction of the task, address and title; `null` for a task with none. "
-            "Included when `fields` names `direction`, or when `fields` is omitted"
+            "The area of the task, address and title; `null` for a task with none. "
+            "Included when `fields` names `area`, or when `fields` is omitted"
         ),
     )
 
@@ -460,12 +460,10 @@ class TaskSearchRead(BaseModel):
         if found.parent is not None:
             asked = found.parent.value
             payload[PARENT_FIELD] = None if asked is None else TaskParentRead.model_validate(asked)
-        if found.direction is not None:
-            asked_direction = found.direction.value
-            payload[DIRECTION_FIELD] = (
-                None
-                if asked_direction is None
-                else TaskDirectionRowRead.model_validate(asked_direction)
+        if found.area is not None:
+            asked_area = found.area.value
+            payload[AREA_FIELD] = (
+                None if asked_area is None else TaskAreaRowRead.model_validate(asked_area)
             )
         if fields:
             payload = {name: value for name, value in payload.items() if name in fields}

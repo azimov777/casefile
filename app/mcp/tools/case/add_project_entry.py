@@ -1,4 +1,4 @@
-"""Инструмент `add_project_entry`: запись в дело проекта или направления — решение,
+"""Инструмент `add_project_entry`: запись в дело проекта или области — решение,
 находка, артефакт, заметка.
 """
 
@@ -12,8 +12,8 @@ from app.mcp.idempotency import Once
 from app.mcp.tools.case.arguments import EntryBodyArg, EntryRefsArg
 from app.mcp.tools.case.views import AppendedProjectEntryView, appended_project_entry
 from app.mcp.toolset import FILING, Toolset
+from app.services import areas as areas_service
 from app.services import case as case_service
-from app.services import directions as directions_service
 from app.services.case import owner_name
 
 # Набор типов объявлен `Literal` прямо в аннотации, как у `add_entry`: агент видит его в
@@ -73,10 +73,10 @@ def register(tools: Toolset) -> None:
         supersedes: SupersedesArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedProjectEntryView:
-        """Files an entry in the case of a project or of a direction: a decision, finding,
+        """Files an entry in the case of a project or of an area: a decision, finding,
         artifact or note that concerns it rather than one of its tasks.
 
-        The entry number counts inside the project or direction, and `TRK#7` or
+        The entry number counts inside the project or area, and `TRK#7` or
         `TRK/promotion#3` addresses the entry from `refs` of any case. Like a task entry
         filed by `add_entry`, such an entry stays as filed.
 
@@ -89,7 +89,7 @@ def register(tools: Toolset) -> None:
         `entry_fields_invalid` naming the offending fields.
         """
         async with runtime.call() as (session, actor):
-            owner = await directions_service.get_owner(session, key)
+            owner = await areas_service.get_owner(session, key)
 
             async def append() -> AppendedProjectEntryView:
                 entry = await case_service.append_project_entry(

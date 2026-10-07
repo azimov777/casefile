@@ -1,4 +1,4 @@
-"""Инструмент `set_attribute`: завести атрибут проекта или направления или изменить его
+"""Инструмент `set_attribute`: завести атрибут проекта или области или изменить его
 значение."""
 
 from typing import Annotated
@@ -9,8 +9,8 @@ from app.mcp.arguments import CaseOwnerKeyArg, IdempotencyKeyArg
 from app.mcp.idempotency import Once
 from app.mcp.tools.registries.arguments import AttributeNameArg
 from app.mcp.toolset import IDEMPOTENT_TASK_UPDATE, Toolset
+from app.services import areas as areas_service
 from app.services import attributes as attributes_service
-from app.services import directions as directions_service
 from app.services.attributes import AttributeSet
 from app.services.case import owner_name
 
@@ -41,11 +41,11 @@ AttributeSetReasonArg = Annotated[
 # но оно остаётся в ответе: без него «ничего не подшито» (`no: null`) не отличить от
 # «подшито не то».
 class AttributeSetView(BaseModel):
-    """Attribute after the call; the project or direction with all attributes is returned
+    """Attribute after the call; the project or area with all attributes is returned
     by `get_project`.
     """
 
-    project_key: str = Field(description="Project key or direction address")
+    project_key: str = Field(description="Project key or area address")
     name: str = Field(description="Name as stored: the spelling the attribute was created with")
     value: str
     no: int | None = Field(
@@ -79,7 +79,7 @@ def register(tools: Toolset) -> None:
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AttributeSetView:
         """Sets the value of an attribute: a reference fact such as the repository or the
-        main branch, kept by a project or direction. One call both creates and changes;
+        main branch, kept by a project or area. One call both creates and changes;
         which entry it files in the owner's case follows from the attribute's state.
 
         - No attribute with this name, ignoring case: the attribute is created and an
@@ -94,7 +94,7 @@ def register(tools: Toolset) -> None:
         the tracker stores the text and acts on none of it.
         """
         async with runtime.call() as (session, actor):
-            owner = await directions_service.get_owner(session, key)
+            owner = await areas_service.get_owner(session, key)
 
             async def put() -> AttributeSetView:
                 result = await attributes_service.set_attribute(

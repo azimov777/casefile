@@ -113,21 +113,21 @@ class AttributeRead(BaseModel):
     updated_at: datetime
 
 
-class DirectionRefRead(BaseModel):
-    """Направление строкой в чтении проекта: адрес и название (`CONCEPT.md`, 3.7)."""
+class AreaRefRead(BaseModel):
+    """Область строкой в чтении проекта: адрес и название (`CONCEPT.md`, 3.7)."""
 
     address: str = Field(
         examples=["TRK/promotion"],
         description=(
-            "Address of the direction: the project key and the direction key. Its card, "
-            "attributes and case are read at `/projects/TRK/directions/promotion`"
+            "Address of the area: the project key and the area key. Its card, "
+            "attributes and case are read at `/projects/TRK/areas/promotion`"
         ),
     )
     title: str = Field(examples=["Популяризация"])
 
 
 class ProjectDetailRead(ProjectRead):
-    """Один проект с нынешними значениями атрибутов, его решениями и направлениями.
+    """Один проект с нынешними значениями атрибутов, его решениями и областями.
 
     Отдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов и
     решений не показывают, и запрос их на каждый проект списка стоил бы им без пользы.
@@ -147,10 +147,10 @@ class ProjectDetailRead(ProjectRead):
             "of tasks that name it"
         )
     )
-    directions: list[DirectionRefRead] = Field(
+    areas: list[AreaRefRead] = Field(
         description=(
-            "Active directions of the project — endless parts of its work — ordered by key. "
-            "Archived ones are listed by `/projects/{key}/directions?include_archived=true`"
+            "Active areas of the project — endless parts of its work — ordered by key. "
+            "Archived ones are listed by `/projects/{key}/areas?include_archived=true`"
         )
     )
 

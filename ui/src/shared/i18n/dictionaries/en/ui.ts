@@ -114,7 +114,7 @@ export const ui = {
     crumbTasks: 'Tasks',
     crumbCase: 'Case',
     crumbProject: 'Project',
-    crumbDirection: 'Direction',
+    crumbArea: 'Area',
     broken: {
       title: 'The interface broke right here',
       text: 'The screen did not render because of a bug in the interface itself — the data has nothing to do with it. The details are in the browser console.',
@@ -358,7 +358,7 @@ export const ui = {
     headline: {
       created: 'Task created',
       projectCreated: 'Project created',
-      directionCreated: 'Direction created',
+      areaCreated: 'Area created',
       status: 'Status',
       withReason: '· with a reason',
       sectionEdited: 'Section edit',
@@ -374,8 +374,8 @@ export const ui = {
       attributeRemoved: 'Attribute removed',
       projectArchived: 'Project archived',
       projectRestored: 'Project restored',
-      directionArchived: 'Direction archived',
-      directionRestored: 'Direction restored',
+      areaArchived: 'Area archived',
+      areaRestored: 'Area restored',
       linkRole: {
         parent: '— child task',
         child: '— parent',

@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { directionHref, projectHref, taskRefHref } from '@/shared/lib/task-refs';
+import { areaHref, projectHref, taskRefHref } from '@/shared/lib/task-refs';
 import { Markdown } from './markdown';
 
 interface ReceiptProps {
@@ -10,10 +10,10 @@ interface ReceiptProps {
   headline: string;
   /**
    * Чьё дело: задача (`DEMO-1#7` ведёт в её карточку), проект (`TRK#7` — на экран
-   * проекта с раскрытой записью) или направление (`TRK/promotion#3` — на его страницу).
+   * проекта с раскрытой записью) или область (`TRK/promotion#3` — на её страницу).
    * Форма та же, что у владельца описи (`EntryIndex`).
    */
-  owner: { kind: 'task' | 'project' | 'direction'; key: string };
+  owner: { kind: 'task' | 'project' | 'area'; key: string };
   /** Номер подшитой записи — из ответа сервера, не вычисленный. */
   entryNo: number;
   body: string;
@@ -49,8 +49,8 @@ export function Receipt({ label, headline, owner, entryNo, body, onClose }: Rece
           to={
             owner.kind === 'task'
               ? taskRefHref({ key: owner.key, entryNo })
-              : owner.kind === 'direction'
-                ? directionHref(owner.key, entryNo)
+              : owner.kind === 'area'
+                ? areaHref(owner.key, entryNo)
                 : projectHref(owner.key, entryNo)
           }
         >

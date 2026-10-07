@@ -32,7 +32,7 @@ export const fieldReasons = {
   service_type: 'Only the tracker itself files this kind of entry, not an agent.',
   too_long: 'This value is too long.',
   too_many: 'There are more items than allowed.',
-  unknown_direction: 'There is no direction with that address.',
+  unknown_area: 'There is no area with that address.',
   unknown_entry: 'There is no entry with that number.',
   unknown_participant: 'There is no participant by that name in the registry.',
   unknown_task: 'There is no task with that key.',

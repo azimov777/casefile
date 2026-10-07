@@ -410,7 +410,7 @@ export function TaskPage() {
         features={features}
         parent={parent ?? null}
         decisions={decisions}
-        canChangeDirection={canEditCard}
+        canChangeArea={canEditCard}
         canChangeNotBefore={canEditCard}
       />
 

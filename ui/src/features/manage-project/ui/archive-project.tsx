@@ -15,7 +15,7 @@ import { ReasonField } from './reason-field';
  * не знает ни прав, ни состояния проекта.
  */
 
-type Direction = 'archive' | 'restore';
+type Area = 'archive' | 'restore';
 
 /**
  * Окно «В архив» у активного проекта и «Восстановить» у архивного — одно окно, чей
@@ -41,24 +41,20 @@ export function ProjectArchiving({
   onOpenChange: (open: boolean) => void;
   returnFocus: RefObject<HTMLElement | null>;
 }) {
-  const direction: Direction = archived ? 'restore' : 'archive';
+  const area: Area = archived ? 'restore' : 'archive';
   const { t } = useTranslation('project');
 
   return (
     <Dialog
-      alert={direction === 'archive'}
+      alert={area === 'archive'}
       open={open}
       onOpenChange={onOpenChange}
-      title={t(`${direction}.title`, { key: projectKey })}
-      description={t(`${direction}.intro`)}
+      title={t(`${area}.title`, { key: projectKey })}
+      description={t(`${area}.intro`)}
       closeLabel={t('close')}
       returnFocus={returnFocus}
     >
-      <ArchivingForm
-        projectKey={projectKey}
-        direction={direction}
-        onDone={() => onOpenChange(false)}
-      />
+      <ArchivingForm projectKey={projectKey} area={area} onDone={() => onOpenChange(false)} />
     </Dialog>
   );
 }
@@ -69,18 +65,18 @@ export function ProjectArchiving({
  */
 function ArchivingForm({
   projectKey,
-  direction,
+  area,
   onDone,
 }: {
   projectKey: string;
-  direction: Direction;
+  area: Area;
   onDone: () => void;
 }) {
   const [reason, setReason] = useState('');
   const [emptyReason, setEmptyReason] = useState(false);
   const archive = useArchiveProject();
   const restore = useRestoreProject();
-  const action = direction === 'archive' ? archive : restore;
+  const action = area === 'archive' ? archive : restore;
   const { t } = useTranslation('project');
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -95,19 +91,19 @@ function ArchivingForm({
   return (
     <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
       <ReasonField
-        label={t(`${direction}.reasonLabel`)}
+        label={t(`${area}.reasonLabel`)}
         value={reason}
         onChange={(next) => {
           setReason(next);
           if (next.trim() !== '') setEmptyReason(false);
         }}
-        hint={t(`${direction}.reasonHint`)}
-        problem={emptyReason ? t(`${direction}.reasonEmpty`) : null}
+        hint={t(`${area}.reasonHint`)}
+        problem={emptyReason ? t(`${area}.reasonEmpty`) : null}
       />
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={action.isPending}>
-          {action.isPending ? t(`${direction}.pending`) : t(`${direction}.submit`)}
+          {action.isPending ? t(`${area}.pending`) : t(`${area}.submit`)}
         </Button>
         <Button tone="quiet" onClick={onDone}>
           {t('cancel')}

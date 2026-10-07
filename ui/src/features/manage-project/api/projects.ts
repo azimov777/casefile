@@ -1,27 +1,27 @@
 import { apiClient, unwrap, type components } from '@/shared/api';
-import { splitDirectionAddress } from '@/shared/lib';
+import { splitAreaAddress } from '@/shared/lib';
 
 export type Project = components['schemas']['ProjectRead'];
 export type Attribute = components['schemas']['AttributeRead'];
 export type Entry = components['schemas']['EntryRead'];
-export type Direction = components['schemas']['DirectionRead'];
-export type DirectionDetail = components['schemas']['DirectionDetailRead'];
+export type Area = components['schemas']['AreaRead'];
+export type AreaDetail = components['schemas']['AreaDetailRead'];
 
 /**
- * Чьи атрибуты и дело: проект или его направление (TRK-557). Направление устроено как
+ * Чьи атрибуты и дело: проект или его область (TRK-557). Область устроена как
  * проект, только меньше (`../docs/CONCEPT.md`, 3.7): атрибуты и записи у них — одни
- * правила и одни сценарии бэкенда, различается только путь. Ключ направления — его
+ * правила и одни сценарии бэкенда, различается только путь. Ключ области — её
  * адрес `TRK/promotion`; путь API собирается из двух его частей.
  */
 export interface Holder {
-  kind: 'project' | 'direction';
+  kind: 'project' | 'area';
   key: string;
 }
 
-/** Путь направления в API: ключ проекта и ключ направления двумя сегментами. */
-function directionPath(address: string) {
-  const { projectKey, directionKey } = splitDirectionAddress(address);
-  return { project_key: projectKey, direction_key: directionKey };
+/** Путь области в API: ключ проекта и ключ области двумя сегментами. */
+function areaPath(address: string) {
+  const { projectKey, areaKey } = splitAreaAddress(address);
+  return { project_key: projectKey, area_key: areaKey };
 }
 
 export interface CreateProjectInput {
@@ -85,7 +85,7 @@ export interface SetAttributeInput {
 }
 
 /**
- * Заводит атрибут или меняет его значение — у проекта или у направления. Набор `task`
+ * Заводит атрибут или меняет его значение — у проекта или у области. Набор `task`
  * достаточен (решение 7 `TRK-150`): атрибут — такой же факт дела, как запись.
  *
  * Имя идёт в адрес: `openapi-fetch` кодирует его сам, а образец имени проверяет
@@ -100,12 +100,12 @@ export function setAttribute({
 }: SetAttributeInput): Promise<Attribute> {
   const body = reason === null ? { value } : { value, reason };
   const header = { 'Idempotency-Key': idempotencyKey };
-  return holder.kind === 'direction'
+  return holder.kind === 'area'
     ? unwrap(
         apiClient.PUT(
-          '/api/v1/projects/{project_key}/directions/{direction_key}/attributes/{attribute_name}',
+          '/api/v1/projects/{project_key}/areas/{area_key}/attributes/{attribute_name}',
           {
-            params: { path: { ...directionPath(holder.key), attribute_name: name }, header },
+            params: { path: { ...areaPath(holder.key), attribute_name: name }, header },
             body,
           },
         ),
@@ -133,12 +133,12 @@ export function removeAttribute({
   idempotencyKey,
 }: RemoveAttributeInput): Promise<Entry> {
   const header = { 'Idempotency-Key': idempotencyKey };
-  return holder.kind === 'direction'
+  return holder.kind === 'area'
     ? unwrap(
         apiClient.POST(
-          '/api/v1/projects/{project_key}/directions/{direction_key}/attributes/{attribute_name}/remove',
+          '/api/v1/projects/{project_key}/areas/{area_key}/attributes/{attribute_name}/remove',
           {
-            params: { path: { ...directionPath(holder.key), attribute_name: name }, header },
+            params: { path: { ...areaPath(holder.key), attribute_name: name }, header },
             body: { reason },
           },
         ),
@@ -153,7 +153,7 @@ export function removeAttribute({
 
 /**
  * Какие записи человек пишет в дело: в дело проекта — только заметку (`UI-175`; решения,
- * находки и артефакты подшивают агенты), в дело направления — заметку и решение
+ * находки и артефакты подшивают агенты), в дело области — заметку и решение
  * (TRK#16, ч. 4: «человек пишет заметки и решения»; запись `decision` в деле TRK-557).
  */
 export type HumanEntryType = 'note' | 'decision';
@@ -167,8 +167,8 @@ export interface EntryInput {
 }
 
 /**
- * Запись человека в дело проекта или направления. У направления `supersedes` нет вовсе:
- * механика замены решений проекта на его дело не распространяется (TRK-555).
+ * Запись человека в дело проекта или области. У области `supersedes` нет вовсе:
+ * механика замены решений проекта на её дело не распространяется (TRK-555).
  */
 export function fileEntry({
   holder,
@@ -178,10 +178,10 @@ export function fileEntry({
   idempotencyKey,
 }: EntryInput): Promise<Entry> {
   const header = { 'Idempotency-Key': idempotencyKey };
-  return holder.kind === 'direction'
+  return holder.kind === 'area'
     ? unwrap(
-        apiClient.POST('/api/v1/projects/{project_key}/directions/{direction_key}/entries', {
-          params: { path: directionPath(holder.key), header },
+        apiClient.POST('/api/v1/projects/{project_key}/areas/{area_key}/entries', {
+          params: { path: areaPath(holder.key), header },
           body: { type, title, body },
         }),
       )
@@ -228,86 +228,76 @@ export function restoreProject({ key, reason }: ArchivingInput): Promise<Project
   );
 }
 
-export interface CreateDirectionInput {
+export interface CreateAreaInput {
   projectKey: string;
   key: string;
   title: string;
   description: string;
-  /** Ключ повтора: тот же на каждой попытке завести это направление. */
+  /** Ключ повтора: тот же на каждой попытке завести эту область. */
   idempotencyKey: string;
 }
 
 /**
- * Заводит направление в проекте (TRK-557, `../docs/CONCEPT.md`, 3.7). Ключ уходит как
- * набран: регистр приводит бэкенд, он же проверяет образец (`422 invalid_direction_key`)
- * и занятость в проекте (`409 direction_key_taken`).
+ * Заводит область в проекте (TRK-557, `../docs/CONCEPT.md`, 3.7). Ключ уходит как
+ * набран: регистр приводит бэкенд, он же проверяет образец (`422 invalid_area_key`)
+ * и занятость в проекте (`409 area_key_taken`).
  */
-export function createDirection({
+export function createArea({
   projectKey,
   key,
   title,
   description,
   idempotencyKey,
-}: CreateDirectionInput): Promise<Direction> {
+}: CreateAreaInput): Promise<Area> {
   return unwrap(
-    apiClient.POST('/api/v1/projects/{project_key}/directions', {
+    apiClient.POST('/api/v1/projects/{project_key}/areas', {
       params: { path: { project_key: projectKey }, header: { 'Idempotency-Key': idempotencyKey } },
       body: { key, title, description },
     }),
   );
 }
 
-export interface UpdateDirectionInput {
-  /** Адрес направления `TRK/promotion`. */
+export interface UpdateAreaInput {
+  /** Адрес области `TRK/promotion`. */
   address: string;
   title: string;
   description: string;
 }
 
-/** Меняет название и описание направления. Ключа у правки нет: он вшит в адрес. */
-export function updateDirection({
-  address,
-  title,
-  description,
-}: UpdateDirectionInput): Promise<DirectionDetail> {
+/** Меняет название и описание области. Ключа у правки нет: он вшит в адрес. */
+export function updateArea({ address, title, description }: UpdateAreaInput): Promise<AreaDetail> {
   return unwrap(
-    apiClient.PATCH('/api/v1/projects/{project_key}/directions/{direction_key}', {
-      params: { path: directionPath(address) },
+    apiClient.PATCH('/api/v1/projects/{project_key}/areas/{area_key}', {
+      params: { path: areaPath(address) },
       body: { title, description },
     }),
   );
 }
 
-export interface DirectionArchivingInput {
+export interface AreaArchivingInput {
   address: string;
-  /** Почему направление уходит в архив или возвращается; пустую бэкенд не примет. */
+  /** Почему область уходит в архив или возвращается; пустую бэкенд не примет. */
   reason: string;
 }
 
 /**
- * Архивирует направление с причиной: карточка, атрибуты и дело замораживаются, новую
- * задачу в него не поставить; задачи, что уже в нём, работают как обычно.
+ * Архивирует область с причиной: карточка, атрибуты и дело замораживаются, новую
+ * задачу в неё не поставить; задачи, что уже в ней, работают как обычно.
  */
-export function archiveDirection({
-  address,
-  reason,
-}: DirectionArchivingInput): Promise<DirectionDetail> {
+export function archiveArea({ address, reason }: AreaArchivingInput): Promise<AreaDetail> {
   return unwrap(
-    apiClient.POST('/api/v1/projects/{project_key}/directions/{direction_key}/archive', {
-      params: { path: directionPath(address) },
+    apiClient.POST('/api/v1/projects/{project_key}/areas/{area_key}/archive', {
+      params: { path: areaPath(address) },
       body: { reason },
     }),
   );
 }
 
-/** Восстанавливает направление из архива с причиной. */
-export function restoreDirection({
-  address,
-  reason,
-}: DirectionArchivingInput): Promise<DirectionDetail> {
+/** Восстанавливает область из архива с причиной. */
+export function restoreArea({ address, reason }: AreaArchivingInput): Promise<AreaDetail> {
   return unwrap(
-    apiClient.POST('/api/v1/projects/{project_key}/directions/{direction_key}/restore', {
-      params: { path: directionPath(address) },
+    apiClient.POST('/api/v1/projects/{project_key}/areas/{area_key}/restore', {
+      params: { path: areaPath(address) },
       body: { reason },
     }),
   );

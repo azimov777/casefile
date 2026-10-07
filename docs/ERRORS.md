@@ -51,8 +51,8 @@
 | Код | Сообщение | Когда возникает |
 |---|---|---|
 | `account_not_found` | Account not found | Учётной записи с таким идентификатором или почтой нет. |
-| `attribute_not_found` | Attribute not found | Атрибута с таким именем (без учёта регистра) у проекта или направления нет. |
-| `direction_not_found` | Direction not found | Направления с таким адресом нет: проект есть, ключа в нём нет (`CONCEPT.md`, 3.7). |
+| `area_not_found` | Area not found | Области с таким адресом нет: проект есть, ключа в нём нет (`CONCEPT.md`, 3.7). |
+| `attribute_not_found` | Attribute not found | Атрибута с таким именем (без учёта регистра) у проекта или области нет. |
 | `entry_not_found` | Case entry not found | Записи с таким номером в этой задаче нет. |
 | `link_not_found` | Link not found | Связи такого вида между этими задачами нет. |
 | `not_found` | Object not found | Запрошенного объекта не существует. |
@@ -74,15 +74,15 @@
 | `acceptance_by_closer` | The warning cannot be accepted by the signature that closed the task | Предупреждение принимает та же подпись, что закрыла задачу. |
 | `account_email_taken` | Account email is already taken | Почта уже занята другой учётной записью: адреса уникальны без учёта регистра. |
 | `archive_revision_unknown` | The archive comes from a newer Casefile; update this installation first | Ревизии схемы архива приёмник не знает: архив снят более новым Casefile. |
+| `area_archived` | Area is archived: its card, attributes and case are frozen | Область в архиве: карточка, атрибуты и дело заморожены (`CONCEPT.md`, 3.7). |
+| `area_key_taken` | Area key is already taken in this project | Ключ области уже занят в этом проекте: ключи уникальны без учёта регистра. |
+| `area_not_archived` | Area is not archived | Восстанавливать нечего: область не в архиве. |
 | `assignee_mismatch` | Task is assigned to someone else | Вход в `in_progress` не от исполнителя задачи. |
 | `assignee_required` | Task has no assignee | Вход в `in_progress` у задачи без исполнителя. |
 | `checks_not_passed` | Some checks have no verdict, or a failed one, recorded since the last entry into in_progress | `in_progress → done` требует по каждой проверке вердикта не `failed`, подшитого после последнего входа в `in_progress`. |
 | `closing_not_a_transition` | Closing a task is a separate call, not a status transition | `done` достигается только сценарием закрытия, а не переводом статуса. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
 | `decision_not_in_force` | Project decision is superseded by a later decision | Решение проекта уже заменено другим, а его называют как действующее. |
-| `direction_archived` | Direction is archived: its card, attributes and case are frozen | Направление в архиве: карточка, атрибуты и дело заморожены (`CONCEPT.md`, 3.7). |
-| `direction_key_taken` | Direction key is already taken in this project | Ключ направления уже занят в этом проекте: ключи уникальны без учёта регистра. |
-| `direction_not_archived` | Direction is not archived | Восстанавливать нечего: направление не в архиве. |
 | `finding_not_in_force` | Project finding is superseded by a later finding | Заметка дела проекта уже заменена другой, а её заменяют снова. |
 | `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |
 | `installation_not_empty` | Only an installation without projects can take an archive | Приём архива в установку, где уже есть проекты. |
@@ -117,18 +117,18 @@
 | `addressee_with_any_addressee` | Questions are filtered either by addressee or by any addressee, not by both | В выдаче вопросов назван адресат и тут же снято условие адресата. |
 | `archive_format_unsupported` | This is not an installation archive this Casefile can read | Документ — не архив установки этой раскладки: чужой `format` или `format_version`. |
 | `archive_invalid` | The installation archive is malformed | Архив противоречит сам себе или схеме своей ревизии. |
+| `area_description_too_long` | Area description is too long | Описание области длиннее предела (`app/domain/areas.py`); не обрезается. |
+| `area_project_mismatch` | Area belongs to another project than the task | Область другого проекта: задаче подходит область её собственного проекта. |
+| `area_reason_required` | Archiving or restoring an area requires a reason | Архивирование и восстановление области требуют непустой причины `reason`. |
 | `attribute_reason_required` | Changing or removing an attribute requires a reason | Изменение и снятие атрибута требуют непустой причины `reason`. |
 | `attribute_value_too_long` | Attribute value is too long | Значение атрибута длиннее предела (`app/domain/attributes.py`). |
 | `current_password_mismatch` | Current password does not match | Смена своего пароля прислала неверный прежний пароль. |
 | `cursor_with_offset` | Page is addressed either by cursor or by offset, not by both | Страница адресована сразу двумя способами: и курсором, и смещением. |
-| `direction_description_too_long` | Direction description is too long | Описание направления длиннее предела (`app/domain/directions.py`); не обрезается. |
-| `direction_project_mismatch` | Direction belongs to another project than the task | Направление другого проекта: задаче подходит направление её собственного проекта. |
-| `direction_reason_required` | Archiving or restoring a direction requires a reason | Архивирование и восстановление направления требуют непустой причины `reason`. |
 | `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. Снять (`withdrawn`) или заменить (`replaced`) можно только вопрос, на который ещё не ответили: у отвеченного это `already_answered`. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
+| `invalid_area_key` | Area key is invalid | Адрес новой области не `ПРОЕКТ/ключ` или ключ не по шаблону. |
 | `invalid_attribute_name` | Attribute name is invalid | Имя атрибута не соответствует шаблону. |
 | `invalid_cursor` | Pagination cursor is malformed | Курсор не разбирается. Ошибка механизма, а не предметной области, поэтому живёт здесь. |
-| `invalid_direction_key` | Direction key is invalid | Адрес нового направления не `ПРОЕКТ/ключ` или ключ не по шаблону. |
 | `invalid_email` | Email is invalid | Почта не похожа на адрес: нет `@`, пустая часть, пробел или слишком длинная. |
 | `invalid_idempotency_key` | Idempotency key is invalid | Ключ идемпотентности пуст или длиннее допустимого. |
 | `invalid_journal_cursor` | Last-Event-ID is not a journal sequence number | `Last-Event-ID` потока не разбирается как сквозной номер записи. |

@@ -10,7 +10,7 @@ const INLINE_RESET = 'border-none bg-transparent p-0 text-accent underline';
 
 /**
  * Запись из адреса не попала в отобранную выдачу: сказано словами, со сбросом отбора.
- * Те же слова, что на экране «Дело» задачи, — для дела проекта и направления (TRK-621).
+ * Те же слова, что на экране «Дело» задачи, — для дела проекта и области (TRK-621).
  */
 export function HiddenByTypeNotice({
   reference,

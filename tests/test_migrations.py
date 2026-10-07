@@ -17,6 +17,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any
 
 import asyncpg
 import pytest
@@ -1339,3 +1340,203 @@ async def test_the_directions_rollback_refuses_while_direction_entries_exist(
 
     with pytest.raises(Exception, match="ck_entries_one_owner"):
         await migrate(url, DIRECTIONS_PREVIOUS, down=True)
+
+
+# --- Направление — область (TRK-675) ------------------------------------------------------
+
+#: Ревизия переименования и ревизия перед ней.
+AREAS_REVISION = "ed61a83a9be0"
+AREAS_PREVIOUS = "29c012062376"
+
+_INSERT_DIRECTION_HISTORY = text(
+    "INSERT INTO entries (direction_id, no, type, title, payload, created_by_kind, "
+    "created_by_signature) SELECT directions.id, rows.no, rows.type, rows.title, "
+    "CAST(rows.payload AS jsonb), 'agent', 'claude' FROM directions, (VALUES "
+    """(2, 'archived', 'Direction archived', '{"reason": "Пауза"}'), """
+    """(3, 'restored', 'Direction restored', '{"reason": "Снова в работе"}'), """
+    "(4, 'note', 'Direction of the work', '{}')) AS rows (no, type, title, payload)"
+)
+_INSERT_DIRECTION_ATTRIBUTE = text(
+    "INSERT INTO direction_attributes (direction_id, name, value) "
+    "SELECT id, 'repo', 'casefile' FROM directions"
+)
+_INSERT_TASK_IN_DIRECTION = text(
+    "INSERT INTO tasks (key, project_id, title, description, status, created_by_kind, "
+    "created_by_signature, direction_id) SELECT 'OLD-1', projects.id, 'Задача в направлении', 'd', "
+    "'open', 'agent', 'claude', directions.id FROM projects JOIN directions "
+    "ON directions.project_id = projects.id WHERE projects.key = 'OLD'"
+)
+_INSERT_TASK_FIELD_HISTORY = text(
+    "INSERT INTO entries (task_id, no, type, title, payload, created_by_kind, "
+    "created_by_signature) SELECT tasks.id, rows.no, rows.type, rows.title, "
+    "CAST(rows.payload AS jsonb), 'agent', 'claude' FROM tasks, (VALUES "
+    "(1, 'created', 'Task created', '{}'), "
+    "(2, 'field_changed', 'Field changed: direction', "
+    """'{"field": "direction", "before": null, "after": "OLD/promotion"}'), """
+    "(3, 'field_changed', 'Field changed: priority', "
+    """'{"field": "priority", "before": "normal", "after": "high"}')) """
+    "AS rows (no, type, title, payload) WHERE tasks.key = 'OLD-1'"
+)
+
+#: Записи дела после переименования — те же байты: записи неизменяемы, и прежнее слово
+#: в нагрузке и заголовках остаётся как написано (решение — дело TRK-675).
+_ENTRIES_AS_WRITTEN = [
+    ("OLD-1", 1, "created", "Task created", {}),
+    (
+        "OLD-1",
+        2,
+        "field_changed",
+        "Field changed: direction",
+        {"field": "direction", "before": None, "after": "OLD/promotion"},
+    ),
+    (
+        "OLD-1",
+        3,
+        "field_changed",
+        "Field changed: priority",
+        {"field": "priority", "before": "normal", "after": "high"},
+    ),
+    ("OLD/promotion", 1, "created", "Direction created", {}),
+    ("OLD/promotion", 2, "archived", "Direction archived", {"reason": "Пауза"}),
+    ("OLD/promotion", 3, "restored", "Direction restored", {"reason": "Снова в работе"}),
+    ("OLD/promotion", 4, "note", "Direction of the work", {}),
+]
+
+
+async def _seed_direction_with_history(engine: AsyncEngine) -> None:
+    """Направление с атрибутом и делом и задача в нём с правкой поля — установка до TRK-675."""
+    async with engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+        await connection.execute(_INSERT_DIRECTION)
+        await connection.execute(_INSERT_DIRECTION_ENTRY)
+        await connection.execute(_INSERT_DIRECTION_HISTORY)
+        await connection.execute(_INSERT_DIRECTION_ATTRIBUTE)
+        await connection.execute(_INSERT_TASK_IN_DIRECTION)
+        await connection.execute(_INSERT_TASK_FIELD_HISTORY)
+
+
+async def _schema_names_with(connection: AsyncConnection, word: str) -> list[str]:
+    """Таблицы, колонки, ограничения и индексы схемы `public`, в чьём имени есть слово."""
+    rows = await connection.execute(
+        text(
+            "SELECT 'table ' || table_name FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name LIKE :pattern "
+            "UNION ALL SELECT 'column ' || table_name || '.' || column_name "
+            "FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND column_name LIKE :pattern "
+            "UNION ALL SELECT 'constraint ' || conname FROM pg_constraint "
+            "JOIN pg_namespace ON pg_namespace.oid = pg_constraint.connamespace "
+            "WHERE nspname = 'public' AND conname LIKE :pattern "
+            "UNION ALL SELECT 'index ' || indexname FROM pg_indexes "
+            "WHERE schemaname = 'public' AND indexname LIKE :pattern"
+        ),
+        {"pattern": f"%{word}%"},
+    )
+    return sorted(rows.scalars())
+
+
+async def _entries_by_owner(connection: AsyncConnection, area: str) -> list[tuple[Any, ...]]:
+    """Записи задач и дела области: владелец — ключ задачи или адрес, номер, тип, текст."""
+    rows = await connection.execute(
+        text(
+            "SELECT coalesce(tasks.key, projects.key || '/' || owner.key) AS owner, "
+            "entries.no, entries.type, entries.title, entries.payload FROM entries "
+            "LEFT JOIN tasks ON tasks.id = entries.task_id "
+            f"LEFT JOIN {area}s AS owner ON owner.id = entries.{area}_id "
+            "LEFT JOIN projects ON projects.id = owner.project_id "
+            "ORDER BY owner.key NULLS FIRST, entries.no"
+        )
+    )
+    return [tuple(row) for row in rows]
+
+
+async def test_directions_become_areas_with_their_rows_and_names(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Обзорная проверка TRK-675: таблицы, колонки и имена объектов — `area`, строки те же.
+
+    Направление, его атрибут и задача в нём доходят до `areas`, `area_attributes` и
+    `tasks.area_id` с теми же ключами, записи дела — теми же байтами. Ни одного имени
+    со словом `direction` в схеме не остаётся, а проверка одного владельца и номер
+    внутри области держат новую колонку.
+    """
+    url = f"{test_database_url}_migrations"
+    await migrate(url, AREAS_PREVIOUS)
+    await _seed_direction_with_history(migration_engine)
+
+    await migrate(url, AREAS_REVISION)
+
+    async with migration_engine.connect() as connection:
+        areas = list(
+            await connection.execute(
+                text(
+                    "SELECT projects.key, areas.key, areas.title FROM areas "
+                    "JOIN projects ON projects.id = areas.project_id"
+                )
+            )
+        )
+        attributes = list(
+            await connection.execute(
+                text(
+                    "SELECT areas.key, name, value FROM area_attributes "
+                    "JOIN areas ON areas.id = area_attributes.area_id"
+                )
+            )
+        )
+        tasks = list(
+            await connection.execute(
+                text(
+                    "SELECT tasks.key, areas.key FROM tasks JOIN areas ON areas.id = tasks.area_id"
+                )
+            )
+        )
+        entries = await _entries_by_owner(connection, "area")
+        leftovers = await _schema_names_with(connection, "direction")
+
+    assert [tuple(row) for row in areas] == [("OLD", "promotion", "Популяризация")]
+    assert [tuple(row) for row in attributes] == [("promotion", "repo", "casefile")]
+    assert [tuple(row) for row in tasks] == [("OLD-1", "promotion")]
+    assert entries == _ENTRIES_AS_WRITTEN
+    assert leftovers == []
+
+    with pytest.raises(Exception, match="ck_entries_one_owner"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO entries (project_id, area_id, no, type, title, "
+                    "created_by_kind, created_by_signature) SELECT project_id, id, 9, 'note', "
+                    "'Обоих', 'agent', 'claude' FROM areas"
+                )
+            )
+    with pytest.raises(Exception, match="uq_entries_area_id_no"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO entries (area_id, no, type, title, created_by_kind, "
+                    "created_by_signature) SELECT id, 1, 'note', 'Повтор номера', 'agent', "
+                    "'claude' FROM areas"
+                )
+            )
+
+
+async def test_the_areas_rollback_brings_the_direction_names_back(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Откат возвращает прежние имена, записи остаются как были; подъём снова идёт."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, AREAS_PREVIOUS)
+    await _seed_direction_with_history(migration_engine)
+    async with migration_engine.connect() as connection:
+        seeded = await _entries_by_owner(connection, "direction")
+    await migrate(url, AREAS_REVISION)
+
+    await migrate(url, AREAS_PREVIOUS, down=True)
+    async with migration_engine.connect() as connection:
+        rolled_back = await _entries_by_owner(connection, "direction")
+        leftovers = await _schema_names_with(connection, "area")
+    assert seeded == rolled_back == _ENTRIES_AS_WRITTEN
+    assert leftovers == []
+
+    await migrate(url, AREAS_REVISION)
+    async with migration_engine.connect() as connection:
+        assert await _entries_by_owner(connection, "area") == _ENTRIES_AS_WRITTEN

@@ -5,7 +5,7 @@ import { parseFrame } from './frames';
 function frame(owner: {
   task_key: string | null;
   project_key: string | null;
-  direction?: string | null;
+  area?: string | null;
 }): string {
   return JSON.stringify({ seq: 7, no: 2, type: 'note', title: 'Заметка', ...owner });
 }
@@ -29,10 +29,10 @@ describe('parseFrame', () => {
     });
   });
 
-  it('разбирает запись дела направления: назван его адрес (TRK-557)', () => {
+  it('разбирает запись дела области: назван её адрес (TRK-557)', () => {
     expect(
-      parseFrame(frame({ task_key: null, project_key: null, direction: 'TRK/promotion' })),
-    ).toMatchObject({ taskKey: null, projectKey: null, direction: 'TRK/promotion' });
+      parseFrame(frame({ task_key: null, project_key: null, area: 'TRK/promotion' })),
+    ).toMatchObject({ taskKey: null, projectKey: null, area: 'TRK/promotion' });
   });
 
   it('отбрасывает кадр без владельца: ни задачи, ни проекта', () => {

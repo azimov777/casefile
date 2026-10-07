@@ -5,18 +5,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { API, data, directionDetail, failure, projectDetail } from '@testing/msw/responses';
+import { API, data, areaDetail, failure, projectDetail } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { say } from '@testing/say';
 import { i18n } from '@/shared/i18n';
 import { setToken } from '@/shared/api';
 import { ProjectArchiving } from './archive-project';
-import { DirectionArchivingDialog, EditDirectionDialog } from './direction-dialogs';
+import { AreaArchivingDialog, EditAreaDialog } from './area-dialogs';
 import { EditProject } from './edit-project';
-import { directionMenuActions, projectMenuActions } from '../model/menu-actions';
+import { areaMenuActions, projectMenuActions } from '../model/menu-actions';
 
 /*
- * Меню «⋯» экрана проекта и страницы направления (TRK-618): какие пункты в нём стоят и
+ * Меню «⋯» экрана проекта и страницы области (TRK-618): какие пункты в нём стоят и
  * что делают окна, которые они открывают.
  *
  * Окна проверяются открытыми сами по себе, без меню: `Popover` Radix в jsdom раскрывается
@@ -30,7 +30,7 @@ import { directionMenuActions, projectMenuActions } from '../model/menu-actions'
 const MENU = 'menu';
 
 const ADDRESS = 'DEMO/promotion';
-const DIRECTION_PATH = '/api/v1/projects/DEMO/directions/promotion';
+const AREA_PATH = '/api/v1/projects/DEMO/areas/promotion';
 
 /** Запросы записи прогона: метод, путь и тело — по ним видно, что ушло и чего не ушло. */
 let writes: { method: string; path: string; body: unknown }[] = [];
@@ -59,13 +59,13 @@ beforeEach(() => {
       await remember(request);
       return data(projectDetail('DEMO'));
     }),
-    http.patch(`${API}${DIRECTION_PATH}`, async ({ request }) => {
+    http.patch(`${API}${AREA_PATH}`, async ({ request }) => {
       await remember(request);
-      return data(directionDetail(ADDRESS));
+      return data(areaDetail(ADDRESS));
     }),
-    http.post(`${API}${DIRECTION_PATH}/archive`, async ({ request }) => {
+    http.post(`${API}${AREA_PATH}/archive`, async ({ request }) => {
       await remember(request);
-      return data(directionDetail(ADDRESS, { archived_at: '2026-10-06T10:00:00Z' }));
+      return data(areaDetail(ADDRESS, { archived_at: '2026-10-06T10:00:00Z' }));
     }),
   );
 });
@@ -114,20 +114,18 @@ describe('пункты меню', () => {
     expect(projectMenuActions(true)).toEqual(['restore']);
   });
 
-  it('у направления пункты идут за правами страницы; без прав меню пустое', () => {
-    expect(directionMenuActions({ canEdit: true, canArchive: true, archived: false })).toEqual([
+  it('у области пункты идут за правами страницы; без прав меню пустое', () => {
+    expect(areaMenuActions({ canEdit: true, canArchive: true, archived: false })).toEqual([
       'edit',
       'archive',
     ]);
-    // Архивное направление активного проекта: правки нет, есть «Восстановить».
-    expect(directionMenuActions({ canEdit: false, canArchive: true, archived: true })).toEqual([
+    // Архивная область активного проекта: правки нет, есть «Восстановить».
+    expect(areaMenuActions({ canEdit: false, canArchive: true, archived: true })).toEqual([
       'restore',
     ]);
-    // Направление архивного проекта: ни правки, ни архива, ни восстановления.
-    expect(directionMenuActions({ canEdit: false, canArchive: false, archived: false })).toEqual(
-      [],
-    );
-    expect(directionMenuActions({ canEdit: false, canArchive: false, archived: true })).toEqual([]);
+    // Область архивного проекта: ни правки, ни архива, ни восстановления.
+    expect(areaMenuActions({ canEdit: false, canArchive: false, archived: false })).toEqual([]);
+    expect(areaMenuActions({ canEdit: false, canArchive: false, archived: true })).toEqual([]);
   });
 });
 
@@ -254,12 +252,12 @@ describe('окна архива и восстановления проекта (
   });
 });
 
-describe('окна направления из меню', () => {
-  it('правка названия и описания уходит `PATCH` по адресу направления, фокус — на «⋯»', async () => {
+describe('окна области из меню', () => {
+  it('правка названия и описания уходит `PATCH` по адресу области, фокус — на «⋯»', async () => {
     const user = userEvent.setup();
     renderOpened((place) => (
-      <EditDirectionDialog
-        direction={{
+      <EditAreaDialog
+        area={{
           address: ADDRESS,
           title: 'Популяризация',
           description: 'Каталоги, публикации и **день запуска**.',
@@ -269,18 +267,18 @@ describe('окна направления из меню', () => {
     ));
 
     const dialog = await screen.findByRole('dialog', {
-      name: say.direction('edit.title', { address: ADDRESS }),
+      name: say.area('edit.title', { address: ADDRESS }),
     });
-    const title = within(dialog).getByLabelText(say.direction('edit.titleLabel'));
+    const title = within(dialog).getByLabelText(say.area('edit.titleLabel'));
     await user.clear(title);
     await user.type(title, 'Продвижение');
-    await user.click(within(dialog).getByRole('button', { name: say.direction('edit.submit') }));
+    await user.click(within(dialog).getByRole('button', { name: say.area('edit.submit') }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(writes).toEqual([
       {
         method: 'PATCH',
-        path: DIRECTION_PATH,
+        path: AREA_PATH,
         body: { title: 'Продвижение', description: 'Каталоги, публикации и **день запуска**.' },
       },
     ]);
@@ -289,28 +287,24 @@ describe('окна направления из меню', () => {
 
   it('архив без причины не уходит и говорит почему; с причиной — `reason`', async () => {
     const user = userEvent.setup();
-    renderOpened((place) => (
-      <DirectionArchivingDialog address={ADDRESS} archived={false} {...place} />
-    ));
+    renderOpened((place) => <AreaArchivingDialog address={ADDRESS} archived={false} {...place} />);
 
     const dialog = await screen.findByRole('alertdialog', {
-      name: say.direction('archive.title', { address: ADDRESS }),
+      name: say.area('archive.title', { address: ADDRESS }),
     });
-    const submit = within(dialog).getByRole('button', { name: say.direction('archive.submit') });
+    const submit = within(dialog).getByRole('button', { name: say.area('archive.submit') });
     await user.click(submit);
-    expect(within(dialog).getByRole('alert')).toHaveTextContent(
-      say.direction('archive.reasonEmpty'),
-    );
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(say.area('archive.reasonEmpty'));
     expect(writes).toEqual([]);
 
     await user.type(
-      within(dialog).getByLabelText(say.direction('archive.reasonLabel')),
+      within(dialog).getByLabelText(say.area('archive.reasonLabel')),
       'Запуск прошёл',
     );
     await user.click(submit);
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     expect(writes).toEqual([
-      { method: 'POST', path: `${DIRECTION_PATH}/archive`, body: { reason: 'Запуск прошёл' } },
+      { method: 'POST', path: `${AREA_PATH}/archive`, body: { reason: 'Запуск прошёл' } },
     ]);
   });
 });

@@ -218,14 +218,14 @@ function crumbsOf(place: Place, t: TFunction<'ui'>): Crumb[] {
   // Экран проекта: ключ ведёт в его задачи, как и внутри задачи, а раздел назван словом.
   if (place.section === 'project') return [project, { label: t('app.crumbProject') }];
 
-  // Страница направления (TRK-557): проект, его экран ссылкой и само место словом.
-  // Слово «Направление» ниже `fold` не показывается: оно повторяло бы надпись над
+  // Страница области (TRK-557): проект, его экран ссылкой и само место словом.
+  // Слово «Область» ниже `fold` не показывается: оно повторяло бы надпись над
   // заголовком страницы, а место в полосе нужно ссылке на экран проекта.
-  if (place.section === 'direction' && place.project !== null) {
+  if (place.section === 'area' && place.project !== null) {
     return [
       project,
       { label: t('app.crumbProject'), to: projectHref(place.project) },
-      { label: t('app.crumbDirection'), wide: true },
+      { label: t('app.crumbArea'), wide: true },
     ];
   }
 

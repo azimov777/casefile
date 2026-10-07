@@ -6,7 +6,7 @@ import {
   bootstrap,
   collection,
   data,
-  directionDetail,
+  areaDetail,
   failure,
   projectDetail,
 } from '@testing/msw/responses';
@@ -16,7 +16,7 @@ import { say } from '@testing/say';
 import { setToken } from '@/shared/api';
 
 /*
- * Строка счётчиков в шапке экрана проекта и страницы направления (TRK-619, TRK#46):
+ * Строка счётчиков в шапке экрана проекта и страницы области (TRK-619, TRK#46):
  * четыре числа из `meta.total` у `GET /api/v1/tasks`, каждое — ссылкой в список с тем же
  * отбором. Мок отвечает по отбору запроса, как бэкенд: в какую графу попадает запрос,
  * видно по `status` и условию в `query`.
@@ -55,12 +55,12 @@ beforeEach(() => {
   server.use(
     http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
     http.get(`${API}/api/v1/projects/DEMO`, () => data(projectDetail('DEMO'))),
-    http.get(`${API}/api/v1/projects/DEMO/directions`, () => collection([])),
+    http.get(`${API}/api/v1/projects/DEMO/areas`, () => collection([])),
     http.get(`${API}/api/v1/projects/DEMO/entries`, () => collection([])),
-    http.get(`${API}/api/v1/projects/DEMO/directions/promotion`, () =>
-      data(directionDetail('DEMO/promotion')),
+    http.get(`${API}/api/v1/projects/DEMO/areas/promotion`, () =>
+      data(areaDetail('DEMO/promotion')),
     ),
-    http.get(`${API}/api/v1/projects/DEMO/directions/promotion/entries`, () => collection([])),
+    http.get(`${API}/api/v1/projects/DEMO/areas/promotion/entries`, () => collection([])),
   );
 });
 
@@ -146,27 +146,27 @@ describe('счётчики задач в шапке проекта', () => {
   });
 });
 
-describe('счётчики задач в шапке страницы направления', () => {
-  it('отбор по проекту и направлению: тот же адрес у числа и у ссылки', async () => {
+describe('счётчики задач в шапке страницы области', () => {
+  it('отбор по проекту и области: тот же адрес у числа и у ссылки', async () => {
     serve({ inProgress: 1, open: 2, waiting: 3, warnings: 4 });
-    renderApp('/projects/DEMO/directions/promotion');
+    renderApp('/projects/DEMO/areas/promotion');
 
     await waitFor(() => expect(counter('warnings')).toHaveTextContent(/4$/));
     expect(counter('inProgress')).toHaveTextContent(/1$/);
     expect(params(counter('inProgress'))).toEqual({
       project: 'DEMO',
-      direction: 'DEMO/promotion',
+      area: 'DEMO/promotion',
       status: 'in_progress',
     });
     expect(params(counter('waiting'))).toEqual({
       project: 'DEMO',
-      direction: 'DEMO/promotion',
+      area: 'DEMO/promotion',
       waiting: 'true',
     });
 
     await waitFor(() => expect(requests).toHaveLength(4));
     for (const url of requests) {
-      expect(url.searchParams.getAll('direction')).toEqual(['DEMO/promotion']);
+      expect(url.searchParams.getAll('area')).toEqual(['DEMO/promotion']);
       expect(url.searchParams.get('limit')).toBe('1');
     }
   });

@@ -88,8 +88,8 @@ export const project = {
     addTitle: 'New attribute',
     addIntro:
       'A reference fact about the project: a name and a value. It is set without a reason; changing or removing it takes one.',
-    addIntroDirection:
-      'A reference fact about the direction: a name and a value. It is set without a reason; changing or removing it takes one.',
+    addIntroArea:
+      'A reference fact about the area: a name and a value. It is set without a reason; changing or removing it takes one.',
     nameLabel: 'Name',
     nameHint: 'Latin letters, digits, “_” and “-”, up to 64: workspace, read-first.',
     nameEmpty: 'The attribute needs a name.',
@@ -111,8 +111,8 @@ export const project = {
     removeTitle: 'Remove attribute {{name}}?',
     removeIntro:
       'The attribute leaves the project card; its last value and the reason stay in the project case.',
-    removeIntroDirection:
-      'The attribute leaves the direction card; its last value and the reason stay in the direction case.',
+    removeIntroArea:
+      'The attribute leaves the area card; its last value and the reason stay in the area case.',
     removeReasonHint: 'Why the attribute is no longer true. It is read in the attribute history.',
     removeReasonEmpty:
       'An attribute is not removed without a reason: the history has to explain why the fact stopped being true.',
@@ -177,14 +177,14 @@ export const project = {
     overview: 'Overview',
     decisions: 'Decisions',
     attributes: 'Attributes',
-    directions: 'Directions',
+    areas: 'Areas',
     case: 'Case',
   },
 
-  /** The Overview tab (TRK-618): directions, latest decisions and latest in the case. */
+  /** The Overview tab (TRK-618): areas, latest decisions and latest in the case. */
   overview: {
-    directions: 'Directions',
-    directionsNone: 'No directions.',
+    areas: 'Areas',
+    areasNone: 'No areas.',
     decisions: 'Latest decisions',
     allDecisions_one: 'All {{count, number}} decision',
     allDecisions_other: 'All {{count, number}} decisions',

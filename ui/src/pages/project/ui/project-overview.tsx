@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, type To } from 'react-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
-import { DirectionLink } from '@/entities/direction';
+import { AreaLink } from '@/entities/area';
 import {
   EntryHeadline,
   EntryKind,
@@ -33,8 +33,8 @@ const LATEST_ENTRIES = 5;
 
 interface ProjectOverviewProps {
   projectKey: string;
-  /** Активные направления из карточки проекта: адрес и название. */
-  directions: ProjectDetail['directions'];
+  /** Активные области из карточки проекта: адрес и название. */
+  areas: ProjectDetail['areas'];
   /** Все решения проекта из карточки, со статусом от бэкенда. */
   decisions: ProjectDecision[];
   /** Адрес «Дела» с раскрытой записью — туда ведут решения и строки дела. */
@@ -43,25 +43,25 @@ interface ProjectOverviewProps {
 }
 
 /**
- * Вкладка «Обзор» экрана проекта (TRK-618, решение TRK#46): направления, свежее по
+ * Вкладка «Обзор» экрана проекта (TRK-618, решение TRK#46): области, свежее по
  * решениям и по делу — то, что человек читает на каждом заходе, примерно на один экран.
  * Подробности — на своих вкладках, сюда они приходят ссылками «Все N решений» и
  * «Всё дело». Рост числа решений и записей «Обзор» не удлиняет.
  */
 export function ProjectOverview({
   projectKey,
-  directions,
+  areas,
   decisions,
   entryHref,
   tabHref,
 }: ProjectOverviewProps) {
   return (
     <div className="flex flex-col gap-4">
-      {/* Две колонки на точке `card`: направления — короткие строки, решения — с
+      {/* Две колонки на точке `card`: области — короткие строки, решения — с
           названием во всю оставшуюся ширину. На узком экране — одна колонка. */}
       <div className="flex flex-col gap-4 card:flex-row card:items-start">
         <div className="flex flex-col card:min-w-0 card:flex-[2_1_0]">
-          <OverviewDirections directions={directions} />
+          <OverviewAreas areas={areas} />
         </div>
         <div className="flex flex-col card:min-w-0 card:flex-[3_1_0]">
           <LatestDecisions decisions={decisions} entryHref={entryHref} tabHref={tabHref} />
@@ -106,25 +106,21 @@ function MoreLink({ to, children }: { to: To; children: ReactNode }) {
   );
 }
 
-/** Направления проекта списком: название ссылкой на страницу направления и адрес. */
-function OverviewDirections({ directions }: { directions: ProjectDetail['directions'] }) {
+/** Области проекта списком: название ссылкой на страницу области и адрес. */
+function OverviewAreas({ areas }: { areas: ProjectDetail['areas'] }) {
   const { t } = useTranslation('project');
 
   return (
-    <OverviewBlock id="overview-directions" title={t('overview.directions')}>
-      {directions.length === 0 ? (
-        <p className="px-3 py-2 text-muted italic">{t('overview.directionsNone')}</p>
+    <OverviewBlock id="overview-areas" title={t('overview.areas')}>
+      {areas.length === 0 ? (
+        <p className="px-3 py-2 text-muted italic">{t('overview.areasNone')}</p>
       ) : (
         <ul className="flex list-none flex-col p-0">
-          {directions.map((direction) => (
-            <li key={direction.address} className={ROW} data-overview-direction={direction.address}>
-              <DirectionLink
-                address={direction.address}
-                title={direction.title}
-                className="font-semibold"
-              />
+          {areas.map((area) => (
+            <li key={area.address} className={ROW} data-overview-area={area.address}>
+              <AreaLink address={area.address} title={area.title} className="font-semibold" />
               <span className="font-mono text-meta whitespace-nowrap text-muted">
-                {direction.address}
+                {area.address}
               </span>
             </li>
           ))}

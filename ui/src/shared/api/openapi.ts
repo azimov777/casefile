@@ -450,7 +450,7 @@ export interface paths {
         /**
          * Read a project
          * @description Карточка проекта вместе с описанием, нынешними значениями атрибутов, решениями и
-         *     неархивными направлениями (адрес и название; `CONCEPT.md`, 3.7).
+         *     неархивными областями (адрес и название; `CONCEPT.md`, 3.7).
          *
          *     Описание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и
          *     таскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи
@@ -649,7 +649,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_key}/directions": {
+    "/api/v1/projects/{project_key}/areas": {
         parameters: {
             query?: never;
             header?: never;
@@ -657,29 +657,29 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the directions of a project
-         * @description Направления проекта. Архивные — только с `include_archived=true`; по адресу
-         *     архивное направление читается и без него.
+         * List the areas of a project
+         * @description Области проекта. Архивные — только с `include_archived=true`; по адресу
+         *     архивная область читается и без него.
          */
-        get: operations["list_directions"];
+        get: operations["list_areas"];
         put?: never;
         /**
-         * Create a direction
-         * @description Заводит направление в проекте; первая запись его дела — `created`.
+         * Create an area
+         * @description Заводит область в проекте; первая запись её дела — `created`.
          *
          *     Ключ хранится в нижнем регистре и неизменяем; занятый в проекте (без учёта регистра)
-         *     — `409 direction_key_taken`, не по шаблону — `422 invalid_direction_key`. В архивный
-         *     проект направление не заводится — `409 project_archived`. Повтор с тем же
-         *     `Idempotency-Key` отвечает первым направлением, а не `409`.
+         *     — `409 area_key_taken`, не по шаблону — `422 invalid_area_key`. В архивный
+         *     проект область не заводится — `409 project_archived`. Повтор с тем же
+         *     `Idempotency-Key` отвечает первой областью, а не `409`.
          */
-        post: operations["create_direction"];
+        post: operations["create_area"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_key}/directions/{direction_key}": {
+    "/api/v1/projects/{project_key}/areas/{area_key}": {
         parameters: {
             query?: never;
             header?: never;
@@ -687,27 +687,27 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read a direction
-         * @description Карточка направления с нынешними значениями атрибутов. История атрибутов и всё
-         *     остальное дело — `/projects/{key}/directions/{direction}/entries`.
+         * Read an area
+         * @description Карточка области с нынешними значениями атрибутов. История атрибутов и всё
+         *     остальное дело — `/projects/{key}/areas/{area}/entries`.
          */
-        get: operations["read_direction"];
+        get: operations["read_area"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /**
-         * Update a direction
+         * Update an area
          * @description Меняет название и описание; проект и ключ неизменяемы, поле `key` в теле — `422`.
          *
-         *     Каждое изменённое поле подшивает `field_changed` в дело направления. Архивное
-         *     направление — `409 direction_archived`, архивный проект — `409 project_archived`.
+         *     Каждое изменённое поле подшивает `field_changed` в дело области. Архивная
+         *     область — `409 area_archived`, архивный проект — `409 project_archived`.
          */
-        patch: operations["update_direction"];
+        patch: operations["update_area"];
         trace?: never;
     };
-    "/api/v1/projects/{project_key}/directions/{direction_key}/archive": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/archive": {
         parameters: {
             query?: never;
             header?: never;
@@ -717,20 +717,20 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Archive a direction
-         * @description Архивирует направление с причиной: карточка, атрибуты и дело замораживаются
-         *     (`409 direction_archived` на любое изменение, кроме восстановления). Причина — в записи
-         *     `archived`; пустая — `422 direction_reason_required`. Уже в архиве —
-         *     `409 direction_archived`, проект в архиве — `409 project_archived`.
+         * Archive an area
+         * @description Архивирует область с причиной: карточка, атрибуты и дело замораживаются
+         *     (`409 area_archived` на любое изменение, кроме восстановления). Причина — в записи
+         *     `archived`; пустая — `422 area_reason_required`. Уже в архиве —
+         *     `409 area_archived`, проект в архиве — `409 project_archived`.
          */
-        post: operations["archive_direction"];
+        post: operations["archive_area"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_key}/directions/{direction_key}/restore": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/restore": {
         parameters: {
             query?: never;
             header?: never;
@@ -740,19 +740,19 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Restore an archived direction
-         * @description Восстанавливает направление из архива с причиной (запись `restored`). Не в архиве —
-         *     `409 direction_not_archived`; проект в архиве — `409 project_archived`: сначала
+         * Restore an archived area
+         * @description Восстанавливает область из архива с причиной (запись `restored`). Не в архиве —
+         *     `409 area_not_archived`; проект в архиве — `409 project_archived`: сначала
          *     восстанавливают проект.
          */
-        post: operations["restore_direction"];
+        post: operations["restore_area"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_key}/directions/{direction_key}/attributes/{attribute_name}": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/attributes/{attribute_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -761,14 +761,14 @@ export interface paths {
         };
         get?: never;
         /**
-         * Set a direction attribute
-         * @description Заводит атрибут направления или меняет его значение — правила атрибута проекта.
+         * Set an area attribute
+         * @description Заводит атрибут области или меняет его значение — правила атрибута проекта.
          *
          *     Атрибута нет — `attribute_created`, причина необязательна; есть с другим значением —
          *     `attribute_changed`, без причины `422 attribute_reason_required`; то же значение —
-         *     ничего не подшивается. Записи ложатся в дело направления.
+         *     ничего не подшивается. Записи ложатся в дело области.
          */
-        put: operations["set_direction_attribute"];
+        put: operations["set_area_attribute"];
         post?: never;
         delete?: never;
         options?: never;
@@ -776,7 +776,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_key}/directions/{direction_key}/attributes/{attribute_name}/remove": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/attributes/{attribute_name}/remove": {
         parameters: {
             query?: never;
             header?: never;
@@ -786,21 +786,21 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Remove a direction attribute
-         * @description Снимает атрибут направления с причиной и отдаёт подшитую `attribute_removed`.
+         * Remove an area attribute
+         * @description Снимает атрибут области с причиной и отдаёт подшитую `attribute_removed`.
          *
          *     Атрибута нет — `404 attribute_not_found`, пустая причина —
          *     `422 attribute_reason_required`. Повтор с тем же `Idempotency-Key` отвечает первой
          *     записью, а не `404`.
          */
-        post: operations["remove_direction_attribute"];
+        post: operations["remove_area_attribute"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_key}/directions/{direction_key}/entries": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/entries": {
         parameters: {
             query?: never;
             header?: never;
@@ -808,30 +808,30 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read direction case entries
-         * @description Записи дела направления с телами и нагрузкой, в порядке `no` — те же фильтры, что у
+         * Read area case entries
+         * @description Записи дела области с телами и нагрузкой, в порядке `no` — те же фильтры, что у
          *     дела проекта, включая историю одного атрибута (`attribute`) и подстроку заголовка или
          *     тела (`text`).
          */
-        get: operations["list_direction_entries"];
+        get: operations["list_area_entries"];
         put?: never;
         /**
-         * Append a direction case entry
-         * @description Подшивает запись в дело направления: заметку, решение, находку или артефакт.
+         * Append an area case entry
+         * @description Подшивает запись в дело области: заметку, решение, находку или артефакт.
          *
-         *     Номер `no` считается внутри направления, ссылка на запись — `TRK/promotion#3`.
-         *     `supersedes` здесь нет: механика решений проекта на дело направления не
+         *     Номер `no` считается внутри области, ссылка на запись — `TRK/promotion#3`.
+         *     `supersedes` здесь нет: механика решений проекта на дело области не
          *     распространяется. Замечания к форме и ссылкам — разом в `422 entry_fields_invalid`.
-         *     Архивное направление — `409 direction_archived`.
+         *     Архивная область — `409 area_archived`.
          */
-        post: operations["create_direction_entry"];
+        post: operations["create_area_entry"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_key}/directions/{direction_key}/entries/{entry_no}": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/entries/{entry_no}": {
         parameters: {
             query?: never;
             header?: never;
@@ -839,12 +839,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read one direction case entry
-         * @description Одна запись дела направления по номеру — адрес из ссылки `TRK/promotion#3`.
+         * Read one area case entry
+         * @description Одна запись дела области по номеру — адрес из ссылки `TRK/promotion#3`.
          *
          *     Номера, которого в деле нет, — `404 entry_not_found`.
          */
-        get: operations["read_direction_entry"];
+        get: operations["read_area_entry"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1002,15 +1002,15 @@ export interface paths {
          * @description Меняет только переданные поля.
          *
          *     Название, описание и пять разделов — только в `backlog` (иначе `409
-         *     task_field_locked`); исполнитель, приоритет, направление, момент `not_before` и решения
+         *     task_field_locked`); исполнитель, приоритет, область, момент `not_before` и решения
          *     проекта — в любом незакрытом статусе; в `done` и `cancelled` не меняется ничего (`409
          *     task_closed`). Каждое изменение подшивает запись: раздел — `section_changed`,
-         *     исполнитель — `assignee_changed`, приоритет, направление, момент и решения —
+         *     исполнитель — `assignee_changed`, приоритет, область, момент и решения —
          *     `field_changed` с автором запроса. Момент `not_before` — строка ISO 8601 со смещением
          *     пояса или `null`; время без смещения и дата без времени — `422 task_fields_invalid`.
-         *     Направление — адрес направления своего проекта или `null`: другой проект — `422
-         *     direction_project_mismatch`, нет такого — `404 direction_not_found`, архивное — `409
-         *     direction_archived` (снять направление можно всегда). Новая ссылка на заменённое
+         *     Область — адрес области своего проекта или `null`: другой проект — `422
+         *     area_project_mismatch`, нет такой — `404 area_not_found`, архивная — `409
+         *     area_archived` (снять область можно всегда). Новая ссылка на заменённое
          *     решение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не
          *     оставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле
          *     задачи, а условие: устаревшая версия отвечает `409 version_conflict`.
@@ -1083,9 +1083,9 @@ export interface paths {
          *     этот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на
          *     задачу везде, где принимается ключ. Статус не важен: закрытая задача переносится
          *     тоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими
-         *     проектами, обоими ключами и причиной. Направление снимается тем же действием: оно
-         *     принадлежит проекту, а в новом такого нет; если оно стояло, в дело ложится
-         *     `field_changed` (`field: direction`, «стало» — `null`).
+         *     проектами, обоими ключами и причиной. Область снимается тем же действием: она
+         *     принадлежит проекту, а в новом такой нет; если она стояла, в дело ложится
+         *     `field_changed` (`field: area`, «стало» — `null`).
          *
          *     Отказы: набор `task` — `403 permission_denied`; пустая причина — `422
          *     task_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий
@@ -1468,7 +1468,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -1502,7 +1502,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -1518,11 +1518,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1538,7 +1538,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1759,7 +1759,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -1789,7 +1789,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -1805,11 +1805,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -1825,7 +1825,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -1984,7 +1984,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -2000,11 +2000,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2020,7 +2020,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2143,6 +2143,234 @@ export interface components {
             rows: (string | null)[][];
         };
         /**
+         * AreaArchiving
+         * @description Архивирование или восстановление области: причина обязательна в обе стороны.
+         */
+        AreaArchiving: {
+            /**
+             * Reason
+             * @description Why the area is archived or restored; a blank one answers `422 area_reason_required`. Filed in the `archived` or `restored` entry of the area's case
+             * @example Область закрыта: работа перешла в коммерцию
+             */
+            reason: string;
+        };
+        /**
+         * AreaCreate
+         * @description Создание области в проекте из пути.
+         *
+         *     Ключ принимается в любом регистре и хранится в нижнем; уникален внутри проекта без
+         *     учёта регистра и дальше неизменяем.
+         */
+        AreaCreate: {
+            /**
+             * Key
+             * @description Area key: lower-case Latin letters, digits and hyphens, starting and ending with a letter or a digit (`invalid_area_key` otherwise; the pattern is `^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$` after lower-casing). Stored lower-case, never changes; a key taken in the project, in any case, answers `409 area_key_taken`
+             * @example promotion
+             */
+            key: string;
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title: string;
+            /**
+             * Description
+             * @description Short "what this is", up to 320 characters after trimming; a longer one answers `area_description_too_long`
+             * @default
+             * @example Каталоги, публикации и день запуска
+             */
+            description: string;
+        };
+        /**
+         * AreaDetailRead
+         * @description Одна область с нынешними значениями атрибутов.
+         *
+         *     Отдельная модель по той же причине, что у проекта (`ProjectDetailRead`): список
+         *     областей атрибутов не показывает.
+         */
+        AreaDetailRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Key
+             * @description Key of the project the area lives in; never changes
+             * @example TRK
+             */
+            project_key: string;
+            /**
+             * Key
+             * @description Area key inside its project, lower-case; never changes
+             * @example promotion
+             */
+            key: string;
+            /**
+             * Address
+             * @description Address of the area: the project key and the area key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`
+             * @example TRK/promotion
+             */
+            address: string;
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title: string;
+            /**
+             * Description
+             * @description Short "what this is", up to 320 characters; may be empty
+             * @example Каталоги, публикации и день запуска
+             */
+            description: string;
+            /**
+             * Archived At
+             * @description When the area was archived; `null` while it is active. An archived area is frozen: every change of its card, attributes and case answers `409 area_archived`, except `restore`. Reading works as usual
+             * @example null
+             */
+            archived_at: string | null;
+            created_by: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Attributes
+             * @description Current attribute values, ordered by name ignoring case. Every change is an entry of the area's case: `attribute_created`, `attribute_changed`, `attribute_removed`
+             */
+            attributes: components["schemas"]["AttributeRead"][];
+        };
+        /**
+         * AreaEntryCreate
+         * @description Запись агента или человека в деле области: заметка, решение, находка, артефакт.
+         *
+         *     Те же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: механики
+         *     решений проекта у дела области нет, и лишнее поле схема отвергает до сценария.
+         */
+        AreaEntryCreate: {
+            /**
+             * Body
+             * @description Markdown body of the entry
+             * @default
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @example []
+             */
+            refs?: string[];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Номер задачи выдаётся до валидации
+             */
+            title: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "note" | "decision" | "finding" | "artifact";
+        };
+        /**
+         * AreaRead
+         * @description Область в ответе: карточка.
+         */
+        AreaRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Key
+             * @description Key of the project the area lives in; never changes
+             * @example TRK
+             */
+            project_key: string;
+            /**
+             * Key
+             * @description Area key inside its project, lower-case; never changes
+             * @example promotion
+             */
+            key: string;
+            /**
+             * Address
+             * @description Address of the area: the project key and the area key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`
+             * @example TRK/promotion
+             */
+            address: string;
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title: string;
+            /**
+             * Description
+             * @description Short "what this is", up to 320 characters; may be empty
+             * @example Каталоги, публикации и день запуска
+             */
+            description: string;
+            /**
+             * Archived At
+             * @description When the area was archived; `null` while it is active. An archived area is frozen: every change of its card, attributes and case answers `409 area_archived`, except `restore`. Reading works as usual
+             * @example null
+             */
+            archived_at: string | null;
+            created_by: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AreaRefRead
+         * @description Область строкой в чтении проекта: адрес и название (`CONCEPT.md`, 3.7).
+         */
+        AreaRefRead: {
+            /**
+             * Address
+             * @description Address of the area: the project key and the area key. Its card, attributes and case are read at `/projects/TRK/areas/promotion`
+             * @example TRK/promotion
+             */
+            address: string;
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title: string;
+        };
+        /**
+         * AreaUpdate
+         * @description Частичное обновление: применяется только переданное. Ключа и проекта здесь нет —
+         *     они неизменяемы, и схема отвергает лишнее поле, а не игнорирует его молча.
+         */
+        AreaUpdate: {
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title?: string;
+            /**
+             * Description
+             * @description Short "what this is", up to 320 characters after trimming; a longer one answers `area_description_too_long`
+             * @example Каталоги, публикации и день запуска
+             */
+            description?: string;
+        };
+        /**
          * AssigneeChangedEntryRead
          * @description Служебная запись о смене исполнителя.
          */
@@ -2160,7 +2388,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -2176,11 +2404,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2196,7 +2424,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2288,28 +2516,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Always `null`: entries of this type belong to a project or a direction, never to a task
+             * @description Always `null`: entries of this type belong to a project or an area, never to a task
              * @example null
              */
             task_key: null;
             /**
              * Project Key
-             * @description Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry
+             * @description Key of the owning project; the entry address is `TRK#7`. `null` for an area entry
              * @example TRK
              */
             project_key: string | null;
             /**
-             * Direction
-             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * Area
+             * @description Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry
              * @example null
              */
-            direction?: string | null;
+            area?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2325,7 +2553,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2408,28 +2636,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Always `null`: entries of this type belong to a project or a direction, never to a task
+             * @description Always `null`: entries of this type belong to a project or an area, never to a task
              * @example null
              */
             task_key: null;
             /**
              * Project Key
-             * @description Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry
+             * @description Key of the owning project; the entry address is `TRK#7`. `null` for an area entry
              * @example TRK
              */
             project_key: string | null;
             /**
-             * Direction
-             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * Area
+             * @description Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry
              * @example null
              */
-            direction?: string | null;
+            area?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2445,7 +2673,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2581,28 +2809,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Always `null`: entries of this type belong to a project or a direction, never to a task
+             * @description Always `null`: entries of this type belong to a project or an area, never to a task
              * @example null
              */
             task_key: null;
             /**
              * Project Key
-             * @description Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry
+             * @description Key of the owning project; the entry address is `TRK#7`. `null` for an area entry
              * @example TRK
              */
             project_key: string | null;
             /**
-             * Direction
-             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * Area
+             * @description Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry
              * @example null
              */
-            direction?: string | null;
+            area?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -2618,7 +2846,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -2861,10 +3089,10 @@ export interface components {
             data: components["schemas"]["AnsweredQuestionRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
-        /** CollectionResponse[DirectionRead] */
-        CollectionResponse_DirectionRead_: {
+        /** CollectionResponse[AreaRead] */
+        CollectionResponse_AreaRead_: {
             /** Data */
-            data: components["schemas"]["DirectionRead"][];
+            data: components["schemas"]["AreaRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
         /** CollectionResponse[EntryRead] */
@@ -2938,6 +3166,14 @@ export interface components {
         DataResponse_ArchiveImportRead_: {
             data: components["schemas"]["ArchiveImportRead"];
         };
+        /** DataResponse[AreaDetailRead] */
+        DataResponse_AreaDetailRead_: {
+            data: components["schemas"]["AreaDetailRead"];
+        };
+        /** DataResponse[AreaRead] */
+        DataResponse_AreaRead_: {
+            data: components["schemas"]["AreaRead"];
+        };
         /** DataResponse[AttributeRead] */
         DataResponse_AttributeRead_: {
             data: components["schemas"]["AttributeRead"];
@@ -2945,14 +3181,6 @@ export interface components {
         /** DataResponse[BootstrapRead] */
         DataResponse_BootstrapRead_: {
             data: components["schemas"]["BootstrapRead"];
-        };
-        /** DataResponse[DirectionDetailRead] */
-        DataResponse_DirectionDetailRead_: {
-            data: components["schemas"]["DirectionDetailRead"];
-        };
-        /** DataResponse[DirectionRead] */
-        DataResponse_DirectionRead_: {
-            data: components["schemas"]["DirectionRead"];
         };
         /** DataResponse[EntryRead] */
         DataResponse_EntryRead_: {
@@ -3028,28 +3256,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Key of the owning task; `null` for an entry of a project's or a direction's case
+             * @description Key of the owning task; `null` for an entry of a project's or an area's case
              * @example TRK-42
              */
             task_key: string | null;
             /**
              * Project Key
-             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry
              * @example null
              */
             project_key: string | null;
             /**
-             * Direction
-             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * Area
+             * @description Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry
              * @example null
              */
-            direction?: string | null;
+            area?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3065,7 +3293,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3084,7 +3312,7 @@ export interface components {
              */
             action_id?: string | null;
             /**
-             * @description Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or a direction's case, in the journal and in the answer that files the entry
+             * @description Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or an area's case, in the journal and in the answer that files the entry
              * @example in_force
              */
             status?: components["schemas"]["DecisionStatus"] | null;
@@ -3166,234 +3394,6 @@ export interface components {
             after: string[];
         };
         /**
-         * DirectionArchiving
-         * @description Архивирование или восстановление направления: причина обязательна в обе стороны.
-         */
-        DirectionArchiving: {
-            /**
-             * Reason
-             * @description Why the direction is archived or restored; a blank one answers `422 direction_reason_required`. Filed in the `archived` or `restored` entry of the direction's case
-             * @example Направление закрыто: работа перешла в коммерцию
-             */
-            reason: string;
-        };
-        /**
-         * DirectionCreate
-         * @description Создание направления в проекте из пути.
-         *
-         *     Ключ принимается в любом регистре и хранится в нижнем; уникален внутри проекта без
-         *     учёта регистра и дальше неизменяем.
-         */
-        DirectionCreate: {
-            /**
-             * Key
-             * @description Direction key: lower-case Latin letters, digits and hyphens, starting and ending with a letter or a digit (`invalid_direction_key` otherwise; the pattern is `^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$` after lower-casing). Stored lower-case, never changes; a key taken in the project, in any case, answers `409 direction_key_taken`
-             * @example promotion
-             */
-            key: string;
-            /**
-             * Title
-             * @example Популяризация
-             */
-            title: string;
-            /**
-             * Description
-             * @description Short "what this is", up to 320 characters after trimming; a longer one answers `direction_description_too_long`
-             * @default
-             * @example Каталоги, публикации и день запуска
-             */
-            description: string;
-        };
-        /**
-         * DirectionDetailRead
-         * @description Одно направление с нынешними значениями атрибутов.
-         *
-         *     Отдельная модель по той же причине, что у проекта (`ProjectDetailRead`): список
-         *     направлений атрибутов не показывает.
-         */
-        DirectionDetailRead: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Project Key
-             * @description Key of the project the direction lives in; never changes
-             * @example TRK
-             */
-            project_key: string;
-            /**
-             * Key
-             * @description Direction key inside its project, lower-case; never changes
-             * @example promotion
-             */
-            key: string;
-            /**
-             * Address
-             * @description Address of the direction: the project key and the direction key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`
-             * @example TRK/promotion
-             */
-            address: string;
-            /**
-             * Title
-             * @example Популяризация
-             */
-            title: string;
-            /**
-             * Description
-             * @description Short "what this is", up to 320 characters; may be empty
-             * @example Каталоги, публикации и день запуска
-             */
-            description: string;
-            /**
-             * Archived At
-             * @description When the direction was archived; `null` while it is active. An archived direction is frozen: every change of its card, attributes and case answers `409 direction_archived`, except `restore`. Reading works as usual
-             * @example null
-             */
-            archived_at: string | null;
-            created_by: components["schemas"]["AuthorRead"];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Attributes
-             * @description Current attribute values, ordered by name ignoring case. Every change is an entry of the direction's case: `attribute_created`, `attribute_changed`, `attribute_removed`
-             */
-            attributes: components["schemas"]["AttributeRead"][];
-        };
-        /**
-         * DirectionEntryCreate
-         * @description Запись агента или человека в деле направления: заметка, решение, находка, артефакт.
-         *
-         *     Те же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: механики
-         *     решений проекта у дела направления нет, и лишнее поле схема отвергает до сценария.
-         */
-        DirectionEntryCreate: {
-            /**
-             * Body
-             * @description Markdown body of the entry
-             * @default
-             */
-            body: string;
-            /**
-             * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
-             * @example []
-             */
-            refs?: string[];
-            /**
-             * Title
-             * @description One line; this is what the case index shows
-             * @example Номер задачи выдаётся до валидации
-             */
-            title: string;
-            /**
-             * Type
-             * @enum {string}
-             */
-            type: "note" | "decision" | "finding" | "artifact";
-        };
-        /**
-         * DirectionRead
-         * @description Направление в ответе: карточка.
-         */
-        DirectionRead: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Project Key
-             * @description Key of the project the direction lives in; never changes
-             * @example TRK
-             */
-            project_key: string;
-            /**
-             * Key
-             * @description Direction key inside its project, lower-case; never changes
-             * @example promotion
-             */
-            key: string;
-            /**
-             * Address
-             * @description Address of the direction: the project key and the direction key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`
-             * @example TRK/promotion
-             */
-            address: string;
-            /**
-             * Title
-             * @example Популяризация
-             */
-            title: string;
-            /**
-             * Description
-             * @description Short "what this is", up to 320 characters; may be empty
-             * @example Каталоги, публикации и день запуска
-             */
-            description: string;
-            /**
-             * Archived At
-             * @description When the direction was archived; `null` while it is active. An archived direction is frozen: every change of its card, attributes and case answers `409 direction_archived`, except `restore`. Reading works as usual
-             * @example null
-             */
-            archived_at: string | null;
-            created_by: components["schemas"]["AuthorRead"];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-        };
-        /**
-         * DirectionRefRead
-         * @description Направление строкой в чтении проекта: адрес и название (`CONCEPT.md`, 3.7).
-         */
-        DirectionRefRead: {
-            /**
-             * Address
-             * @description Address of the direction: the project key and the direction key. Its card, attributes and case are read at `/projects/TRK/directions/promotion`
-             * @example TRK/promotion
-             */
-            address: string;
-            /**
-             * Title
-             * @example Популяризация
-             */
-            title: string;
-        };
-        /**
-         * DirectionUpdate
-         * @description Частичное обновление: применяется только переданное. Ключа и проекта здесь нет —
-         *     они неизменяемы, и схема отвергает лишнее поле, а не игнорирует его молча.
-         */
-        DirectionUpdate: {
-            /**
-             * Title
-             * @example Популяризация
-             */
-            title?: string;
-            /**
-             * Description
-             * @description Short "what this is", up to 320 characters after trimming; a longer one answers `direction_description_too_long`
-             * @example Каталоги, публикации и день запуска
-             */
-            description?: string;
-        };
-        /**
          * EmptyPayload
          * @description Нагрузки нет: всё содержание записи в её заголовке, теле и ссылках.
          */
@@ -3406,7 +3406,7 @@ export interface components {
         EntryHeadingRead: {
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -3488,28 +3488,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Key of the owning task; `null` for an entry of a project's or a direction's case
+             * @description Key of the owning task; `null` for an entry of a project's or an area's case
              * @example TRK-42
              */
             task_key: string | null;
             /**
              * Project Key
-             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry
              * @example null
              */
             project_key: string | null;
             /**
-             * Direction
-             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * Area
+             * @description Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry
              * @example null
              */
-            direction?: string | null;
+            area?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3525,7 +3525,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3624,28 +3624,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Key of the owning task; `null` for an entry of a project's or a direction's case
+             * @description Key of the owning task; `null` for an entry of a project's or an area's case
              * @example TRK-42
              */
             task_key: string | null;
             /**
              * Project Key
-             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry
              * @example null
              */
             project_key: string | null;
             /**
-             * Direction
-             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * Area
+             * @description Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry
              * @example null
              */
-            direction?: string | null;
+            area?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3661,7 +3661,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3680,7 +3680,7 @@ export interface components {
              */
             action_id?: string | null;
             /**
-             * @description Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or a direction's case, in the journal and in the answer that files the entry
+             * @description Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or an area's case, in the journal and in the answer that files the entry
              * @example in_force
              */
             status?: components["schemas"]["DecisionStatus"] | null;
@@ -3825,7 +3825,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -3841,11 +3841,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -3861,7 +3861,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -3983,7 +3983,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -3999,11 +3999,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4019,7 +4019,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4395,7 +4395,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4429,28 +4429,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Key of the owning task; `null` for an entry of a project's or a direction's case
+             * @description Key of the owning task; `null` for an entry of a project's or an area's case
              * @example TRK-42
              */
             task_key: string | null;
             /**
              * Project Key
-             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry
              * @example null
              */
             project_key: string | null;
             /**
-             * Direction
-             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * Area
+             * @description Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry
              * @example null
              */
-            direction?: string | null;
+            area?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4466,7 +4466,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4521,28 +4521,28 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
             /**
              * Task Key
-             * @description Always `null`: entries of this type belong to a project or a direction, never to a task
+             * @description Always `null`: entries of this type belong to a project or an area, never to a task
              * @example null
              */
             task_key: null;
             /**
              * Project Key
-             * @description Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry
+             * @description Key of the owning project; the entry address is `TRK#7`. `null` for an area entry
              * @example TRK
              */
             project_key: string | null;
             /**
-             * Direction
-             * @description Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry
+             * Area
+             * @description Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry
              * @example null
              */
-            direction?: string | null;
+            area?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4558,7 +4558,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -4707,7 +4707,7 @@ export interface components {
         };
         /**
          * ProjectDetailRead
-         * @description Один проект с нынешними значениями атрибутов, его решениями и направлениями.
+         * @description Один проект с нынешними значениями атрибутов, его решениями и областями.
          *
          *     Отдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов и
          *     решений не показывают, и запрос их на каждый проект списка стоил бы им без пользы.
@@ -4768,10 +4768,10 @@ export interface components {
              */
             decisions: components["schemas"]["ProjectDecisionRead"][];
             /**
-             * Directions
-             * @description Active directions of the project — endless parts of its work — ordered by key. Archived ones are listed by `/projects/{key}/directions?include_archived=true`
+             * Areas
+             * @description Active areas of the project — endless parts of its work — ordered by key. Archived ones are listed by `/projects/{key}/areas?include_archived=true`
              */
-            directions: components["schemas"]["DirectionRefRead"][];
+            areas: components["schemas"]["AreaRefRead"][];
         };
         /**
          * ProjectEntryCreate
@@ -4795,7 +4795,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4924,7 +4924,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -4959,7 +4959,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -4975,11 +4975,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4995,7 +4995,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5125,7 +5125,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -5159,7 +5159,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -5175,11 +5175,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -5195,7 +5195,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5276,7 +5276,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -5305,7 +5305,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -5321,11 +5321,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -5341,7 +5341,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5444,7 +5444,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -5460,11 +5460,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -5480,7 +5480,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5708,7 +5708,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -5724,11 +5724,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -5744,7 +5744,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -5839,7 +5839,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -5868,7 +5868,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -5884,11 +5884,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -5904,7 +5904,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -6024,14 +6024,14 @@ export interface components {
          * @description Нагрузка решения и заметки: какие записи того же типа и того же дела проекта эта
          *     заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2).
          *
-         *     Список со значением по умолчанию: записи задач и направлений, решения проекта,
+         *     Список со значением по умолчанию: записи задач и областей, решения проекта,
          *     подшитые до замены (`TRK-554`), и заметки проекта до TRK-656 ключа не несут, а ответ
          *     несёт его всегда — форма записи одна.
          */
         SupersedesPayload: {
             /**
              * Supersedes
-             * @description Numbers of the earlier entries of the same type in the same project's case that this decision or finding superseded; empty in a task's or a direction's case
+             * @description Numbers of the earlier entries of the same type in the same project's case that this decision or finding superseded; empty in a task's or an area's case
              * @example [
              *       12
              *     ]
@@ -6060,6 +6060,57 @@ export interface components {
             to_key: string;
         };
         /**
+         * TaskAreaRead
+         * @description Область в карточке задачи: адрес, название, описание и архив (`CONCEPT.md`, 4.2).
+         *
+         *     Атрибуты и дело области в карточку не едут: они читаются у самой области по
+         *     адресу. Описание не длиннее 320 знаков по той же причине, что у проекта.
+         */
+        TaskAreaRead: {
+            /**
+             * Address
+             * @description Address of the area: the project key and the area key
+             * @example TRK/promotion
+             */
+            address: string;
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title: string;
+            /**
+             * Description
+             * @description Short "what this is" of the area, up to 320 characters; may be empty
+             * @example Каталоги, публикации и день запуска
+             */
+            description: string;
+            /**
+             * Archived At
+             * @description When the area was archived; `null` while it is active. A task cannot be put into an archived area, but can be taken out of it
+             * @example null
+             */
+            archived_at: string | null;
+        };
+        /**
+         * TaskAreaRowRead
+         * @description Область задачи в строке выдачи: адрес и название (`CONCEPT.md`, 4.4).
+         *
+         *     Описания и признака архива нет намеренно: строка называет, куда задача входит, а
+         *     остальное несёт карточка (`TaskAreaRead`) и сама область.
+         */
+        TaskAreaRowRead: {
+            /**
+             * Address
+             * @example TRK/promotion
+             */
+            address: string;
+            /**
+             * Title
+             * @example Популяризация
+             */
+            title: string;
+        };
+        /**
          * TaskBriefCardRead
          * @description Шапка задачи в кратком ответе: без разделов, проекта и описания.
          */
@@ -6076,10 +6127,10 @@ export interface components {
             assignee: string | null;
             priority: components["schemas"]["TaskPriority"];
             /**
-             * Direction
-             * @description Address of the direction, or `null`
+             * Area
+             * @description Address of the area, or `null`
              */
-            direction: string | null;
+            area: string | null;
             /** Version */
             version: number;
             /**
@@ -6216,11 +6267,11 @@ export interface components {
             /** @default normal */
             priority: components["schemas"]["TaskPriority"];
             /**
-             * Direction
-             * @description Address `PROJECT/key` of a direction of the task's own project, or null for none. Another project's direction answers `direction_project_mismatch`, an unknown one `direction_not_found`, an archived one `direction_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`
+             * Area
+             * @description Address `PROJECT/key` of an area of the task's own project, or null for none. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`
              * @example TRK/promotion
              */
-            direction?: string | null;
+            area?: string | null;
             /**
              * Not Before
              * Format: date-time
@@ -6236,57 +6287,6 @@ export interface components {
              *     ]
              */
             decisions?: string[];
-        };
-        /**
-         * TaskDirectionRead
-         * @description Направление в карточке задачи: адрес, название, описание и архив (`CONCEPT.md`, 4.2).
-         *
-         *     Атрибуты и дело направления в карточку не едут: они читаются у самого направления по
-         *     адресу. Описание не длиннее 320 знаков по той же причине, что у проекта.
-         */
-        TaskDirectionRead: {
-            /**
-             * Address
-             * @description Address of the direction: the project key and the direction key
-             * @example TRK/promotion
-             */
-            address: string;
-            /**
-             * Title
-             * @example Популяризация
-             */
-            title: string;
-            /**
-             * Description
-             * @description Short "what this is" of the direction, up to 320 characters; may be empty
-             * @example Каталоги, публикации и день запуска
-             */
-            description: string;
-            /**
-             * Archived At
-             * @description When the direction was archived; `null` while it is active. A task cannot be put into an archived direction, but can be taken out of it
-             * @example null
-             */
-            archived_at: string | null;
-        };
-        /**
-         * TaskDirectionRowRead
-         * @description Направление задачи в строке выдачи: адрес и название (`CONCEPT.md`, 4.4).
-         *
-         *     Описания и признака архива нет намеренно: строка называет, куда задача входит, а
-         *     остальное несёт карточка (`TaskDirectionRead`) и само направление.
-         */
-        TaskDirectionRowRead: {
-            /**
-             * Address
-             * @example TRK/promotion
-             */
-            address: string;
-            /**
-             * Title
-             * @example Популяризация
-             */
-            title: string;
         };
         /**
          * TaskFeaturesRead
@@ -6351,7 +6351,7 @@ export interface components {
          *     `payload.field` записи `section_changed`, и читающий видит то же имя, что в схеме.
          * @enum {string}
          */
-        TaskField: "title" | "description" | "goal" | "context" | "constraints" | "output" | "checks" | "status" | "assignee" | "priority" | "direction" | "not_before" | "decisions";
+        TaskField: "title" | "description" | "goal" | "context" | "constraints" | "output" | "checks" | "status" | "assignee" | "priority" | "area" | "not_before" | "decisions";
         /**
          * TaskLinkRead
          * @description Связь со стороны одной задачи.
@@ -6638,10 +6638,10 @@ export interface components {
             previous_keys: string[];
             project: components["schemas"]["TaskProjectRead"];
             /**
-             * @description The direction of the task inside its project, or `null`: at most one. Taken from no one: a child does not inherit it from its parent
+             * @description The area of the task inside its project, or `null`: at most one. Taken from no one: a child does not inherit it from its parent
              * @example null
              */
-            direction: components["schemas"]["TaskDirectionRead"] | null;
+            area: components["schemas"]["TaskAreaRead"] | null;
             /**
              * Title
              * @example Починить выдачу ключей задач
@@ -6770,8 +6770,8 @@ export interface components {
             features?: components["schemas"]["TaskFeaturesRead"] | null;
             /** @description The parent of the task, key and title; a task has at most one. `null` for a top-level task. Grandparents are not included. Included unless `fields` asks for a narrower set without `parent` */
             parent?: components["schemas"]["TaskParentRead"] | null;
-            /** @description The direction of the task, address and title; `null` for a task with none. Included when `fields` names `direction`, or when `fields` is omitted */
-            direction?: components["schemas"]["TaskDirectionRowRead"] | null;
+            /** @description The area of the task, address and title; `null` for a task with none. Included when `fields` names `area`, or when `fields` is omitted */
+            area?: components["schemas"]["TaskAreaRowRead"] | null;
         };
         /**
          * TaskStateRead
@@ -6924,11 +6924,11 @@ export interface components {
             /** @example high */
             priority?: components["schemas"]["TaskPriority"];
             /**
-             * Direction
-             * @description Address `PROJECT/key` of a direction of the task's own project, or null for none. Another project's direction answers `direction_project_mismatch`, an unknown one `direction_not_found`, an archived one `direction_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`. Pass null to take the task out of its direction
+             * Area
+             * @description Address `PROJECT/key` of an area of the task's own project, or null for none. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`. Pass null to take the task out of its area
              * @example TRK/promotion
              */
-            direction?: string | null;
+            area?: string | null;
             /**
              * Not Before
              * Format: date-time
@@ -7105,7 +7105,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example []
              */
             refs?: string[];
@@ -7134,7 +7134,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -7150,11 +7150,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -7170,7 +7170,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -7303,7 +7303,7 @@ export interface components {
             seq: number;
             /**
              * No
-             * @description Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry
+             * @description Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry
              * @example 12
              */
             no: number;
@@ -7319,11 +7319,11 @@ export interface components {
              */
             project_key: null;
             /**
-             * Direction
-             * @description Always `null`: entries of this type belong to a task, never to a direction
+             * Area
+             * @description Always `null`: entries of this type belong to a task, never to an area
              * @example null
              */
-            direction?: null;
+            area?: null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -7339,7 +7339,7 @@ export interface components {
             body: string;
             /**
              * Refs
-             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked
              * @example [
              *       "TRK-42#3",
              *       "TRK-7"
@@ -9940,10 +9940,10 @@ export interface operations {
             };
         };
     };
-    list_directions: {
+    list_areas: {
         parameters: {
             query?: {
-                /** @description Also list archived directions. Without it they are hidden from the list; a direction is still read by its address either way */
+                /** @description Also list archived areas. Without it they are hidden from the list; a area is still read by its address either way */
                 include_archived?: boolean;
                 /** @description Page size */
                 limit?: number;
@@ -9968,7 +9968,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CollectionResponse_DirectionRead_"];
+                    "application/json": components["schemas"]["CollectionResponse_AreaRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -10027,7 +10027,7 @@ export interface operations {
             };
         };
     };
-    create_direction: {
+    create_area: {
         parameters: {
             query?: never;
             header?: {
@@ -10044,7 +10044,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DirectionCreate"];
+                "application/json": components["schemas"]["AreaCreate"];
             };
         };
         responses: {
@@ -10054,7 +10054,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataResponse_DirectionRead_"];
+                    "application/json": components["schemas"]["DataResponse_AreaRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -10113,7 +10113,7 @@ export interface operations {
             };
         };
     };
-    read_direction: {
+    read_area: {
         parameters: {
             query?: never;
             header?: {
@@ -10123,8 +10123,8 @@ export interface operations {
             path: {
                 /** @description Project key; matching ignores case */
                 project_key: string;
-                /** @description Direction key inside the project; matching ignores case */
-                direction_key: string;
+                /** @description Area key inside the project; matching ignores case */
+                area_key: string;
             };
             cookie?: never;
         };
@@ -10136,7 +10136,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataResponse_DirectionDetailRead_"];
+                    "application/json": components["schemas"]["DataResponse_AreaDetailRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -10195,7 +10195,7 @@ export interface operations {
             };
         };
     };
-    update_direction: {
+    update_area: {
         parameters: {
             query?: never;
             header?: {
@@ -10205,14 +10205,14 @@ export interface operations {
             path: {
                 /** @description Project key; matching ignores case */
                 project_key: string;
-                /** @description Direction key inside the project; matching ignores case */
-                direction_key: string;
+                /** @description Area key inside the project; matching ignores case */
+                area_key: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DirectionUpdate"];
+                "application/json": components["schemas"]["AreaUpdate"];
             };
         };
         responses: {
@@ -10222,7 +10222,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataResponse_DirectionDetailRead_"];
+                    "application/json": components["schemas"]["DataResponse_AreaDetailRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -10281,7 +10281,7 @@ export interface operations {
             };
         };
     };
-    archive_direction: {
+    archive_area: {
         parameters: {
             query?: never;
             header?: {
@@ -10291,14 +10291,14 @@ export interface operations {
             path: {
                 /** @description Project key; matching ignores case */
                 project_key: string;
-                /** @description Direction key inside the project; matching ignores case */
-                direction_key: string;
+                /** @description Area key inside the project; matching ignores case */
+                area_key: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DirectionArchiving"];
+                "application/json": components["schemas"]["AreaArchiving"];
             };
         };
         responses: {
@@ -10308,7 +10308,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataResponse_DirectionDetailRead_"];
+                    "application/json": components["schemas"]["DataResponse_AreaDetailRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -10367,7 +10367,7 @@ export interface operations {
             };
         };
     };
-    restore_direction: {
+    restore_area: {
         parameters: {
             query?: never;
             header?: {
@@ -10377,14 +10377,14 @@ export interface operations {
             path: {
                 /** @description Project key; matching ignores case */
                 project_key: string;
-                /** @description Direction key inside the project; matching ignores case */
-                direction_key: string;
+                /** @description Area key inside the project; matching ignores case */
+                area_key: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DirectionArchiving"];
+                "application/json": components["schemas"]["AreaArchiving"];
             };
         };
         responses: {
@@ -10394,7 +10394,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataResponse_DirectionDetailRead_"];
+                    "application/json": components["schemas"]["DataResponse_AreaDetailRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -10453,7 +10453,7 @@ export interface operations {
             };
         };
     };
-    set_direction_attribute: {
+    set_area_attribute: {
         parameters: {
             query?: never;
             header?: {
@@ -10465,8 +10465,8 @@ export interface operations {
             path: {
                 /** @description Project key; matching ignores case */
                 project_key: string;
-                /** @description Direction key inside the project; matching ignores case */
-                direction_key: string;
+                /** @description Area key inside the project; matching ignores case */
+                area_key: string;
                 /** @description Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case */
                 attribute_name: string;
             };
@@ -10543,7 +10543,7 @@ export interface operations {
             };
         };
     };
-    remove_direction_attribute: {
+    remove_area_attribute: {
         parameters: {
             query?: never;
             header?: {
@@ -10555,8 +10555,8 @@ export interface operations {
             path: {
                 /** @description Project key; matching ignores case */
                 project_key: string;
-                /** @description Direction key inside the project; matching ignores case */
-                direction_key: string;
+                /** @description Area key inside the project; matching ignores case */
+                area_key: string;
                 /** @description Attribute name: Latin letters, digits, `_` and `-`, at most 64 characters; matching ignores case */
                 attribute_name: string;
             };
@@ -10633,7 +10633,7 @@ export interface operations {
             };
         };
     };
-    list_direction_entries: {
+    list_area_entries: {
         parameters: {
             query?: {
                 /** @description Read only these entry numbers */
@@ -10658,8 +10658,8 @@ export interface operations {
             path: {
                 /** @description Project key; matching ignores case */
                 project_key: string;
-                /** @description Direction key inside the project; matching ignores case */
-                direction_key: string;
+                /** @description Area key inside the project; matching ignores case */
+                area_key: string;
             };
             cookie?: never;
         };
@@ -10730,7 +10730,7 @@ export interface operations {
             };
         };
     };
-    create_direction_entry: {
+    create_area_entry: {
         parameters: {
             query?: never;
             header?: {
@@ -10742,14 +10742,14 @@ export interface operations {
             path: {
                 /** @description Project key; matching ignores case */
                 project_key: string;
-                /** @description Direction key inside the project; matching ignores case */
-                direction_key: string;
+                /** @description Area key inside the project; matching ignores case */
+                area_key: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DirectionEntryCreate"];
+                "application/json": components["schemas"]["AreaEntryCreate"];
             };
         };
         responses: {
@@ -10818,7 +10818,7 @@ export interface operations {
             };
         };
     };
-    read_direction_entry: {
+    read_area_entry: {
         parameters: {
             query?: never;
             header?: {
@@ -10828,9 +10828,9 @@ export interface operations {
             path: {
                 /** @description Project key; matching ignores case */
                 project_key: string;
-                /** @description Direction key inside the project; matching ignores case */
-                direction_key: string;
-                /** @description Entry number inside the direction, from 1 */
+                /** @description Area key inside the project; matching ignores case */
+                area_key: string;
+                /** @description Entry number inside the area, from 1 */
                 entry_no: number;
             };
             cookie?: never;
@@ -10905,11 +10905,11 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `deferred`, `direction`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
+                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `area`, `assignee`, `blocked`, `decision`, `deferred`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by project and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
-                /** @description Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `direction`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `direction` brings the direction of the task, address and title, or `null` */
+                /** @description Fields to return, to keep the answer small: `area`, `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `area` brings the area of the task, address and title, or `null` */
                 fields?: string[] | null;
                 /** @description Page size */
                 limit?: number;
@@ -10925,8 +10925,8 @@ export interface operations {
                 parent?: string[] | null;
                 /** @description Project decisions `PROJECT#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's case answers 422 instead of an empty page */
                 decision?: string[] | null;
-                /** @description Direction addresses `PROJECT/key`: the tasks whose own `direction` field names one of them, parents and subtrees not followed. `empty()` finds tasks with no direction. An unknown address answers 422 instead of an empty page */
-                direction?: string[] | null;
+                /** @description Area addresses `PROJECT/key`: the tasks whose own `area` field names one of them, parents and subtrees not followed. `empty()` finds tasks with no area. An unknown address answers 422 instead of an empty page */
+                area?: string[] | null;
                 /** @description Root task keys: the answer holds all their descendants at any depth — children, grandchildren and so on — without the roots themselves. `parent` is the direct children only. An unknown key answers 422 instead of an empty page */
                 under?: string[] | null;
                 /** @description Task statuses */

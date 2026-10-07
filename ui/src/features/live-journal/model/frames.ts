@@ -3,9 +3,9 @@ import type { Entry, EntryType } from '@/entities/entry';
 /**
  * Кадр живого потока: та же запись дела, что и в ленте, плюс её сквозной номер `seq`.
  *
- * Владелец записи — задача, проект или направление (`CONCEPT.md`, 3.4, 3.7), и назван
+ * Владелец записи — задача, проект или область (`CONCEPT.md`, 3.4, 3.7), и назван
  * ровно один из трёх: `taskKey` у записи дела задачи, `projectKey` у записи дела проекта
- * (TRK-156), `direction` — адрес `TRK/promotion` у записи дела направления (TRK-557).
+ * (TRK-156), `area` — адрес `TRK/promotion` у записи дела области (TRK-557).
  *
  * `seq` — курсор ленты: с него поток продолжается после обрыва
  * (`../docs/DEVELOPMENT.md`, «Лента журнала»).
@@ -15,7 +15,7 @@ export interface JournalFrame {
   type: EntryType;
   taskKey: string | null;
   projectKey: string | null;
-  direction: string | null;
+  area: string | null;
   entry: Entry;
 }
 
@@ -29,11 +29,11 @@ export function parseFrame(data: string): JournalFrame | null {
     if (typeof entry.seq !== 'number') return null;
     const taskKey = typeof entry.task_key === 'string' ? entry.task_key : null;
     const projectKey = typeof entry.project_key === 'string' ? entry.project_key : null;
-    const direction = typeof entry.direction === 'string' ? entry.direction : null;
+    const area = typeof entry.area === 'string' ? entry.area : null;
     // Владелец не назван вовсе — кадр негодный, а не «ничей»: у настоящей записи он
     // есть всегда.
-    if (taskKey === null && projectKey === null && direction === null) return null;
-    return { seq: entry.seq, type: entry.type, taskKey, projectKey, direction, entry };
+    if (taskKey === null && projectKey === null && area === null) return null;
+    return { seq: entry.seq, type: entry.type, taskKey, projectKey, area, entry };
   } catch {
     return null;
   }

@@ -1,8 +1,8 @@
 import type { QueryKey } from '@tanstack/react-query';
-import { directionKeys } from '@/entities/direction';
+import { areaKeys } from '@/entities/area';
 import { questionKeys } from '@/entities/entry';
 import { projectKeys } from '@/entities/project';
-import { splitDirectionAddress } from '@/shared/lib';
+import { splitAreaAddress } from '@/shared/lib';
 import { sessionKeys } from '@/entities/session';
 import { taskKeys } from '@/entities/task';
 import type { JournalFrame } from './frames';
@@ -24,7 +24,7 @@ import type { JournalFrame } from './frames';
  *   предлагается полосой, а не навязывается.
  * - Экран проекта устроен как открытая задача: у него нет ни доски, ни таблицы,
  *   поэтому запись дела проекта перечитывает его сразу и целиком, без склейки и
- *   без полосы (UI-177). Страница направления — так же (TRK-557).
+ *   без полосы (UI-177). Страница области — так же (TRK-557).
  */
 export interface Invalidation {
   /** Перечитывается сразу: обновление ничего не сдвигает. */
@@ -56,14 +56,14 @@ export function keysToInvalidate(frame: JournalFrame): Invalidation {
     return { immediate: [projectKeys.detail(frame.projectKey)], coalesced: [], deferred: [] };
   }
 
-  // Запись дела направления (TRK-557) — так же, как проекта: перечитывается страница
-  // направления сразу и целиком. И проект: правка и архив направления — тоже записи его
-  // дела, а раздел «Направления» экрана проекта показывает название и признак архива.
-  if (frame.direction !== null) {
+  // Запись дела области (TRK-557) — так же, как проекта: перечитывается страница
+  // области сразу и целиком. И проект: правка и архив области — тоже записи его
+  // дела, а раздел «Области» экрана проекта показывает название и признак архива.
+  if (frame.area !== null) {
     return {
       immediate: [
-        directionKeys.detail(frame.direction),
-        projectKeys.detail(splitDirectionAddress(frame.direction).projectKey),
+        areaKeys.detail(frame.area),
+        projectKeys.detail(splitAreaAddress(frame.area).projectKey),
       ],
       coalesced: [],
       deferred: [],
@@ -109,7 +109,7 @@ export function keysAfterReconnect(): Invalidation {
     immediate: [
       ['task'],
       ['project'],
-      ['direction'],
+      ['area'],
       questionKeys.all,
       taskKeys.attention,
       sessionKeys.bootstrap,

@@ -84,8 +84,8 @@ export default tseslint.config(
            * `t`, переименованный при разборе (`const { t: brick } = useTranslation('ui')`),
            * `tStart` — так же переименованный `t` словаря `start` на экране, который
            * читает фразы для агента из чужого словаря, а не заводит свою копию
-           * (`ui/src/pages/connect/ui/connect-page.tsx`, `TRK-367`), `tDirection` — `t`
-           * словаря `direction` в разделах, общих проекту и направлению
+           * (`ui/src/pages/connect/ui/connect-page.tsx`, `TRK-367`), `tArea` — `t`
+           * словаря `area` в разделах, общих проекту и области
            * (`ui/src/features/manage-project`, TRK-557), `say.*` — помощник страничных
            * тестов (`testing/say.ts`).
            */
@@ -95,7 +95,7 @@ export default tseslint.config(
               't',
               'brick',
               'tStart',
-              'tDirection',
+              'tArea',
               'say\\.\\w+',
               'require',
               'addEventListener',

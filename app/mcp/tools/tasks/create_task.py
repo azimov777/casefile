@@ -9,7 +9,7 @@ from app.domain.tasks import DEFAULT_PRIORITY
 from app.mcp.arguments import IdempotencyKeyArg, ProjectKeyArg
 from app.mcp.enums import TaskPrioritySchema
 from app.mcp.idempotency import Once
-from app.mcp.tools.tasks.arguments import DecisionsArg, DirectionArg, NotBeforeArg
+from app.mcp.tools.tasks.arguments import AreaArg, DecisionsArg, NotBeforeArg
 from app.mcp.tools.tasks.views import MutationView, mutation
 from app.mcp.toolset import FILING, Toolset
 from app.services import case as case_service
@@ -103,7 +103,7 @@ def register(tools: Toolset) -> None:
         assignee: AssigneeArg = None,
         priority: PriorityArg = DEFAULT_PRIORITY,
         decisions: DecisionsArg = None,
-        direction: DirectionArg = None,
+        area: AreaArg = None,
         not_before: NotBeforeArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> MutationView:
@@ -144,7 +144,7 @@ def register(tools: Toolset) -> None:
                     assignee=assignee,
                     priority=priority,
                     decisions=decisions or (),
-                    direction=direction,
+                    area=area,
                     not_before=not_before,
                 )
                 parent_entry: int | None = None
@@ -183,7 +183,7 @@ def register(tools: Toolset) -> None:
                     "assignee": assignee,
                     "priority": priority,
                     "decisions": decisions,
-                    "direction": direction,
+                    "area": area,
                     "not_before": not_before,
                 },
                 build=create,

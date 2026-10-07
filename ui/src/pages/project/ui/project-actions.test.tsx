@@ -30,7 +30,7 @@ function projectDetail(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
     ...STAMPS,
     attributes: [{ name: 'repo', value: 'github.com/demo', ...STAMPS }],
     decisions: [],
-    directions: [],
+    areas: [],
     ...overrides,
   };
 }
@@ -84,7 +84,7 @@ beforeEach(() => {
     ),
     http.get(`${API}/api/v1/projects/NEW/entries`, () => collection([])),
     http.get(`${API}/api/v1/projects/DEMO/entries`, () => collection([])),
-    http.get(`${API}/api/v1/projects/:key/directions`, () => collection([])),
+    http.get(`${API}/api/v1/projects/:key/areas`, () => collection([])),
     http.put(`${API}/api/v1/projects/DEMO/attributes/:name`, async ({ request, params }) => {
       await remember(request);
       const body = (await request.json()) as { value: string };

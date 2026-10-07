@@ -2780,7 +2780,7 @@
           "projects"
         ],
         "summary": "Read a project",
-        "description": "Карточка проекта вместе с описанием, нынешними значениями атрибутов, решениями и\nнеархивными направлениями (адрес и название; `CONCEPT.md`, 3.7).\n\nОписание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и\nтаскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи\nдела проекта (`/projects/{key}/entries`). Решения проекта — все, со статусом,\nпосчитанным при чтении, и числом задач, которые на каждое ссылаются (`CONCEPT.md`,\n3.2): на этом строится раздел «Решения» экрана проекта.",
+        "description": "Карточка проекта вместе с описанием, нынешними значениями атрибутов, решениями и\nнеархивными областями (адрес и название; `CONCEPT.md`, 3.7).\n\nОписание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и\nтаскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи\nдела проекта (`/projects/{key}/entries`). Решения проекта — все, со статусом,\nпосчитанным при чтении, и числом задач, которые на каждое ссылаются (`CONCEPT.md`,\n3.2): на этом строится раздел «Решения» экрана проекта.",
         "operationId": "read_project",
         "security": [
           {
@@ -4223,14 +4223,14 @@
         }
       }
     },
-    "/api/v1/projects/{project_key}/directions": {
+    "/api/v1/projects/{project_key}/areas": {
       "get": {
         "tags": [
-          "directions"
+          "areas"
         ],
-        "summary": "List the directions of a project",
-        "description": "Направления проекта. Архивные — только с `include_archived=true`; по адресу\nархивное направление читается и без него.",
-        "operationId": "list_directions",
+        "summary": "List the areas of a project",
+        "description": "Области проекта. Архивные — только с `include_archived=true`; по адресу\nархивная область читается и без него.",
+        "operationId": "list_areas",
         "security": [
           {
             "ApiToken": []
@@ -4257,11 +4257,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "Also list archived directions. Without it they are hidden from the list; a direction is still read by its address either way",
+              "description": "Also list archived areas. Without it they are hidden from the list; a area is still read by its address either way",
               "default": false,
               "title": "Include Archived"
             },
-            "description": "Also list archived directions. Without it they are hidden from the list; a direction is still read by its address either way"
+            "description": "Also list archived areas. Without it they are hidden from the list; a area is still read by its address either way"
           },
           {
             "name": "limit",
@@ -4323,7 +4323,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CollectionResponse_DirectionRead_"
+                  "$ref": "#/components/schemas/CollectionResponse_AreaRead_"
                 }
               }
             }
@@ -4392,11 +4392,11 @@
       },
       "post": {
         "tags": [
-          "directions"
+          "areas"
         ],
-        "summary": "Create a direction",
-        "description": "Заводит направление в проекте; первая запись его дела — `created`.\n\nКлюч хранится в нижнем регистре и неизменяем; занятый в проекте (без учёта регистра)\n— `409 direction_key_taken`, не по шаблону — `422 invalid_direction_key`. В архивный\nпроект направление не заводится — `409 project_archived`. Повтор с тем же\n`Idempotency-Key` отвечает первым направлением, а не `409`.",
-        "operationId": "create_direction",
+        "summary": "Create an area",
+        "description": "Заводит область в проекте; первая запись её дела — `created`.\n\nКлюч хранится в нижнем регистре и неизменяем; занятый в проекте (без учёта регистра)\n— `409 area_key_taken`, не по шаблону — `422 invalid_area_key`. В архивный\nпроект область не заводится — `409 project_archived`. Повтор с тем же\n`Idempotency-Key` отвечает первой областью, а не `409`.",
+        "operationId": "create_area",
         "security": [
           {
             "ApiToken": []
@@ -4465,7 +4465,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DirectionCreate"
+                "$ref": "#/components/schemas/AreaCreate"
               }
             }
           }
@@ -4476,7 +4476,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataResponse_DirectionRead_"
+                  "$ref": "#/components/schemas/DataResponse_AreaRead_"
                 }
               }
             }
@@ -4544,14 +4544,14 @@
         }
       }
     },
-    "/api/v1/projects/{project_key}/directions/{direction_key}": {
+    "/api/v1/projects/{project_key}/areas/{area_key}": {
       "get": {
         "tags": [
-          "directions"
+          "areas"
         ],
-        "summary": "Read a direction",
-        "description": "Карточка направления с нынешними значениями атрибутов. История атрибутов и всё\nостальное дело — `/projects/{key}/directions/{direction}/entries`.",
-        "operationId": "read_direction",
+        "summary": "Read an area",
+        "description": "Карточка области с нынешними значениями атрибутов. История атрибутов и всё\nостальное дело — `/projects/{key}/areas/{area}/entries`.",
+        "operationId": "read_area",
         "security": [
           {
             "ApiToken": []
@@ -4573,18 +4573,18 @@
             "description": "Project key; matching ignores case"
           },
           {
-            "name": "direction_key",
+            "name": "area_key",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Direction key inside the project; matching ignores case",
+              "description": "Area key inside the project; matching ignores case",
               "examples": [
                 "promotion"
               ],
-              "title": "Direction Key"
+              "title": "Area Key"
             },
-            "description": "Direction key inside the project; matching ignores case"
+            "description": "Area key inside the project; matching ignores case"
           },
           {
             "name": "X-Actor-Label",
@@ -4614,7 +4614,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataResponse_DirectionDetailRead_"
+                  "$ref": "#/components/schemas/DataResponse_AreaDetailRead_"
                 }
               }
             }
@@ -4683,11 +4683,11 @@
       },
       "patch": {
         "tags": [
-          "directions"
+          "areas"
         ],
-        "summary": "Update a direction",
-        "description": "Меняет название и описание; проект и ключ неизменяемы, поле `key` в теле — `422`.\n\nКаждое изменённое поле подшивает `field_changed` в дело направления. Архивное\nнаправление — `409 direction_archived`, архивный проект — `409 project_archived`.",
-        "operationId": "update_direction",
+        "summary": "Update an area",
+        "description": "Меняет название и описание; проект и ключ неизменяемы, поле `key` в теле — `422`.\n\nКаждое изменённое поле подшивает `field_changed` в дело области. Архивная\nобласть — `409 area_archived`, архивный проект — `409 project_archived`.",
+        "operationId": "update_area",
         "security": [
           {
             "ApiToken": []
@@ -4709,18 +4709,18 @@
             "description": "Project key; matching ignores case"
           },
           {
-            "name": "direction_key",
+            "name": "area_key",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Direction key inside the project; matching ignores case",
+              "description": "Area key inside the project; matching ignores case",
               "examples": [
                 "promotion"
               ],
-              "title": "Direction Key"
+              "title": "Area Key"
             },
-            "description": "Direction key inside the project; matching ignores case"
+            "description": "Area key inside the project; matching ignores case"
           },
           {
             "name": "X-Actor-Label",
@@ -4749,7 +4749,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DirectionUpdate"
+                "$ref": "#/components/schemas/AreaUpdate"
               }
             }
           }
@@ -4760,7 +4760,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataResponse_DirectionDetailRead_"
+                  "$ref": "#/components/schemas/DataResponse_AreaDetailRead_"
                 }
               }
             }
@@ -4828,14 +4828,14 @@
         }
       }
     },
-    "/api/v1/projects/{project_key}/directions/{direction_key}/archive": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/archive": {
       "post": {
         "tags": [
-          "directions"
+          "areas"
         ],
-        "summary": "Archive a direction",
-        "description": "Архивирует направление с причиной: карточка, атрибуты и дело замораживаются\n(`409 direction_archived` на любое изменение, кроме восстановления). Причина — в записи\n`archived`; пустая — `422 direction_reason_required`. Уже в архиве —\n`409 direction_archived`, проект в архиве — `409 project_archived`.",
-        "operationId": "archive_direction",
+        "summary": "Archive an area",
+        "description": "Архивирует область с причиной: карточка, атрибуты и дело замораживаются\n(`409 area_archived` на любое изменение, кроме восстановления). Причина — в записи\n`archived`; пустая — `422 area_reason_required`. Уже в архиве —\n`409 area_archived`, проект в архиве — `409 project_archived`.",
+        "operationId": "archive_area",
         "security": [
           {
             "ApiToken": []
@@ -4857,18 +4857,18 @@
             "description": "Project key; matching ignores case"
           },
           {
-            "name": "direction_key",
+            "name": "area_key",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Direction key inside the project; matching ignores case",
+              "description": "Area key inside the project; matching ignores case",
               "examples": [
                 "promotion"
               ],
-              "title": "Direction Key"
+              "title": "Area Key"
             },
-            "description": "Direction key inside the project; matching ignores case"
+            "description": "Area key inside the project; matching ignores case"
           },
           {
             "name": "X-Actor-Label",
@@ -4897,7 +4897,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DirectionArchiving"
+                "$ref": "#/components/schemas/AreaArchiving"
               }
             }
           }
@@ -4908,7 +4908,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataResponse_DirectionDetailRead_"
+                  "$ref": "#/components/schemas/DataResponse_AreaDetailRead_"
                 }
               }
             }
@@ -4976,14 +4976,14 @@
         }
       }
     },
-    "/api/v1/projects/{project_key}/directions/{direction_key}/restore": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/restore": {
       "post": {
         "tags": [
-          "directions"
+          "areas"
         ],
-        "summary": "Restore an archived direction",
-        "description": "Восстанавливает направление из архива с причиной (запись `restored`). Не в архиве —\n`409 direction_not_archived`; проект в архиве — `409 project_archived`: сначала\nвосстанавливают проект.",
-        "operationId": "restore_direction",
+        "summary": "Restore an archived area",
+        "description": "Восстанавливает область из архива с причиной (запись `restored`). Не в архиве —\n`409 area_not_archived`; проект в архиве — `409 project_archived`: сначала\nвосстанавливают проект.",
+        "operationId": "restore_area",
         "security": [
           {
             "ApiToken": []
@@ -5005,18 +5005,18 @@
             "description": "Project key; matching ignores case"
           },
           {
-            "name": "direction_key",
+            "name": "area_key",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Direction key inside the project; matching ignores case",
+              "description": "Area key inside the project; matching ignores case",
               "examples": [
                 "promotion"
               ],
-              "title": "Direction Key"
+              "title": "Area Key"
             },
-            "description": "Direction key inside the project; matching ignores case"
+            "description": "Area key inside the project; matching ignores case"
           },
           {
             "name": "X-Actor-Label",
@@ -5045,7 +5045,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DirectionArchiving"
+                "$ref": "#/components/schemas/AreaArchiving"
               }
             }
           }
@@ -5056,7 +5056,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataResponse_DirectionDetailRead_"
+                  "$ref": "#/components/schemas/DataResponse_AreaDetailRead_"
                 }
               }
             }
@@ -5124,14 +5124,14 @@
         }
       }
     },
-    "/api/v1/projects/{project_key}/directions/{direction_key}/attributes/{attribute_name}": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/attributes/{attribute_name}": {
       "put": {
         "tags": [
-          "directions"
+          "areas"
         ],
-        "summary": "Set a direction attribute",
-        "description": "Заводит атрибут направления или меняет его значение — правила атрибута проекта.\n\nАтрибута нет — `attribute_created`, причина необязательна; есть с другим значением —\n`attribute_changed`, без причины `422 attribute_reason_required`; то же значение —\nничего не подшивается. Записи ложатся в дело направления.",
-        "operationId": "set_direction_attribute",
+        "summary": "Set an area attribute",
+        "description": "Заводит атрибут области или меняет его значение — правила атрибута проекта.\n\nАтрибута нет — `attribute_created`, причина необязательна; есть с другим значением —\n`attribute_changed`, без причины `422 attribute_reason_required`; то же значение —\nничего не подшивается. Записи ложатся в дело области.",
+        "operationId": "set_area_attribute",
         "security": [
           {
             "ApiToken": []
@@ -5153,18 +5153,18 @@
             "description": "Project key; matching ignores case"
           },
           {
-            "name": "direction_key",
+            "name": "area_key",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Direction key inside the project; matching ignores case",
+              "description": "Area key inside the project; matching ignores case",
               "examples": [
                 "promotion"
               ],
-              "title": "Direction Key"
+              "title": "Area Key"
             },
-            "description": "Direction key inside the project; matching ignores case"
+            "description": "Area key inside the project; matching ignores case"
           },
           {
             "name": "attribute_name",
@@ -5307,14 +5307,14 @@
         }
       }
     },
-    "/api/v1/projects/{project_key}/directions/{direction_key}/attributes/{attribute_name}/remove": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/attributes/{attribute_name}/remove": {
       "post": {
         "tags": [
-          "directions"
+          "areas"
         ],
-        "summary": "Remove a direction attribute",
-        "description": "Снимает атрибут направления с причиной и отдаёт подшитую `attribute_removed`.\n\nАтрибута нет — `404 attribute_not_found`, пустая причина —\n`422 attribute_reason_required`. Повтор с тем же `Idempotency-Key` отвечает первой\nзаписью, а не `404`.",
-        "operationId": "remove_direction_attribute",
+        "summary": "Remove an area attribute",
+        "description": "Снимает атрибут области с причиной и отдаёт подшитую `attribute_removed`.\n\nАтрибута нет — `404 attribute_not_found`, пустая причина —\n`422 attribute_reason_required`. Повтор с тем же `Idempotency-Key` отвечает первой\nзаписью, а не `404`.",
+        "operationId": "remove_area_attribute",
         "security": [
           {
             "ApiToken": []
@@ -5336,18 +5336,18 @@
             "description": "Project key; matching ignores case"
           },
           {
-            "name": "direction_key",
+            "name": "area_key",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Direction key inside the project; matching ignores case",
+              "description": "Area key inside the project; matching ignores case",
               "examples": [
                 "promotion"
               ],
-              "title": "Direction Key"
+              "title": "Area Key"
             },
-            "description": "Direction key inside the project; matching ignores case"
+            "description": "Area key inside the project; matching ignores case"
           },
           {
             "name": "attribute_name",
@@ -5490,14 +5490,14 @@
         }
       }
     },
-    "/api/v1/projects/{project_key}/directions/{direction_key}/entries": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/entries": {
       "post": {
         "tags": [
-          "directions"
+          "areas"
         ],
-        "summary": "Append a direction case entry",
-        "description": "Подшивает запись в дело направления: заметку, решение, находку или артефакт.\n\nНомер `no` считается внутри направления, ссылка на запись — `TRK/promotion#3`.\n`supersedes` здесь нет: механика решений проекта на дело направления не\nраспространяется. Замечания к форме и ссылкам — разом в `422 entry_fields_invalid`.\nАрхивное направление — `409 direction_archived`.",
-        "operationId": "create_direction_entry",
+        "summary": "Append an area case entry",
+        "description": "Подшивает запись в дело области: заметку, решение, находку или артефакт.\n\nНомер `no` считается внутри области, ссылка на запись — `TRK/promotion#3`.\n`supersedes` здесь нет: механика решений проекта на дело области не\nраспространяется. Замечания к форме и ссылкам — разом в `422 entry_fields_invalid`.\nАрхивная область — `409 area_archived`.",
+        "operationId": "create_area_entry",
         "security": [
           {
             "ApiToken": []
@@ -5519,18 +5519,18 @@
             "description": "Project key; matching ignores case"
           },
           {
-            "name": "direction_key",
+            "name": "area_key",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Direction key inside the project; matching ignores case",
+              "description": "Area key inside the project; matching ignores case",
               "examples": [
                 "promotion"
               ],
-              "title": "Direction Key"
+              "title": "Area Key"
             },
-            "description": "Direction key inside the project; matching ignores case"
+            "description": "Area key inside the project; matching ignores case"
           },
           {
             "name": "X-Actor-Label",
@@ -5580,7 +5580,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DirectionEntryCreate"
+                "$ref": "#/components/schemas/AreaEntryCreate"
               }
             }
           }
@@ -5660,11 +5660,11 @@
       },
       "get": {
         "tags": [
-          "directions"
+          "areas"
         ],
-        "summary": "Read direction case entries",
-        "description": "Записи дела направления с телами и нагрузкой, в порядке `no` — те же фильтры, что у\nдела проекта, включая историю одного атрибута (`attribute`) и подстроку заголовка или\nтела (`text`).",
-        "operationId": "list_direction_entries",
+        "summary": "Read area case entries",
+        "description": "Записи дела области с телами и нагрузкой, в порядке `no` — те же фильтры, что у\nдела проекта, включая историю одного атрибута (`attribute`) и подстроку заголовка или\nтела (`text`).",
+        "operationId": "list_area_entries",
         "security": [
           {
             "ApiToken": []
@@ -5686,18 +5686,18 @@
             "description": "Project key; matching ignores case"
           },
           {
-            "name": "direction_key",
+            "name": "area_key",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Direction key inside the project; matching ignores case",
+              "description": "Area key inside the project; matching ignores case",
               "examples": [
                 "promotion"
               ],
-              "title": "Direction Key"
+              "title": "Area Key"
             },
-            "description": "Direction key inside the project; matching ignores case"
+            "description": "Area key inside the project; matching ignores case"
           },
           {
             "name": "nos",
@@ -5945,14 +5945,14 @@
         }
       }
     },
-    "/api/v1/projects/{project_key}/directions/{direction_key}/entries/{entry_no}": {
+    "/api/v1/projects/{project_key}/areas/{area_key}/entries/{entry_no}": {
       "get": {
         "tags": [
-          "directions"
+          "areas"
         ],
-        "summary": "Read one direction case entry",
-        "description": "Одна запись дела направления по номеру — адрес из ссылки `TRK/promotion#3`.\n\nНомера, которого в деле нет, — `404 entry_not_found`.",
-        "operationId": "read_direction_entry",
+        "summary": "Read one area case entry",
+        "description": "Одна запись дела области по номеру — адрес из ссылки `TRK/promotion#3`.\n\nНомера, которого в деле нет, — `404 entry_not_found`.",
+        "operationId": "read_area_entry",
         "security": [
           {
             "ApiToken": []
@@ -5974,18 +5974,18 @@
             "description": "Project key; matching ignores case"
           },
           {
-            "name": "direction_key",
+            "name": "area_key",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Direction key inside the project; matching ignores case",
+              "description": "Area key inside the project; matching ignores case",
               "examples": [
                 "promotion"
               ],
-              "title": "Direction Key"
+              "title": "Area Key"
             },
-            "description": "Direction key inside the project; matching ignores case"
+            "description": "Area key inside the project; matching ignores case"
           },
           {
             "name": "entry_no",
@@ -5994,13 +5994,13 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "description": "Entry number inside the direction, from 1",
+              "description": "Entry number inside the area, from 1",
               "examples": [
                 3
               ],
               "title": "Entry No"
             },
-            "description": "Entry number inside the direction, from 1"
+            "description": "Entry number inside the area, from 1"
           },
           {
             "name": "X-Actor-Label",
@@ -6265,13 +6265,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `deferred`, `direction`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
+              "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `area`, `assignee`, `blocked`, `decision`, `deferred`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
               "examples": [
                 "project: TRK and status: open and blocked: false"
               ],
               "title": "Query"
             },
-            "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `assignee`, `blocked`, `decision`, `deferred`, `direction`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
+            "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `area`, `assignee`, `blocked`, `decision`, `deferred`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
           },
           {
             "name": "sort",
@@ -6316,7 +6316,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `direction`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `direction` brings the direction of the task, address and title, or `null`",
+              "description": "Fields to return, to keep the answer small: `area`, `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `area` brings the area of the task, address and title, or `null`",
               "examples": [
                 [
                   "title",
@@ -6325,7 +6325,7 @@
               ],
               "title": "Fields"
             },
-            "description": "Fields to return, to keep the answer small: `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `direction`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `direction` brings the direction of the task, address and title, or `null`"
+            "description": "Fields to return, to keep the answer small: `area`, `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `area` brings the area of the task, address and title, or `null`"
           },
           {
             "name": "limit",
@@ -6491,7 +6491,7 @@
             "description": "Project decisions `PROJECT#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's case answers 422 instead of an empty page"
           },
           {
-            "name": "direction",
+            "name": "area",
             "in": "query",
             "required": false,
             "schema": {
@@ -6507,15 +6507,15 @@
                   "type": "null"
                 }
               ],
-              "description": "Direction addresses `PROJECT/key`: the tasks whose own `direction` field names one of them, parents and subtrees not followed. `empty()` finds tasks with no direction. An unknown address answers 422 instead of an empty page",
+              "description": "Area addresses `PROJECT/key`: the tasks whose own `area` field names one of them, parents and subtrees not followed. `empty()` finds tasks with no area. An unknown address answers 422 instead of an empty page",
               "examples": [
                 [
                   "TRK/promotion"
                 ]
               ],
-              "title": "Direction"
+              "title": "Area"
             },
-            "description": "Direction addresses `PROJECT/key`: the tasks whose own `direction` field names one of them, parents and subtrees not followed. `empty()` finds tasks with no direction. An unknown address answers 422 instead of an empty page"
+            "description": "Area addresses `PROJECT/key`: the tasks whose own `area` field names one of them, parents and subtrees not followed. `empty()` finds tasks with no area. An unknown address answers 422 instead of an empty page"
           },
           {
             "name": "under",
@@ -7132,7 +7132,7 @@
           "tasks"
         ],
         "summary": "Update a task",
-        "description": "Меняет только переданные поля.\n\nНазвание, описание и пять разделов — только в `backlog` (иначе `409\ntask_field_locked`); исполнитель, приоритет, направление, момент `not_before` и решения\nпроекта — в любом незакрытом статусе; в `done` и `cancelled` не меняется ничего (`409\ntask_closed`). Каждое изменение подшивает запись: раздел — `section_changed`,\nисполнитель — `assignee_changed`, приоритет, направление, момент и решения —\n`field_changed` с автором запроса. Момент `not_before` — строка ISO 8601 со смещением\nпояса или `null`; время без смещения и дата без времени — `422 task_fields_invalid`.\nНаправление — адрес направления своего проекта или `null`: другой проект — `422\ndirection_project_mismatch`, нет такого — `404 direction_not_found`, архивное — `409\ndirection_archived` (снять направление можно всегда). Новая ссылка на заменённое\nрешение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не\nоставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле\nзадачи, а условие: устаревшая версия отвечает `409 version_conflict`.\n\nПроверку правят двумя способами: `check` меняет текст одной на месте, `checks`\nзаменяет список целиком и годится, когда меняется сам состав. Вместе они не\nпринимаются — это два разных ответа на один вопрос.",
+        "description": "Меняет только переданные поля.\n\nНазвание, описание и пять разделов — только в `backlog` (иначе `409\ntask_field_locked`); исполнитель, приоритет, область, момент `not_before` и решения\nпроекта — в любом незакрытом статусе; в `done` и `cancelled` не меняется ничего (`409\ntask_closed`). Каждое изменение подшивает запись: раздел — `section_changed`,\nисполнитель — `assignee_changed`, приоритет, область, момент и решения —\n`field_changed` с автором запроса. Момент `not_before` — строка ISO 8601 со смещением\nпояса или `null`; время без смещения и дата без времени — `422 task_fields_invalid`.\nОбласть — адрес области своего проекта или `null`: другой проект — `422\narea_project_mismatch`, нет такой — `404 area_not_found`, архивная — `409\narea_archived` (снять область можно всегда). Новая ссылка на заменённое\nрешение — `409 decision_not_in_force` с преемником. Поля без записи не бывает: изменение, не\nоставившее записи, не доходит до ленты (`CONCEPT.md`, 4.1). `version` — не поле\nзадачи, а условие: устаревшая версия отвечает `409 version_conflict`.\n\nПроверку правят двумя способами: `check` меняет текст одной на месте, `checks`\nзаменяет список целиком и годится, когда меняется сам состав. Вместе они не\nпринимаются — это два разных ответа на один вопрос.",
         "operationId": "update_task",
         "security": [
           {
@@ -7400,7 +7400,7 @@
           "tasks"
         ],
         "summary": "Move a task to another project",
-        "description": "Переносит задачу в другой проект (`CONCEPT.md`, 3.3).\n\nЗадача получает следующий номер целевого проекта, а если ключ в нём у неё уже был —\nэтот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на\nзадачу везде, где принимается ключ. Статус не важен: закрытая задача переносится\nтоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими\nпроектами, обоими ключами и причиной. Направление снимается тем же действием: оно\nпринадлежит проекту, а в новом такого нет; если оно стояло, в дело ложится\n`field_changed` (`field: direction`, «стало» — `null`).\n\nОтказы: набор `task` — `403 permission_denied`; пустая причина — `422\ntask_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий\nили целевой проект в архиве — `409 project_archived`; целевой проект тот же, где\nзадача лежит, — `409 task_already_in_project`; устаревшая `version` — `409\nversion_conflict`.",
+        "description": "Переносит задачу в другой проект (`CONCEPT.md`, 3.3).\n\nЗадача получает следующий номер целевого проекта, а если ключ в нём у неё уже был —\nэтот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на\nзадачу везде, где принимается ключ. Статус не важен: закрытая задача переносится\nтоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими\nпроектами, обоими ключами и причиной. Область снимается тем же действием: она\nпринадлежит проекту, а в новом такой нет; если она стояла, в дело ложится\n`field_changed` (`field: area`, «стало» — `null`).\n\nОтказы: набор `task` — `403 permission_denied`; пустая причина — `422\ntask_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий\nили целевой проект в архиве — `409 project_archived`; целевой проект тот же, где\nзадача лежит, — `409 task_already_in_project`; устаревшая `version` — `409\nversion_conflict`.",
         "operationId": "move_task",
         "security": [
           {
@@ -9822,7 +9822,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -9870,7 +9870,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -9890,10 +9890,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -9923,7 +9923,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -10271,7 +10271,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -10312,7 +10312,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -10332,10 +10332,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -10365,7 +10365,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -10618,7 +10618,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -10638,10 +10638,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -10671,7 +10671,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -10886,6 +10886,359 @@
         "title": "ArchiveTableRead",
         "description": "Строки одной таблицы установки: значения в порядке `columns`, каждое — текстом."
       },
+      "AreaArchiving": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Reason",
+            "description": "Why the area is archived or restored; a blank one answers `422 area_reason_required`. Filed in the `archived` or `restored` entry of the area's case",
+            "examples": [
+              "Область закрыта: работа перешла в коммерцию"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "AreaArchiving",
+        "description": "Архивирование или восстановление области: причина обязательна в обе стороны."
+      },
+      "AreaCreate": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Area key: lower-case Latin letters, digits and hyphens, starting and ending with a letter or a digit (`invalid_area_key` otherwise; the pattern is `^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$` after lower-casing). Stored lower-case, never changes; a key taken in the project, in any case, answers `409 area_key_taken`",
+            "examples": [
+              "promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\", up to 320 characters after trimming; a longer one answers `area_description_too_long`",
+            "default": "",
+            "examples": [
+              "Каталоги, публикации и день запуска"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "title"
+        ],
+        "title": "AreaCreate",
+        "description": "Создание области в проекте из пути.\n\nКлюч принимается в любом регистре и хранится в нижнем; уникален внутри проекта без\nучёта регистра и дальше неизменяем."
+      },
+      "AreaDetailRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Key of the project the area lives in; never changes",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Area key inside its project, lower-case; never changes",
+            "examples": [
+              "promotion"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the area: the project key and the area key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\", up to 320 characters; may be empty",
+            "examples": [
+              "Каталоги, публикации и день запуска"
+            ]
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At",
+            "description": "When the area was archived; `null` while it is active. An archived area is frozen: every change of its card, attributes and case answers `409 area_archived`, except `restore`. Reading works as usual",
+            "examples": [
+              null
+            ]
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/AttributeRead"
+            },
+            "type": "array",
+            "title": "Attributes",
+            "description": "Current attribute values, ordered by name ignoring case. Every change is an entry of the area's case: `attribute_created`, `attribute_changed`, `attribute_removed`"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_key",
+          "key",
+          "address",
+          "title",
+          "description",
+          "archived_at",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "attributes"
+        ],
+        "title": "AreaDetailRead",
+        "description": "Одна область с нынешними значениями атрибутов.\n\nОтдельная модель по той же причине, что у проекта (`ProjectDetailRead`): список\nобластей атрибутов не показывает."
+      },
+      "AreaEntryCreate": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Body",
+            "description": "Markdown body of the entry",
+            "default": ""
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "examples": [
+              []
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Номер задачи выдаётся до валидации"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "note",
+              "decision",
+              "finding",
+              "artifact"
+            ],
+            "title": "Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "type"
+        ],
+        "title": "AreaEntryCreate",
+        "description": "Запись агента или человека в деле области: заметка, решение, находка, артефакт.\n\nТе же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: механики\nрешений проекта у дела области нет, и лишнее поле схема отвергает до сценария."
+      },
+      "AreaRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "description": "Key of the project the area lives in; never changes",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Area key inside its project, lower-case; never changes",
+            "examples": [
+              "promotion"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the area: the project key and the area key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\", up to 320 characters; may be empty",
+            "examples": [
+              "Каталоги, публикации и день запуска"
+            ]
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At",
+            "description": "When the area was archived; `null` while it is active. An archived area is frozen: every change of its card, attributes and case answers `409 area_archived`, except `restore`. Reading works as usual",
+            "examples": [
+              null
+            ]
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_key",
+          "key",
+          "address",
+          "title",
+          "description",
+          "archived_at",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AreaRead",
+        "description": "Область в ответе: карточка."
+      },
+      "AreaRefRead": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the area: the project key and the area key. Its card, attributes and case are read at `/projects/TRK/areas/promotion`",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "title"
+        ],
+        "title": "AreaRefRead",
+        "description": "Область строкой в чтении проекта: адрес и название (`CONCEPT.md`, 3.7)."
+      },
+      "AreaUpdate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\", up to 320 characters after trimming; a longer one answers `area_description_too_long`",
+            "examples": [
+              "Каталоги, публикации и день запуска"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AreaUpdate",
+        "description": "Частичное обновление: применяется только переданное. Ключа и проекта здесь нет —\nони неизменяемы, и схема отвергает лишнее поле, а не игнорирует его молча."
+      },
       "AssigneeChangedEntryRead": {
         "properties": {
           "id": {
@@ -10904,7 +11257,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -10924,10 +11277,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -10957,7 +11310,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11121,7 +11474,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -11129,7 +11482,7 @@
           "task_key": {
             "type": "null",
             "title": "Task Key",
-            "description": "Always `null`: entries of this type belong to a project or a direction, never to a task",
+            "description": "Always `null`: entries of this type belong to a project or an area, never to a task",
             "examples": [
               null
             ]
@@ -11144,12 +11497,12 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry",
+            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for an area entry",
             "examples": [
               "TRK"
             ]
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
                 "type": "string"
@@ -11158,8 +11511,8 @@
                 "type": "null"
               }
             ],
-            "title": "Direction",
-            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "title": "Area",
+            "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
@@ -11189,7 +11542,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11318,7 +11671,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -11326,7 +11679,7 @@
           "task_key": {
             "type": "null",
             "title": "Task Key",
-            "description": "Always `null`: entries of this type belong to a project or a direction, never to a task",
+            "description": "Always `null`: entries of this type belong to a project or an area, never to a task",
             "examples": [
               null
             ]
@@ -11341,12 +11694,12 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry",
+            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for an area entry",
             "examples": [
               "TRK"
             ]
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
                 "type": "string"
@@ -11355,8 +11708,8 @@
                 "type": "null"
               }
             ],
-            "title": "Direction",
-            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "title": "Area",
+            "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
@@ -11386,7 +11739,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -11611,7 +11964,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -11619,7 +11972,7 @@
           "task_key": {
             "type": "null",
             "title": "Task Key",
-            "description": "Always `null`: entries of this type belong to a project or a direction, never to a task",
+            "description": "Always `null`: entries of this type belong to a project or an area, never to a task",
             "examples": [
               null
             ]
@@ -11634,12 +11987,12 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry",
+            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for an area entry",
             "examples": [
               "TRK"
             ]
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
                 "type": "string"
@@ -11648,8 +12001,8 @@
                 "type": "null"
               }
             ],
-            "title": "Direction",
-            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "title": "Area",
+            "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
@@ -11679,7 +12032,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -12124,11 +12477,11 @@
         ],
         "title": "CollectionResponse[AnsweredQuestionRead]"
       },
-      "CollectionResponse_DirectionRead_": {
+      "CollectionResponse_AreaRead_": {
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/DirectionRead"
+              "$ref": "#/components/schemas/AreaRead"
             },
             "type": "array",
             "title": "Data"
@@ -12141,7 +12494,7 @@
         "required": [
           "data"
         ],
-        "title": "CollectionResponse[DirectionRead]"
+        "title": "CollectionResponse[AreaRead]"
       },
       "CollectionResponse_EntryRead_": {
         "properties": {
@@ -12319,6 +12672,30 @@
         ],
         "title": "DataResponse[ArchiveImportRead]"
       },
+      "DataResponse_AreaDetailRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AreaDetailRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[AreaDetailRead]"
+      },
+      "DataResponse_AreaRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AreaRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[AreaRead]"
+      },
       "DataResponse_AttributeRead_": {
         "properties": {
           "data": {
@@ -12342,30 +12719,6 @@
           "data"
         ],
         "title": "DataResponse[BootstrapRead]"
-      },
-      "DataResponse_DirectionDetailRead_": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/DirectionDetailRead"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "title": "DataResponse[DirectionDetailRead]"
-      },
-      "DataResponse_DirectionRead_": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/DirectionRead"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "title": "DataResponse[DirectionRead]"
       },
       "DataResponse_EntryRead_": {
         "properties": {
@@ -12549,7 +12902,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -12564,7 +12917,7 @@
               }
             ],
             "title": "Task Key",
-            "description": "Key of the owning task; `null` for an entry of a project's or a direction's case",
+            "description": "Key of the owning task; `null` for an entry of a project's or an area's case",
             "examples": [
               "TRK-42"
             ]
@@ -12579,12 +12932,12 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry",
             "examples": [
               null
             ]
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
                 "type": "string"
@@ -12593,8 +12946,8 @@
                 "type": "null"
               }
             ],
-            "title": "Direction",
-            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "title": "Area",
+            "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
@@ -12624,7 +12977,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -12662,7 +13015,7 @@
                 "type": "null"
               }
             ],
-            "description": "Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or a direction's case, in the journal and in the answer that files the entry",
+            "description": "Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or an area's case, in the journal and in the answer that files the entry",
             "examples": [
               "in_force"
             ]
@@ -12798,359 +13151,6 @@
         "title": "DecisionsChangedPayload",
         "description": "Правка решений проекта задачи (`decisions`): списки ссылок «было» и «стало».\n\nСвоя форма, а не расширение `FieldChangedPayload` до «строка либо список»: там\nзначения — строки, и объединение «на всякий случай» сделало бы тип каждого поля\nобвязки неопределённым. Разметка — `field`: у этой формы оно всегда `decisions`."
       },
-      "DirectionArchiving": {
-        "properties": {
-          "reason": {
-            "type": "string",
-            "maxLength": 65536,
-            "title": "Reason",
-            "description": "Why the direction is archived or restored; a blank one answers `422 direction_reason_required`. Filed in the `archived` or `restored` entry of the direction's case",
-            "examples": [
-              "Направление закрыто: работа перешла в коммерцию"
-            ]
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "reason"
-        ],
-        "title": "DirectionArchiving",
-        "description": "Архивирование или восстановление направления: причина обязательна в обе стороны."
-      },
-      "DirectionCreate": {
-        "properties": {
-          "key": {
-            "type": "string",
-            "title": "Key",
-            "description": "Direction key: lower-case Latin letters, digits and hyphens, starting and ending with a letter or a digit (`invalid_direction_key` otherwise; the pattern is `^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$` after lower-casing). Stored lower-case, never changes; a key taken in the project, in any case, answers `409 direction_key_taken`",
-            "examples": [
-              "promotion"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Title",
-            "examples": [
-              "Популяризация"
-            ]
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "description": "Short \"what this is\", up to 320 characters after trimming; a longer one answers `direction_description_too_long`",
-            "default": "",
-            "examples": [
-              "Каталоги, публикации и день запуска"
-            ]
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "key",
-          "title"
-        ],
-        "title": "DirectionCreate",
-        "description": "Создание направления в проекте из пути.\n\nКлюч принимается в любом регистре и хранится в нижнем; уникален внутри проекта без\nучёта регистра и дальше неизменяем."
-      },
-      "DirectionDetailRead": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
-          "project_key": {
-            "type": "string",
-            "title": "Project Key",
-            "description": "Key of the project the direction lives in; never changes",
-            "examples": [
-              "TRK"
-            ]
-          },
-          "key": {
-            "type": "string",
-            "title": "Key",
-            "description": "Direction key inside its project, lower-case; never changes",
-            "examples": [
-              "promotion"
-            ]
-          },
-          "address": {
-            "type": "string",
-            "title": "Address",
-            "description": "Address of the direction: the project key and the direction key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`",
-            "examples": [
-              "TRK/promotion"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "title": "Title",
-            "examples": [
-              "Популяризация"
-            ]
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "description": "Short \"what this is\", up to 320 characters; may be empty",
-            "examples": [
-              "Каталоги, публикации и день запуска"
-            ]
-          },
-          "archived_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Archived At",
-            "description": "When the direction was archived; `null` while it is active. An archived direction is frozen: every change of its card, attributes and case answers `409 direction_archived`, except `restore`. Reading works as usual",
-            "examples": [
-              null
-            ]
-          },
-          "created_by": {
-            "$ref": "#/components/schemas/AuthorRead"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
-          },
-          "attributes": {
-            "items": {
-              "$ref": "#/components/schemas/AttributeRead"
-            },
-            "type": "array",
-            "title": "Attributes",
-            "description": "Current attribute values, ordered by name ignoring case. Every change is an entry of the direction's case: `attribute_created`, `attribute_changed`, `attribute_removed`"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "project_key",
-          "key",
-          "address",
-          "title",
-          "description",
-          "archived_at",
-          "created_by",
-          "created_at",
-          "updated_at",
-          "attributes"
-        ],
-        "title": "DirectionDetailRead",
-        "description": "Одно направление с нынешними значениями атрибутов.\n\nОтдельная модель по той же причине, что у проекта (`ProjectDetailRead`): список\nнаправлений атрибутов не показывает."
-      },
-      "DirectionEntryCreate": {
-        "properties": {
-          "body": {
-            "type": "string",
-            "maxLength": 65536,
-            "title": "Body",
-            "description": "Markdown body of the entry",
-            "default": ""
-          },
-          "refs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "maxItems": 50,
-            "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
-            "examples": [
-              []
-            ]
-          },
-          "title": {
-            "type": "string",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Title",
-            "description": "One line; this is what the case index shows",
-            "examples": [
-              "Номер задачи выдаётся до валидации"
-            ]
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "note",
-              "decision",
-              "finding",
-              "artifact"
-            ],
-            "title": "Type"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "title",
-          "type"
-        ],
-        "title": "DirectionEntryCreate",
-        "description": "Запись агента или человека в деле направления: заметка, решение, находка, артефакт.\n\nТе же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: механики\nрешений проекта у дела направления нет, и лишнее поле схема отвергает до сценария."
-      },
-      "DirectionRead": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
-          "project_key": {
-            "type": "string",
-            "title": "Project Key",
-            "description": "Key of the project the direction lives in; never changes",
-            "examples": [
-              "TRK"
-            ]
-          },
-          "key": {
-            "type": "string",
-            "title": "Key",
-            "description": "Direction key inside its project, lower-case; never changes",
-            "examples": [
-              "promotion"
-            ]
-          },
-          "address": {
-            "type": "string",
-            "title": "Address",
-            "description": "Address of the direction: the project key and the direction key, `TRK/promotion`. References to its case entries are `TRK/promotion#3`",
-            "examples": [
-              "TRK/promotion"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "title": "Title",
-            "examples": [
-              "Популяризация"
-            ]
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "description": "Short \"what this is\", up to 320 characters; may be empty",
-            "examples": [
-              "Каталоги, публикации и день запуска"
-            ]
-          },
-          "archived_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Archived At",
-            "description": "When the direction was archived; `null` while it is active. An archived direction is frozen: every change of its card, attributes and case answers `409 direction_archived`, except `restore`. Reading works as usual",
-            "examples": [
-              null
-            ]
-          },
-          "created_by": {
-            "$ref": "#/components/schemas/AuthorRead"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "project_key",
-          "key",
-          "address",
-          "title",
-          "description",
-          "archived_at",
-          "created_by",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "DirectionRead",
-        "description": "Направление в ответе: карточка."
-      },
-      "DirectionRefRead": {
-        "properties": {
-          "address": {
-            "type": "string",
-            "title": "Address",
-            "description": "Address of the direction: the project key and the direction key. Its card, attributes and case are read at `/projects/TRK/directions/promotion`",
-            "examples": [
-              "TRK/promotion"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "title": "Title",
-            "examples": [
-              "Популяризация"
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "address",
-          "title"
-        ],
-        "title": "DirectionRefRead",
-        "description": "Направление строкой в чтении проекта: адрес и название (`CONCEPT.md`, 3.7)."
-      },
-      "DirectionUpdate": {
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Title",
-            "examples": [
-              "Популяризация"
-            ]
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "description": "Short \"what this is\", up to 320 characters after trimming; a longer one answers `direction_description_too_long`",
-            "examples": [
-              "Каталоги, публикации и день запуска"
-            ]
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "DirectionUpdate",
-        "description": "Частичное обновление: применяется только переданное. Ключа и проекта здесь нет —\nони неизменяемы, и схема отвергает лишнее поле, а не игнорирует его молча."
-      },
       "EmptyPayload": {
         "properties": {},
         "additionalProperties": false,
@@ -13237,7 +13237,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -13488,7 +13488,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -13503,7 +13503,7 @@
               }
             ],
             "title": "Task Key",
-            "description": "Key of the owning task; `null` for an entry of a project's or a direction's case",
+            "description": "Key of the owning task; `null` for an entry of a project's or an area's case",
             "examples": [
               "TRK-42"
             ]
@@ -13518,12 +13518,12 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry",
             "examples": [
               null
             ]
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
                 "type": "string"
@@ -13532,8 +13532,8 @@
                 "type": "null"
               }
             ],
-            "title": "Direction",
-            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "title": "Area",
+            "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
@@ -13563,7 +13563,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -13728,7 +13728,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -13743,7 +13743,7 @@
               }
             ],
             "title": "Task Key",
-            "description": "Key of the owning task; `null` for an entry of a project's or a direction's case",
+            "description": "Key of the owning task; `null` for an entry of a project's or an area's case",
             "examples": [
               "TRK-42"
             ]
@@ -13758,12 +13758,12 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry",
             "examples": [
               null
             ]
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
                 "type": "string"
@@ -13772,8 +13772,8 @@
                 "type": "null"
               }
             ],
-            "title": "Direction",
-            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "title": "Area",
+            "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
@@ -13803,7 +13803,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -13841,7 +13841,7 @@
                 "type": "null"
               }
             ],
-            "description": "Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or a direction's case, in the journal and in the answer that files the entry",
+            "description": "Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or an area's case, in the journal and in the answer that files the entry",
             "examples": [
               "in_force"
             ]
@@ -14078,7 +14078,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -14098,10 +14098,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -14131,7 +14131,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -14339,7 +14339,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -14359,10 +14359,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -14392,7 +14392,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -14978,7 +14978,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -15032,7 +15032,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -15047,7 +15047,7 @@
               }
             ],
             "title": "Task Key",
-            "description": "Key of the owning task; `null` for an entry of a project's or a direction's case",
+            "description": "Key of the owning task; `null` for an entry of a project's or an area's case",
             "examples": [
               "TRK-42"
             ]
@@ -15062,12 +15062,12 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a area entry",
             "examples": [
               null
             ]
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
                 "type": "string"
@@ -15076,8 +15076,8 @@
                 "type": "null"
               }
             ],
-            "title": "Direction",
-            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "title": "Area",
+            "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
@@ -15107,7 +15107,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -15200,7 +15200,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -15208,7 +15208,7 @@
           "task_key": {
             "type": "null",
             "title": "Task Key",
-            "description": "Always `null`: entries of this type belong to a project or a direction, never to a task",
+            "description": "Always `null`: entries of this type belong to a project or an area, never to a task",
             "examples": [
               null
             ]
@@ -15223,12 +15223,12 @@
               }
             ],
             "title": "Project Key",
-            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for a direction entry",
+            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for an area entry",
             "examples": [
               "TRK"
             ]
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
                 "type": "string"
@@ -15237,8 +15237,8 @@
                 "type": "null"
               }
             ],
-            "title": "Direction",
-            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "title": "Area",
+            "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
@@ -15268,7 +15268,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -15594,13 +15594,13 @@
             "title": "Decisions",
             "description": "Every project decision — a `decision` entry of the project's case — in number order, in force or superseded, with its status computed on read and the number of tasks that name it"
           },
-          "directions": {
+          "areas": {
             "items": {
-              "$ref": "#/components/schemas/DirectionRefRead"
+              "$ref": "#/components/schemas/AreaRefRead"
             },
             "type": "array",
-            "title": "Directions",
-            "description": "Active directions of the project — endless parts of its work — ordered by key. Archived ones are listed by `/projects/{key}/directions?include_archived=true`"
+            "title": "Areas",
+            "description": "Active areas of the project — endless parts of its work — ordered by key. Archived ones are listed by `/projects/{key}/areas?include_archived=true`"
           }
         },
         "type": "object",
@@ -15615,10 +15615,10 @@
           "updated_at",
           "attributes",
           "decisions",
-          "directions"
+          "areas"
         ],
         "title": "ProjectDetailRead",
-        "description": "Один проект с нынешними значениями атрибутов, его решениями и направлениями.\n\nОтдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов и\nрешений не показывают, и запрос их на каждый проект списка стоил бы им без пользы."
+        "description": "Один проект с нынешними значениями атрибутов, его решениями и областями.\n\nОтдельная модель, а не поле `ProjectRead`: список проектов и первый экран атрибутов и\nрешений не показывают, и запрос их на каждый проект списка стоил бы им без пользы."
       },
       "ProjectEntryCreate": {
         "properties": {
@@ -15636,7 +15636,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -15831,7 +15831,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -15883,7 +15883,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -15903,10 +15903,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -15936,7 +15936,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -16165,7 +16165,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -16213,7 +16213,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -16233,10 +16233,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -16266,7 +16266,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -16396,7 +16396,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -16437,7 +16437,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -16457,10 +16457,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -16490,7 +16490,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -16678,7 +16678,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -16698,10 +16698,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -16731,7 +16731,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -17159,7 +17159,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -17179,10 +17179,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -17212,7 +17212,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -17389,7 +17389,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -17430,7 +17430,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -17450,10 +17450,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -17483,7 +17483,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -17687,7 +17687,7 @@
             },
             "type": "array",
             "title": "Supersedes",
-            "description": "Numbers of the earlier entries of the same type in the same project's case that this decision or finding superseded; empty in a task's or a direction's case",
+            "description": "Numbers of the earlier entries of the same type in the same project's case that this decision or finding superseded; empty in a task's or an area's case",
             "examples": [
               [
                 12
@@ -17698,7 +17698,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "SupersedesPayload",
-        "description": "Нагрузка решения и заметки: какие записи того же типа и того же дела проекта эта\nзаменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2).\n\nСписок со значением по умолчанию: записи задач и направлений, решения проекта,\nподшитые до замены (`TRK-554`), и заметки проекта до TRK-656 ключа не несут, а ответ\nнесёт его всегда — форма записи одна."
+        "description": "Нагрузка решения и заметки: какие записи того же типа и того же дела проекта эта\nзаменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2).\n\nСписок со значением по умолчанию: записи задач и областей, решения проекта,\nподшитые до замены (`TRK-554`), и заметки проекта до TRK-656 ключа не несут, а ответ\nнесёт его всегда — форма записи одна."
       },
       "TaskAlreadyThereRead": {
         "properties": {
@@ -17726,6 +17726,83 @@
         ],
         "title": "TaskAlreadyThereRead",
         "description": "Задача списка уже лежит в целевом проекте: `task_already_in_project`, записи нет."
+      },
+      "TaskAreaRead": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the area: the project key and the area key",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\" of the area, up to 320 characters; may be empty",
+            "examples": [
+              "Каталоги, публикации и день запуска"
+            ]
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At",
+            "description": "When the area was archived; `null` while it is active. A task cannot be put into an archived area, but can be taken out of it",
+            "examples": [
+              null
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "title",
+          "description",
+          "archived_at"
+        ],
+        "title": "TaskAreaRead",
+        "description": "Область в карточке задачи: адрес, название, описание и архив (`CONCEPT.md`, 4.2).\n\nАтрибуты и дело области в карточку не едут: они читаются у самой области по\nадресу. Описание не длиннее 320 знаков по той же причине, что у проекта."
+      },
+      "TaskAreaRowRead": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "examples": [
+              "TRK/promotion"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Популяризация"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "title"
+        ],
+        "title": "TaskAreaRowRead",
+        "description": "Область задачи в строке выдачи: адрес и название (`CONCEPT.md`, 4.4).\n\nОписания и признака архива нет намеренно: строка называет, куда задача входит, а\nостальное несёт карточка (`TaskAreaRead`) и сама область."
       },
       "TaskBriefCardRead": {
         "properties": {
@@ -17757,7 +17834,7 @@
           "priority": {
             "$ref": "#/components/schemas/TaskPriority"
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
                 "type": "string"
@@ -17766,8 +17843,8 @@
                 "type": "null"
               }
             ],
-            "title": "Direction",
-            "description": "Address of the direction, or `null`"
+            "title": "Area",
+            "description": "Address of the area, or `null`"
           },
           "version": {
             "type": "integer",
@@ -17786,7 +17863,7 @@
           "status",
           "assignee",
           "priority",
-          "direction",
+          "area",
           "version",
           "updated_at"
         ],
@@ -18013,7 +18090,7 @@
             "$ref": "#/components/schemas/TaskPriority",
             "default": "normal"
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
                 "type": "string"
@@ -18022,8 +18099,8 @@
                 "type": "null"
               }
             ],
-            "title": "Direction",
-            "description": "Address `PROJECT/key` of a direction of the task's own project, or null for none. Another project's direction answers `direction_project_mismatch`, an unknown one `direction_not_found`, an archived one `direction_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`",
+            "title": "Area",
+            "description": "Address `PROJECT/key` of an area of the task's own project, or null for none. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`",
             "examples": [
               "TRK/promotion"
             ]
@@ -18068,83 +18145,6 @@
         ],
         "title": "TaskCreate",
         "description": "Создание задачи. Статуса нет: новая задача рождается в `backlog`.\n\nКлюча тоже нет — его выдаёт счётчик проекта. Разделы можно оставить пустыми и\nдописать в `backlog`; перед `open` они обязаны быть заполнены."
-      },
-      "TaskDirectionRead": {
-        "properties": {
-          "address": {
-            "type": "string",
-            "title": "Address",
-            "description": "Address of the direction: the project key and the direction key",
-            "examples": [
-              "TRK/promotion"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "title": "Title",
-            "examples": [
-              "Популяризация"
-            ]
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "description": "Short \"what this is\" of the direction, up to 320 characters; may be empty",
-            "examples": [
-              "Каталоги, публикации и день запуска"
-            ]
-          },
-          "archived_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Archived At",
-            "description": "When the direction was archived; `null` while it is active. A task cannot be put into an archived direction, but can be taken out of it",
-            "examples": [
-              null
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "address",
-          "title",
-          "description",
-          "archived_at"
-        ],
-        "title": "TaskDirectionRead",
-        "description": "Направление в карточке задачи: адрес, название, описание и архив (`CONCEPT.md`, 4.2).\n\nАтрибуты и дело направления в карточку не едут: они читаются у самого направления по\nадресу. Описание не длиннее 320 знаков по той же причине, что у проекта."
-      },
-      "TaskDirectionRowRead": {
-        "properties": {
-          "address": {
-            "type": "string",
-            "title": "Address",
-            "examples": [
-              "TRK/promotion"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "title": "Title",
-            "examples": [
-              "Популяризация"
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "address",
-          "title"
-        ],
-        "title": "TaskDirectionRowRead",
-        "description": "Направление задачи в строке выдачи: адрес и название (`CONCEPT.md`, 4.4).\n\nОписания и признака архива нет намеренно: строка называет, куда задача входит, а\nостальное несёт карточка (`TaskDirectionRead`) и само направление."
       },
       "TaskFeaturesRead": {
         "properties": {
@@ -18248,7 +18248,7 @@
           "status",
           "assignee",
           "priority",
-          "direction",
+          "area",
           "not_before",
           "decisions"
         ],
@@ -18726,16 +18726,16 @@
           "project": {
             "$ref": "#/components/schemas/TaskProjectRead"
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TaskDirectionRead"
+                "$ref": "#/components/schemas/TaskAreaRead"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The direction of the task inside its project, or `null`: at most one. Taken from no one: a child does not inherit it from its parent",
+            "description": "The area of the task inside its project, or `null`: at most one. Taken from no one: a child does not inherit it from its parent",
             "examples": [
               null
             ]
@@ -18866,7 +18866,7 @@
           "key",
           "previous_keys",
           "project",
-          "direction",
+          "area",
           "title",
           "description",
           "goal",
@@ -19124,16 +19124,16 @@
             ],
             "description": "The parent of the task, key and title; a task has at most one. `null` for a top-level task. Grandparents are not included. Included unless `fields` asks for a narrower set without `parent`"
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TaskDirectionRowRead"
+                "$ref": "#/components/schemas/TaskAreaRowRead"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The direction of the task, address and title; `null` for a task with none. Included when `fields` names `direction`, or when `fields` is omitted"
+            "description": "The area of the task, address and title; `null` for a task with none. Included when `fields` names `area`, or when `fields` is omitted"
           }
         },
         "type": "object",
@@ -19418,7 +19418,7 @@
               "high"
             ]
           },
-          "direction": {
+          "area": {
             "anyOf": [
               {
                 "type": "string"
@@ -19427,8 +19427,8 @@
                 "type": "null"
               }
             ],
-            "title": "Direction",
-            "description": "Address `PROJECT/key` of a direction of the task's own project, or null for none. Another project's direction answers `direction_project_mismatch`, an unknown one `direction_not_found`, an archived one `direction_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`. Pass null to take the task out of its direction",
+            "title": "Area",
+            "description": "Address `PROJECT/key` of an area of the task's own project, or null for none. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`. Pass null to take the task out of its area",
             "examples": [
               "TRK/promotion"
             ]
@@ -19747,7 +19747,7 @@
             "type": "array",
             "maxItems": 50,
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               []
             ]
@@ -19788,7 +19788,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -19808,10 +19808,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -19841,7 +19841,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",
@@ -20052,7 +20052,7 @@
           "no": {
             "type": "integer",
             "title": "No",
-            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "description": "Number inside the owning task, project or area, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry",
             "examples": [
               12
             ]
@@ -20072,10 +20072,10 @@
               null
             ]
           },
-          "direction": {
+          "area": {
             "type": "null",
-            "title": "Direction",
-            "description": "Always `null`: entries of this type belong to a task, never to a direction",
+            "title": "Area",
+            "description": "Always `null`: entries of this type belong to a task, never to an area",
             "examples": [
               null
             ]
@@ -20105,7 +20105,7 @@
             },
             "type": "array",
             "title": "Refs",
-            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
             "examples": [
               [
                 "TRK-42#3",

@@ -22,7 +22,7 @@ FastAPI, и правило, записанное только в схеме, д�
 ## Правки полей зависят от статуса
 
 Название, описание и пять разделов меняются только в `backlog`; исполнитель, приоритет,
-направление, момент `not_before` и решения проекта — в любом незакрытом статусе; в `done` и
+область, момент `not_before` и решения проекта — в любом незакрытом статусе; в `done` и
 `cancelled` не меняется ничего.
 Правило выражено одной функцией (`editable_fields`), чтобы частичное обновление и
 инструмент MCP спрашивали её, а не держали по своей копии таблицы.
@@ -35,10 +35,10 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any
 
-from app.domain.directions import (
-    DIRECTION_ADDRESS_SHAPE,
-    is_direction_address,
-    parse_direction_address,
+from app.domain.areas import (
+    AREA_ADDRESS_SHAPE,
+    is_area_address,
+    parse_area_address,
 )
 from app.domain.errors import (
     AssigneeMismatchError,
@@ -371,10 +371,10 @@ class TaskField(StrEnum):
     STATUS = "status"
     ASSIGNEE = "assignee"
     PRIORITY = "priority"
-    #: Направление проекта задачи (`CONCEPT.md`, 3.3 и 3.7): адрес `ПРОЕКТ/ключ` или
+    #: Область проекта задачи (`CONCEPT.md`, 3.3 и 3.7): адрес `ПРОЕКТ/ключ` или
     #: `None`. Обвязка, как приоритет: меняется в любом незакрытом статусе, пишет
-    #: `field_changed`. Хранится ссылкой на строку направления, в записи — адресом.
-    DIRECTION = "direction"
+    #: `field_changed`. Хранится ссылкой на строку области, в записи — адресом.
+    AREA = "area"
     #: Момент «не раньше» (решение проекта `TRK#47`): до него вход в `in_progress`
     #: отклоняется (`check_not_deferred`). Обвязка: меняется в любом незакрытом статусе,
     #: пишет `field_changed`, `None` снимает. В записи — строкой момента в UTC.
@@ -404,7 +404,7 @@ OPEN_FIELDS: frozenset[TaskField] = frozenset(
     {
         TaskField.ASSIGNEE,
         TaskField.PRIORITY,
-        TaskField.DIRECTION,
+        TaskField.AREA,
         TaskField.NOT_BEFORE,
         TaskField.DECISIONS,
     }
@@ -595,19 +595,19 @@ def _normalize_priority(value: Any) -> TaskPriority:
         ) from None
 
 
-def _normalize_direction(value: Any) -> str | None:
-    """Адрес направления в каноническом виде или `None` — «направления нет».
+def _normalize_area(value: Any) -> str | None:
+    """Адрес области в каноническом виде или `None` — «области нет».
 
-    Форму проверяет только это: что направление существует, принадлежит проекту задачи
+    Форму проверяет только это: что область существует, принадлежит проекту задачи
     и не в архиве, решает сценарий — домен в базу не ходит. Строка без косой черты
     (ключ проекта, голое слово) — не адрес, и причина называет форму.
     """
     if value is None:
         return None
     address = _text(value).strip()
-    if not is_direction_address(address):
-        raise FieldProblem("invalid_address", expected=DIRECTION_ADDRESS_SHAPE, allowed_null=True)
-    return str(parse_direction_address(address))
+    if not is_area_address(address):
+        raise FieldProblem("invalid_address", expected=AREA_ADDRESS_SHAPE, allowed_null=True)
+    return str(parse_area_address(address))
 
 
 #: Форма момента `not_before`, которую называет отказ: дата, время и смещение пояса.
@@ -692,7 +692,7 @@ _NORMALIZERS: dict[TaskField, Callable[[Any], Any]] = {
     TaskField.CHECKS: _normalize_checks,
     TaskField.ASSIGNEE: _normalize_assignee,
     TaskField.PRIORITY: _normalize_priority,
-    TaskField.DIRECTION: _normalize_direction,
+    TaskField.AREA: _normalize_area,
     TaskField.NOT_BEFORE: _normalize_not_before,
     TaskField.DECISIONS: _normalize_decisions,
 }

@@ -5,7 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.db.models.direction import Direction
+from app.db.models.area import Area
 from app.db.models.entry import Entry
 from app.db.models.participant import Participant
 from app.db.models.project import Project
@@ -18,17 +18,17 @@ from app.db.models.project import Project
 # правилу, что и `MutationView`: ответ должен читаться сам по себе. Название и
 # описание вызывающий прислал сам; итог, если нужен, отдаёт `get_project` (TRK-144).
 class ProjectKeyView(BaseModel):
-    """Project key or direction address in its stored form; the project or direction in
+    """Project key or area address in its stored form; the project or area in
     full is returned by `get_project`.
     """
 
     key: str
 
 
-def project_key(item: Project | Direction) -> ProjectKeyView:
+def project_key(item: Project | Area) -> ProjectKeyView:
     """Ответ `create_project`/`update_project`: ключ проекта или адрес
-    направления, без эха названия и описания."""
-    return ProjectKeyView(key=item.address if isinstance(item, Direction) else item.key)
+    области, без эха названия и описания."""
+    return ProjectKeyView(key=item.address if isinstance(item, Area) else item.key)
 
 
 # Ответ `register_participant`/`update_participant`: только имя, без эха рода и описания.
@@ -53,7 +53,7 @@ def participant_name(item: Participant) -> ParticipantNameView:
 # Ответ `archive_project`/`restore_project`: ключ, итоговое время архивирования и номер
 # подшитой записи — по тому же правилу, что `MutationView`: что стало и где это в деле.
 class ProjectArchiveView(BaseModel):
-    """Project or direction after archiving or restoring, by the entry that records it;
+    """Project or area after archiving or restoring, by the entry that records it;
     the entry in full is returned by `read_project_entries`.
     """
 
@@ -64,10 +64,10 @@ class ProjectArchiveView(BaseModel):
     no: int = Field(description="Number of the `archived` or `restored` entry in its case")
 
 
-def project_archive(item: Project | Direction, entry: Entry) -> ProjectArchiveView:
-    """Ответ `archive_project`/`restore_project` — у проекта и у направления."""
+def project_archive(item: Project | Area, entry: Entry) -> ProjectArchiveView:
+    """Ответ `archive_project`/`restore_project` — у проекта и у области."""
     return ProjectArchiveView(
-        key=item.address if isinstance(item, Direction) else item.key,
+        key=item.address if isinstance(item, Area) else item.key,
         archived_at=item.archived_at,
         no=entry.no,
     )

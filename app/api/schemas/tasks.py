@@ -25,8 +25,8 @@ from app.api.schemas.entries import (
     SummaryPartsPayload,
 )
 from app.api.schemas.links import LinkTaskRead, TaskLinkRead
+from app.domain.areas import MAX_AREA_DESCRIPTION_LENGTH
 from app.domain.case import MAX_ENTRY_BODY_LENGTH, MAX_SUMMARY_PART_LENGTH, VerdictOutcome
-from app.domain.directions import MAX_DIRECTION_DESCRIPTION_LENGTH
 from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
 from app.domain.state import REASON_LIMIT, RECENT_LIMIT, UNMEASURED_LIMIT
 from app.domain.tasks import (
@@ -57,10 +57,10 @@ _ASSIGNEE_DESCRIPTION = (
     "the caller's signature (participant name or agent label) must match it, case-insensitively"
 )
 _CHECKS_EXAMPLE = ["docker compose run --rm test: the whole suite is green"]
-_DIRECTION_DESCRIPTION = (
-    "Address `PROJECT/key` of a direction of the task's own project, or null for none. "
-    "Another project's direction answers `direction_project_mismatch`, an unknown one "
-    "`direction_not_found`, an archived one `direction_archived` (taking the task out of "
+_AREA_DESCRIPTION = (
+    "Address `PROJECT/key` of an area of the task's own project, or null for none. "
+    "Another project's area answers `area_project_mismatch`, an unknown one "
+    "`area_not_found`, an archived one `area_archived` (taking the task out of "
     "it is always allowed). Not inherited from the parent; set in any status but `done` "
     "and `cancelled`"
 )
@@ -117,10 +117,10 @@ class TaskProjectRead(ProjectRefRead):
     )
 
 
-class TaskDirectionRead(BaseModel):
-    """Направление в карточке задачи: адрес, название, описание и архив (`CONCEPT.md`, 4.2).
+class TaskAreaRead(BaseModel):
+    """Область в карточке задачи: адрес, название, описание и архив (`CONCEPT.md`, 4.2).
 
-    Атрибуты и дело направления в карточку не едут: они читаются у самого направления по
+    Атрибуты и дело области в карточку не едут: они читаются у самой области по
     адресу. Описание не длиннее 320 знаков по той же причине, что у проекта.
     """
 
@@ -128,21 +128,21 @@ class TaskDirectionRead(BaseModel):
 
     address: str = Field(
         examples=["TRK/promotion"],
-        description="Address of the direction: the project key and the direction key",
+        description="Address of the area: the project key and the area key",
     )
     title: str = Field(examples=["Популяризация"])
     description: str = Field(
         examples=["Каталоги, публикации и день запуска"],
         description=(
-            f'Short "what this is" of the direction, up to {MAX_DIRECTION_DESCRIPTION_LENGTH} '
+            f'Short "what this is" of the area, up to {MAX_AREA_DESCRIPTION_LENGTH} '
             "characters; may be empty"
         ),
     )
     archived_at: datetime | None = Field(
         examples=[None],
         description=(
-            "When the direction was archived; `null` while it is active. A task cannot be "
-            "put into an archived direction, but can be taken out of it"
+            "When the area was archived; `null` while it is active. A task cannot be "
+            "put into an archived area, but can be taken out of it"
         ),
     )
 
@@ -170,10 +170,10 @@ class TaskRead(BaseModel):
         ),
     )
     project: TaskProjectRead
-    direction: TaskDirectionRead | None = Field(
+    area: TaskAreaRead | None = Field(
         examples=[None],
         description=(
-            "The direction of the task inside its project, or `null`: at most one. Taken "
+            "The area of the task inside its project, or `null`: at most one. Taken "
             "from no one: a child does not inherit it from its parent"
         ),
     )
@@ -381,7 +381,7 @@ class TaskBriefCardRead(BaseModel):
     status: TaskStatus
     assignee: str | None
     priority: TaskPriority
-    direction: str | None = Field(description="Address of the direction, or `null`")
+    area: str | None = Field(description="Address of the area, or `null`")
     version: int
     updated_at: datetime
 
@@ -501,10 +501,10 @@ class TaskCreate(BaseModel):
         description=_ASSIGNEE_DESCRIPTION,
     )
     priority: TaskPriority = Field(default=TaskPriority.NORMAL)
-    direction: str | None = Field(
+    area: str | None = Field(
         default=None,
         examples=["TRK/promotion"],
-        description=_DIRECTION_DESCRIPTION,
+        description=_AREA_DESCRIPTION,
     )
     # Строка, а не `datetime`: форму момента разбирает домен, как и у MCP, и отказ на
     # время без пояса один на оба канала — `task_fields_invalid`, а не `validation_error`.
@@ -590,9 +590,9 @@ class TaskUpdate(BaseModel):
         description=f"{_ASSIGNEE_DESCRIPTION}. Pass null to unassign",
     )
     priority: TaskPriority = unset_field(examples=[TaskPriority.HIGH])
-    direction: str | None = unset_field(
+    area: str | None = unset_field(
         examples=["TRK/promotion"],
-        description=f"{_DIRECTION_DESCRIPTION}. Pass null to take the task out of its direction",
+        description=f"{_AREA_DESCRIPTION}. Pass null to take the task out of its area",
     )
     not_before: str | None = unset_field(
         examples=[_NOT_BEFORE_EXAMPLE],

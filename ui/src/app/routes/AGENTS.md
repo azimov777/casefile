@@ -4,7 +4,7 @@
 
 ## Файлы
 
-- `routes.tsx` — список маршрутов (страница направления — `projects/:key/directions/:direction`, TRK-557); тот же список поднимают страничные тесты
+- `routes.tsx` — список маршрутов (страница области — `projects/:key/areas/:area`, TRK-557); тот же список поднимают страничные тесты
 - `home-redirect.tsx` — `/`: пока состояние знакомства учётной записи `pending`, ведёт на «Начало», иначе на список задач (`TRK-361`)
 - `home-redirect.test.tsx` — `pending` → `/start`, `completed`/`skipped`/`null` → `/tasks`, ожидание первого кадра `bootstrap`
 - `require-auth.tsx` — страж: ждёт ответа установки про ключ, а без ключа уводит на вход

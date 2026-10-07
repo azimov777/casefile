@@ -7,9 +7,9 @@
 
 from app.db.base import Base, BaseModel
 from app.db.models.account import Account
-from app.db.models.attribute import DirectionAttribute, ProjectAttribute
+from app.db.models.area import Area
+from app.db.models.attribute import AreaAttribute, ProjectAttribute
 from app.db.models.author import CreatedByMixin, created_by_columns
-from app.db.models.direction import Direction
 from app.db.models.entry import Entry
 from app.db.models.idempotency import IdempotencyKey
 from app.db.models.link import Link
@@ -21,11 +21,11 @@ from app.db.models.token import Token
 
 __all__ = [
     "Account",
+    "Area",
+    "AreaAttribute",
     "Base",
     "BaseModel",
     "CreatedByMixin",
-    "Direction",
-    "DirectionAttribute",
     "Entry",
     "IdempotencyKey",
     "Link",

@@ -25,10 +25,10 @@ from app.api.deps import (
     SessionDep,
 )
 from app.api.idempotency import OnceDep
+from app.api.schemas.areas import area_ref
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.decisions import ProjectDecisionRead
-from app.api.schemas.directions import direction_ref
 from app.api.schemas.entries import EntryRead, ProjectEntryCreate, entry_read
 from app.api.schemas.projects import (
     AttributeRead,
@@ -42,10 +42,10 @@ from app.api.schemas.projects import (
 )
 from app.db.models.project import Project
 from app.db.pagination import DEFAULT_PAGE_SIZE
+from app.services import areas as areas_service
 from app.services import attributes as attributes_service
 from app.services import case as case_service
 from app.services import decisions as decisions_service
-from app.services import directions as directions_service
 from app.services import projects as service
 from app.services.auth import Actor
 from app.services.decisions import ProjectDecision
@@ -116,7 +116,7 @@ async def read_project(
     actor: ActorDep,
 ) -> DataResponse[ProjectDetailRead]:
     """Карточка проекта вместе с описанием, нынешними значениями атрибутов, решениями и
-    неархивными направлениями (адрес и название; `CONCEPT.md`, 3.7).
+    неархивными областями (адрес и название; `CONCEPT.md`, 3.7).
 
     Описание едет и в карточке задачи; атрибуты — только здесь: их число не ограничено, и
     таскать их в каждой задаче значило бы тратить контекст. История атрибутов — записи
@@ -385,19 +385,19 @@ async def read_project_entry(
 async def _detail(
     session: AsyncSession, project: Project, *, actor: Actor
 ) -> DataResponse[ProjectDetailRead]:
-    """Проект с атрибутами, решениями и направлениями: тот же ответ у чтения, заведения и
+    """Проект с атрибутами, решениями и областями: тот же ответ у чтения, заведения и
     правки карточки."""
     attributes = await attributes_service.list_attributes(session, project, actor=actor)
     decisions = await decisions_service.project_decisions(session, project, actor=actor)
     counts = await decisions_service.citing_task_counts(session, decisions, actor=actor)
-    directions = await directions_service.list_directions(session, project, actor=actor)
+    areas = await areas_service.list_areas(session, project, actor=actor)
     return DataResponse[ProjectDetailRead](
         data=ProjectDetailRead.model_validate(
             {
                 **ProjectRead.model_validate(project).model_dump(),
                 "attributes": [AttributeRead.model_validate(item) for item in attributes],
                 "decisions": [_decision(item, counts) for item in decisions],
-                "directions": [direction_ref(item) for item in directions],
+                "areas": [area_ref(item) for item in areas],
             }
         )
     )

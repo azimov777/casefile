@@ -271,7 +271,7 @@ class SearchField(StrEnum):
     PROJECT = "project"
     PARENT = "parent"
     DECISION = "decision"
-    DIRECTION = "direction"
+    AREA = "area"
     UNDER = "under"
     STATUS = "status"
     ASSIGNEE = "assignee"
@@ -293,7 +293,7 @@ class SearchValueKind(StrEnum):
     PROJECT_KEY = "project_key"
     TASK_KEY = "task_key"
     DECISION_REF = "decision_ref"
-    DIRECTION_ADDRESS = "direction_address"
+    AREA_ADDRESS = "area_address"
     STATUS = "status"
     ASSIGNEE = "assignee"
     PRIORITY = "priority"
@@ -346,12 +346,12 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
             EXACT_OPERATORS,
             is_nullable=True,
         ),
-        # Направление самой задачи (`CONCEPT.md`, 4.4): отбор по её полю `direction`, без
-        # родителей и поддерева. Пустое состояние — задача без направления. Порядка нет.
+        # Область самой задачи (`CONCEPT.md`, 4.4): отбор по её полю `area`, без
+        # родителей и поддерева. Пустое состояние — задача без области. Порядка нет.
         # Несуществующий адрес — отказ, а не пустая выдача, как у родителя.
         SearchFieldSpec(
-            SearchField.DIRECTION,
-            SearchValueKind.DIRECTION_ADDRESS,
+            SearchField.AREA,
+            SearchValueKind.AREA_ADDRESS,
             EXACT_OPERATORS,
             is_nullable=True,
         ),
@@ -473,14 +473,14 @@ FEATURES_FIELD = "features"
 #: TRK-7. До TRK-135 поле звалось `parents` и было списком (TRK-95).
 PARENT_FIELD = "parent"
 
-#: Направление задачи в строке списка (`CONCEPT.md`, 4.4): адрес и название или `null`.
-#: Имя то же, что у условия отбора `direction`, и значит то же. В набор выдачи по
-#: умолчанию не входит: у большинства задач направления нет, и поле называет себя, когда
+#: Область задачи в строке списка (`CONCEPT.md`, 4.4): адрес и название или `null`.
+#: Имя то же, что у условия отбора `area`, и значит то же. В набор выдачи по
+#: умолчанию не входит: у большинства задач области нет, и поле называет себя, когда
 #: о нём просят.
-DIRECTION_FIELD = "direction"
+AREA_FIELD = "area"
 
 #: Поля, которые можно попросить в выдаче: поля карточки задачи плюс `features`,
-#: `parent` и `direction`. Два разных представления одной задачи в одном API — то, чего проект не
+#: `parent` и `area`. Два разных представления одной задачи в одном API — то, чего проект не
 #: допускает, поэтому список строки совпадает с карточкой, признаки приходят тем же
 #: вложенным объектом, что и в пакете преемника (`CONCEPT.md`, 4.2), а родитель — это
 #: поле `parent` того же пакета, сжатое до ключа и названия.
@@ -506,7 +506,7 @@ SELECTABLE_FIELDS: tuple[str, ...] = (
     "updated_at",
     FEATURES_FIELD,
     PARENT_FIELD,
-    DIRECTION_FIELD,
+    AREA_FIELD,
 )
 
 #: Ключ задачи возвращается всегда: выдача без него бесполезна — по ней нельзя ни

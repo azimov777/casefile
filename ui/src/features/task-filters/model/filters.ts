@@ -27,11 +27,11 @@ export interface TaskFilters {
   view: TaskView;
   project: string;
   /**
-   * Направление (TRK-557): адрес `TRK/promotion`, «без направления» — `empty()`
-   * (`NO_DIRECTION`), пустая строка — любое. То же условие `direction`, каким отбирает
+   * Область (TRK-557): адрес `TRK/promotion`, «без области» — `empty()`
+   * (`NO_AREA`), пустая строка — любая. То же условие `area`, каким отбирает
    * агент; в адрес страницы оно уезжает как есть, и бэкенд разбирает его сам.
    */
-  direction: string;
+  area: string;
   status: TaskStatus[];
   priority: TaskPriority[];
   assignee: string;
@@ -150,7 +150,7 @@ export const OPEN_REMARKS_CONDITION = 'open_remarks: > 0';
 export const EMPTY_FILTERS: TaskFilters = {
   view: 'table',
   project: '',
-  direction: '',
+  area: '',
   status: [],
   priority: [],
   assignee: '',
@@ -181,7 +181,7 @@ export function readFilters(params: URLSearchParams): TaskFilters {
   return {
     view: params.get('view') === 'board' ? 'board' : 'table',
     project: params.get('project') ?? '',
-    direction: (params.get('direction') ?? '').trim(),
+    area: (params.get('area') ?? '').trim(),
     status: keepKnown(params.getAll('status'), TASK_STATUSES),
     priority: keepKnown(params.getAll('priority'), TASK_PRIORITIES),
     assignee: params.get('assignee') ?? '',
@@ -209,7 +209,7 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
 
   if (filters.view === 'board') params.set('view', 'board');
   if (filters.project !== '') params.set('project', filters.project);
-  if (filters.direction.trim() !== '') params.set('direction', filters.direction.trim());
+  if (filters.area.trim() !== '') params.set('area', filters.area.trim());
   for (const status of filters.status) params.append('status', status);
   for (const priority of filters.priority) params.append('priority', priority);
   if (filters.assignee.trim() !== '') params.set('assignee', filters.assignee.trim());
@@ -286,10 +286,10 @@ export function filtersToListParams(filters: TaskFilters): TaskListRequest {
 
   return {
     project: filters.project === '' ? undefined : [filters.project],
-    // Направление уходит структурным параметром как есть: адрес или `empty()`. Неизвестный
+    // Область уходит структурным параметром как есть: адрес или `empty()`. Неизвестный
     // адрес бэкенд отклоняет `422 search_value_invalid`, а не отвечает пустотой: опечатку
-    // в адресе не примут за «в направлении ничего нет».
-    direction: filters.direction.trim() === '' ? undefined : [filters.direction.trim()],
+    // в адресе не примут за «в области ничего нет».
+    area: filters.area.trim() === '' ? undefined : [filters.area.trim()],
     // Столбцы доски и есть отбор по статусу: отбирать ещё и параметром значило бы
     // показывать пустые столбцы рядом с непустыми и врать, что задач в них нет.
     status: !board && filters.status.length > 0 ? filters.status : undefined,

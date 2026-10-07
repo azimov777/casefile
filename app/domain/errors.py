@@ -143,78 +143,78 @@ class ProjectReasonRequiredError(ValidationError):
     message = "Archiving or restoring a project requires a reason"
 
 
-# --- Направления ----------------------------------------------------------------------
+# --- Области ----------------------------------------------------------------------
 
 
-class DirectionNotFoundError(NotFoundError):
-    """Направления с таким адресом нет: проект есть, ключа в нём нет (`CONCEPT.md`, 3.7)."""
+class AreaNotFoundError(NotFoundError):
+    """Области с таким адресом нет: проект есть, ключа в нём нет (`CONCEPT.md`, 3.7)."""
 
-    code = "direction_not_found"
-    message = "Direction not found"
-
-
-class DirectionKeyTakenError(ConflictError):
-    """Ключ направления уже занят в этом проекте: ключи уникальны без учёта регистра."""
-
-    code = "direction_key_taken"
-    message = "Direction key is already taken in this project"
+    code = "area_not_found"
+    message = "Area not found"
 
 
-class InvalidDirectionKeyError(ValidationError):
-    """Адрес нового направления не `ПРОЕКТ/ключ` или ключ не по шаблону."""
+class AreaKeyTakenError(ConflictError):
+    """Ключ области уже занят в этом проекте: ключи уникальны без учёта регистра."""
 
-    code = "invalid_direction_key"
-    message = "Direction key is invalid"
-
-
-class DirectionDescriptionTooLongError(ValidationError):
-    """Описание направления длиннее предела (`app/domain/directions.py`); не обрезается."""
-
-    code = "direction_description_too_long"
-    message = "Direction description is too long"
+    code = "area_key_taken"
+    message = "Area key is already taken in this project"
 
 
-class DirectionArchivedError(ConflictError):
-    """Направление в архиве: карточка, атрибуты и дело заморожены (`CONCEPT.md`, 3.7).
+class InvalidAreaKeyError(ValidationError):
+    """Адрес новой области не `ПРОЕКТ/ключ` или ключ не по шаблону."""
+
+    code = "invalid_area_key"
+    message = "Area key is invalid"
+
+
+class AreaDescriptionTooLongError(ValidationError):
+    """Описание области длиннее предела (`app/domain/areas.py`); не обрезается."""
+
+    code = "area_description_too_long"
+    message = "Area description is too long"
+
+
+class AreaArchivedError(ConflictError):
+    """Область в архиве: карточка, атрибуты и дело заморожены (`CONCEPT.md`, 3.7).
 
     Возникает в одном месте — `app/services/freeze.py`, после проверки архива проекта:
     архив проекта называется первым.
     """
 
-    code = "direction_archived"
-    message = "Direction is archived: its card, attributes and case are frozen"
+    code = "area_archived"
+    message = "Area is archived: its card, attributes and case are frozen"
 
 
-class DirectionNotArchivedError(ConflictError):
-    """Восстанавливать нечего: направление не в архиве."""
+class AreaNotArchivedError(ConflictError):
+    """Восстанавливать нечего: область не в архиве."""
 
-    code = "direction_not_archived"
-    message = "Direction is not archived"
+    code = "area_not_archived"
+    message = "Area is not archived"
 
 
-class DirectionProjectMismatchError(ValidationError):
-    """Направление другого проекта: задаче подходит направление её собственного проекта.
+class AreaProjectMismatchError(ValidationError):
+    """Область другого проекта: задаче подходит область её собственного проекта.
 
-    Оба проекта — в `details` (`task_project`, `direction_project`), и по ним агент видит,
-    чьё направление назвал (`CONCEPT.md`, 3.3).
+    Оба проекта — в `details` (`task_project`, `area_project`), и по ним агент видит,
+    чья область назвал (`CONCEPT.md`, 3.3).
     """
 
-    code = "direction_project_mismatch"
-    message = "Direction belongs to another project than the task"
+    code = "area_project_mismatch"
+    message = "Area belongs to another project than the task"
 
 
-class DirectionReasonRequiredError(ValidationError):
-    """Архивирование и восстановление направления требуют непустой причины `reason`."""
+class AreaReasonRequiredError(ValidationError):
+    """Архивирование и восстановление области требуют непустой причины `reason`."""
 
-    code = "direction_reason_required"
-    message = "Archiving or restoring a direction requires a reason"
+    code = "area_reason_required"
+    message = "Archiving or restoring an area requires a reason"
 
 
-# --- Атрибуты проекта и направления ---------------------------------------------------
+# --- Атрибуты проекта и области ---------------------------------------------------
 
 
 class AttributeNotFoundError(NotFoundError):
-    """Атрибута с таким именем (без учёта регистра) у проекта или направления нет."""
+    """Атрибута с таким именем (без учёта регистра) у проекта или области нет."""
 
     code = "attribute_not_found"
     message = "Attribute not found"
@@ -446,7 +446,7 @@ class FindingNotInForceError(ConflictError):
     Тот же отказ, что у решения (`DecisionNotInForceError`), для второй записи знания
     (решение TRK#48, раздел 2): у заметки не бывает двух преемников, и цепочка замен
     остаётся линейной. Код свой, а не общий с решением: код называет сущность, как
-    `project_archived` и `direction_archived` у одной механики архива. В
+    `project_archived` и `area_archived` у одной механики архива. В
     `details.findings` каждая такая заметка и её преемник (`ref`, `superseded_by`).
     """
 
