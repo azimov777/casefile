@@ -24,6 +24,13 @@ export const errors = {
   archive_invalid: 'The installation archive is damaged or was edited; export it again.',
   archive_revision_unknown:
     'The archive comes from a newer Casefile. Update this installation first, then import again.',
+  area_archived: 'The area is archived: its card, attributes and case accept no changes.',
+  area_description_too_long: 'The area description is longer than 320 characters.',
+  area_key_taken: 'This project already has an area with that key.',
+  area_not_archived: 'The area is not archived.',
+  area_not_found: 'This project has no area with that key.',
+  area_project_mismatch: 'A task can only join an area of its own project.',
+  area_reason_required: 'Archiving or restoring an area requires a reason.',
   assignee_mismatch: 'The task is assigned to someone else.',
   assignee_required: 'The task has no assignee.',
   attribute_not_found: 'There is no attribute by that name in this project.',
@@ -40,13 +47,6 @@ export const errors = {
   database_unavailable: 'The database is unavailable.',
   decision_not_in_force:
     'This project decision has been superseded: refer to the one that replaced it.',
-  direction_archived: 'The direction is archived: its card, attributes and case accept no changes.',
-  direction_description_too_long: 'The direction description is longer than 320 characters.',
-  direction_key_taken: 'This project already has a direction with that key.',
-  direction_not_archived: 'The direction is not archived.',
-  direction_not_found: 'This project has no direction with that key.',
-  direction_project_mismatch: 'A task can only join a direction of its own project.',
-  direction_reason_required: 'Archiving or restoring a direction requires a reason.',
   entry_fields_invalid: 'The entry did not pass validation.',
   entry_not_found: 'This task has no entry with that number.',
   finding_not_in_force:
@@ -59,10 +59,10 @@ export const errors = {
     'Only an installation without projects can take an archive: import into a fresh one.',
   internal_error: 'Internal server error.',
   invalid_actor_label: 'The temporary-agent label does not match the pattern.',
+  invalid_area_key:
+    'The area key may contain only lower-case Latin letters, digits and inner hyphens.',
   invalid_attribute_name: 'The attribute name may contain only Latin letters, digits, “_” and “-”.',
   invalid_cursor: 'The page cursor cannot be parsed.',
-  invalid_direction_key:
-    'The direction key may contain only lower-case Latin letters, digits and inner hyphens.',
   invalid_email: 'This does not look like an email address.',
   invalid_idempotency_key: 'The idempotency key is empty or too long.',
   invalid_journal_cursor: 'The position in the journal feed cannot be parsed.',
