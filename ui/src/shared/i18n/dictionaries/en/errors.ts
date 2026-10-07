@@ -124,4 +124,5 @@ export const errors = {
   validation_error: 'The value breaks a rule of the domain.',
   version_conflict: 'The task changed while you were reading. Refresh the page and try again.',
   weak_password: 'The password does not fit: it is shorter than 12 characters or too long.',
+  task_deferred: 'The task can be taken into work only from its set moment.',
 } as const;

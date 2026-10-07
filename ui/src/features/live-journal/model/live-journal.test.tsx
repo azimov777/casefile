@@ -398,6 +398,7 @@ describe('доска под живым потоком', () => {
             status: 'open',
             features: {
               blocked: false,
+              deferred: false,
               open_questions: 1,
               open_blocking_questions: 1,
               open_remarks: 0,
