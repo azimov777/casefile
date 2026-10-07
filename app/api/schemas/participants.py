@@ -10,7 +10,6 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.authors import AuthorRead
-from app.api.schemas.common import unset_field
 from app.domain.participants import PARTICIPANT_NAME_PATTERN, ParticipantKind
 
 _DESCRIPTION_MAX = 1000
@@ -60,24 +59,4 @@ class ParticipantCreate(BaseModel):
         max_length=_DESCRIPTION_MAX,
         examples=["Релизный бот, ведёт задачи выкладки"],
         description="Short note on who this is: it is all the reader of a case knows about them",
-    )
-
-
-class ParticipantUpdate(BaseModel):
-    """Частичное обновление: применяется только переданное.
-
-    Меняется одно описание. Имя стоит подписью в уже подшитых записях дела, а род
-    объясняет читателю, кто говорит, — переписывать их задним числом значит переписывать
-    историю, поэтому этих полей здесь нет вовсе, и лишнее поле схема отвергает.
-
-    У описания нет осмысленного `null`, поэтому поле объявлено не-nullable: передать
-    `null` схема не даст. Молча отбросить его было бы хуже отказа — клиент получил бы
-    `200` и уверенность, что поле изменено.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    description: str = unset_field(
-        max_length=_DESCRIPTION_MAX,
-        examples=["Релизный бот, ведёт задачи выкладки"],
     )

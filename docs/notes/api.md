@@ -663,8 +663,8 @@ project_not_archived`. Записи `archived`/`restored` — вариант `Pr
 сохранённые ключами идемпотентности до этого поля, повторяются сутки и должны
 разбираться. `Idempotency-Key` оба маршрута не принимают: они не создающие.
 **Как правильно:** любое изменение в архивном проекте и его задачах отвечает `409
-project_archived` с `details.key` и `details.archived_at`; `DELETE
-/tasks/{key}/links/{kind}/{other}` с задачей архивного проекта проходит.
+project_archived` с `details.key` и `details.archived_at`; снятие
+связи (`unlink`) с задачей архивного проекта проходит.
 **Где:** `app/api/routes/projects.py`, `archive_project`, `restore_project`;
 `app/api/schemas/projects.py`, `ProjectArchiving`, `ProjectRead`;
 `app/api/schemas/entries.py`, `ProjectArchiveEntryRead`.

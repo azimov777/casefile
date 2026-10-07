@@ -118,12 +118,6 @@ async def get_account_by_email(session: AsyncSession, email: str) -> Account:
     return account
 
 
-async def read_account(session: AsyncSession, account_id: uuid.UUID, *, actor: Actor) -> Account:
-    """Карточка учётной записи для администратора."""
-    await ensure_admin(session, actor, action="account.read")
-    return await get_account(session, account_id)
-
-
 async def list_accounts(
     session: AsyncSession,
     *,
