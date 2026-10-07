@@ -22,7 +22,7 @@ harness may show them with a prefix.
 
 - The casefile tools are in your tool list. If they are not, see the last section.
 - You know the task key. If the person gave you a topic instead, find it:
-  `search_tasks(query="project: TRK and status: open and blocked: false and open_blocking_questions: 0 and deferred: false")`. If nothing
+  `search_tasks(query="project: TRK and status: open and blocked: false and open_questions: 0 and deferred: false")`. If nothing
   matches the work, file it with `create_task` first (step 4 shows the form; a task needs an `area` of its project): work with a
   result or a decision belongs in a task even when one session holds it all.
 
@@ -42,10 +42,21 @@ Read before you act, because the case already holds choices you must not redo:
   `decisions` of `get_task` with their status, all of them in `get_project(key="TRK")`;
   a superseded one names its successor, and `search_tasks(decision=["TRK#15"])` lists
   the tasks done under it;
-- a reference like `TRK-7#12` in the text is an entry — `read_entries(key="TRK-7", nos=[12])`.
+- the task's discussions come in `discussions` of `get_task`: address (`TRK~7`), title,
+  status, whose turn it is, the open questions and the latest conclusion. The latest
+  conclusion and the human's answers and notes set the work together with the sections
+  (`state` names the ones filed after the sections were last edited); read a discussion
+  in full with `read_project_entries(key="TRK~7")`;
+- a reference like `TRK-7#12` in the text is an entry — `read_entries(key="TRK-7", nos=[12])`;
+  `TRK~7#3` is an entry of a discussion — `read_project_entries(key="TRK~7", nos=[3])`.
 
 **Check:** you can say in two sentences what the goal is, where the work stands and what
-your next action is, and you know the open questions and remarks. If you cannot, read
+your next action is, and you know the open questions, the conclusions of the discussions
+and the remarks. A conclusion that contradicts the sections: if it only changes the course
+inside the goal, work by it and name the divergence in the summary; if it changes the goal,
+the output or the checks, send the task back (`transition(key="TRK-42", to="backlog",
+reason="Conclusion TRK~7#5 changes the goal")`), fix the sections with `update_task`, and
+move it forward again — or cancel it and file a new task linked with `relates`. If you cannot, read
 more before writing anything.
 
 Then take the task — assignee first, because only the assignee enters `in_progress`:
@@ -98,27 +109,32 @@ silently: file a `finding` and answer where it came from.
 
 A task stays `in_progress` only while the next move is yours. Hand it off explicitly.
 
-**A human has to decide.** Ask, summarize, hand the task back as `open`:
+**A human has to decide.** Ask in a discussion, summarize, hand the task back as `open`:
 
 ```
-ask(key="TRK-42", addressees=["<name from list_participants>"], blocking=True,
+ask(key="TRK-42", addressees=["<name from list_participants>"],
     title="Keep the v1 endpoint for old clients?",
-    body="A: keep it one more month. B: remove it now. I lean to A because …")
+    refs=["TRK~3#5", "TRK-40#12"],
+    body="Earlier answers on this: you chose to keep v1 until March (TRK~3#5).\n"
+         "The fork: keep it one more month, or remove it now.\n"
+         "I lean to keep it one more month, because …")
 add_summary(key="TRK-42", done="…", remaining="…",
-            blockers="Answer to TRK-42#9 from <name>",
-            next_step="Apply the chosen option in api/routes.py")
-transition(key="TRK-42", to="open", reason="Waiting for the answer to TRK-42#9")
+            blockers="Answer to TRK~7#1 from <name>",
+            next_step="Read the discussion TRK~7 and apply the chosen option in api/routes.py")
+transition(key="TRK-42", to="open", reason="Waiting for the answer in TRK~7")
 ```
 
-Put the options and your recommendation in the question so it can be answered in one
-line. Mark it `blocking` only when the work truly cannot go on without it: the open
-`blocking` question is what holds the task, and the answer is what releases it. Do not
-take a task that still has an unanswered `blocking` question into work.
+`ask` with a task key opens the discussion, titled by the question, and attaches the task
+to it in the same call; the result gives its address (`TRK~7`) and the question number.
+There is no other place to ask a human: a question in a task's own case is refused. A
+question without an answer holds every task attached to the discussion: such a task cannot
+enter `in_progress`, and the answer makes it a candidate again with no status move. Then it
+is your move: read the answer, write the conclusion, and either close the discussion or
+ask the next question.
 
 **An outside event has to happen** — a catalogue review, someone else's pull request. Ask
-the same way: a `blocking` question to whoever will learn of the event, with what to
-check and where. Whoever learns of it may answer, an agent included. Then the same
-summary and `open`.
+the same way: a question to whoever will learn of the event, with what to check and where.
+Whoever learns of it may answer, an agent included. Then the same summary and `open`.
 
 **Waiting inside the session.** Do not poll `get_task`; one call blocks until an entry lands:
 
@@ -126,11 +142,70 @@ summary and `open`.
 wait_journal(task="TRK-42", types=["answer"], after=<last seq you saw>, timeout=60)
 ```
 
-An empty result means nothing happened yet; call again from the same `after`. The task
-stays `in_progress` while you wait. If you cannot wait, file the question, the summary
-and `open` as above, end your turn and tell the person which question is open. The answer
-makes the task a candidate for work again; whoever takes it up moves it to `in_progress`,
-which starts a new pass: verdicts filed before no longer count.
+An empty result means nothing happened yet; call again from the same `after`. An answer in
+a discussion the task is attached to ends the wait too, and carries the `discussion` it
+belongs to. The task stays `in_progress` while you wait. If you
+cannot wait, file the question, the summary and `open` as above, end your turn and tell the
+person which question is open. The answer makes the task a candidate for work again; whoever
+takes it up moves it to `in_progress`, which starts a new pass: verdicts filed before no
+longer count.
+
+### Discussions
+
+A discussion is one narrow question with its own case; the tasks whose work depends on its
+outcome are attached to it. The rules:
+
+1. **Keep it narrow.** One discussion is one question the work depends on, not a topic.
+   When the topic grows, close the discussion and open another for the new question.
+2. **Attach only the tasks that depend on the outcome.** If a task can go on without the
+   answer, do not attach it; cite the discussion in its entries' `refs` instead. A task
+   you attach waits and cannot be closed until the discussion is closed.
+   `link(key="TRK-43", kind="attached", other="TRK~7")` attaches a task,
+   `unlink(key="TRK-43", kind="attached", other="TRK~7")` detaches it.
+3. **Start the question with the earlier answers.** Before asking, search for what the
+   human has already said on the topic (`search_tasks`, `read_entries`,
+   `read_project_entries` on earlier discussions) and put those answers first in the body,
+   each with its reference (`TRK~3#5`, `TRK-40#12`), and list the references in `refs`.
+   The human does not have to hold the topic in mind; the question does it for them.
+4. **One fork, one question.** After the earlier answers state the single choice, then
+   your recommendation with the reason. A second fork is a second question: in the same
+   discussion if it is the same topic (`ask(key="TRK~7", …)`), in a new one if not.
+5. **Name a changed decision.** If the human's new answer replaces an earlier one, say so
+   in the question or the conclusion directly ("you chose A in TRK~3#5, now B"), and put
+   the old decision in `superseded` of the conclusion.
+6. **Write the conclusion after every answer or note of the human, and close when nothing
+   is open.** The conclusion has three parts, each line with a reference to the entry it
+   follows from; `nothing` is a legal value:
+
+```
+read_project_entries(key="TRK~7")          # the answers and the human's notes, as filed
+add_conclusion(key="TRK~7",
+               decided="Keep v1 one more month (TRK~7#2)",
+               superseded="Remove v1 now, TRK~3#5 (replaced by TRK~7#2)",
+               open="When to announce the removal date (TRK~7#2)")
+```
+
+   The human can add a note to a discussion at any time; it sets the work like an answer,
+   and the next conclusion covers it. When no question is unanswered and nothing is left
+   open, close it, with the final conclusion, in one call:
+
+```
+close_discussion(key="TRK~7",
+                 decided="Keep v1 one more month (TRK~7#2)",
+                 superseded="nothing",
+                 open="nothing")
+```
+
+   A closed discussion never reopens. To continue the topic, open a new discussion and
+   cite the closed one in `refs=["TRK~7"]`. Close every attached discussion before
+   `close_task`: while one is open, closing or cancelling its task is refused.
+
+**An old question was closed by the tracker.** A question in a task's case, filed before
+discussions, that the tracker itself closed with a `withdrawn` answer (it says questions are now asked
+in discussions, and to ask again through one) is yours to ask again through `ask`, with the old question in `refs`
+(`TRK-42#9`) and the human's earlier answers first. An old question that still has an
+answer stays as it is; answer an old open question addressed to you with
+`answer(key="TRK-42", question_no=…, body=…)`.
 
 **Another task has to finish first.** Block only on a real dependency:
 
@@ -161,14 +236,15 @@ and the task is a candidate again, so do not take a task while `deferred` is `tr
 changes={"not_before": null})`. `get_task` shows `deferred` in `features` and, without `brief`, the
 date as `not_before`; `search_tasks` returns it in `fields`. It is not a deadline: the tracker reminds no one.
 
-**A question addressed to you** gets `answer(key=…, question_no=…, body=…)` in its own task.
+**A question addressed to you** gets `answer(key=<discussion address or task key>,
+question_no=…, body=…)` where it was asked.
 
 **Your own question went stale** before anyone answered it — the decision came elsewhere, or a
-newer question asks it better: `answer(key=…, question_no=…, outcome="withdrawn", body="<why>")`,
+newer question asks it better: `answer(key="TRK~7", question_no=…, outcome="withdrawn", body="<why>")`,
 or `outcome="replaced", replaced_by=<number of the new question>`. It leaves the inbox and stays
 in the case; a question that already has an answer stays as it is.
 
-**Question, remark or finding?** `ask` when you need a decision or a fact before going on.
+**Question, remark or finding?** `ask` (a discussion) when you need a decision or a fact from a human before going on.
 A `remark` (through `add_entry`) when finished work of *another* task came out wrong for
 you. A `finding` for anything you observe about your own task.
 
