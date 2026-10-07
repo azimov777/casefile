@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   caseHref,
   areaHref,
+  discussionHref,
+  ownerRefHref,
   projectHref,
   readEntryNo,
   splitAreaAddress,
@@ -82,6 +84,32 @@ describe('ссылки на задачи в тексте', () => {
   it('ведёт на карточку, а на запись — с её номером', () => {
     expect(taskRefHref({ key: 'DEMO-2', entryNo: null })).toBe('/tasks/DEMO-2');
     expect(taskRefHref({ key: 'DEMO-6', entryNo: 4 })).toBe('/tasks/DEMO-6?entry=4');
+  });
+});
+
+describe('ссылки на обсуждения (TRK-672)', () => {
+  it('`TRK~7` и `TRK~7#3` в тексте ведут на страницу обсуждения', () => {
+    expect(splitTaskRefs('см. TRK~7 и TRK~7#3, а также TRK-42')).toEqual([
+      { kind: 'text', value: 'см. ' },
+      { kind: 'ref', value: 'TRK~7', href: '/discussions/TRK~7' },
+      { kind: 'text', value: ' и ' },
+      { kind: 'ref', value: 'TRK~7#3', href: '/discussions/TRK~7?entry=3' },
+      { kind: 'text', value: ', а также ' },
+      { kind: 'ref', value: 'TRK-42', href: '/tasks/TRK-42' },
+    ]);
+  });
+
+  it('строчная тильда без заглавного ключа ссылкой не становится', () => {
+    expect(splitTaskRefs('путь ~/dir и trk~7')).toEqual([
+      { kind: 'text', value: 'путь ~/dir и trk~7' },
+    ]);
+  });
+
+  it('ключ из заголовка записи ведёт по владельцу: задача или обсуждение', () => {
+    expect(ownerRefHref('TRK-42', 3)).toBe('/tasks/TRK-42?entry=3');
+    expect(ownerRefHref('TRK~7', 3)).toBe('/discussions/TRK~7?entry=3');
+    expect(ownerRefHref('TRK~7', null)).toBe('/discussions/TRK~7');
+    expect(discussionHref('TRK~7')).toBe('/discussions/TRK~7');
   });
 });
 

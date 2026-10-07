@@ -29,6 +29,8 @@ type ProjectDetail = components['schemas']['ProjectDetailRead'];
 type Release = components['schemas']['ReleaseRead'];
 type AreaCard = components['schemas']['AreaRead'];
 type AreaDetail = components['schemas']['AreaDetailRead'];
+type Discussion = components['schemas']['DiscussionRead'];
+type DiscussionDetail = components['schemas']['DiscussionDetailRead'];
 
 /** Ответ-ресурс в оболочке контракта. */
 export function data<T>(payload: T, status = 200) {
@@ -655,4 +657,97 @@ export function areaCard(address: string, overrides: Partial<AreaCard> = {}): Ar
 /** Область одним ответом: карточка и атрибуты (`GET …/areas/{key}`). */
 export function areaDetail(address: string, overrides: Partial<AreaDetail> = {}): AreaDetail {
   return { ...areaCard(address), attributes: [], ...overrides };
+}
+
+/**
+ * Обсуждение в списке (`GET /discussions`, TRK-669): адрес `DEMO~7` раскладывается на ключ
+ * проекта и номер. По умолчанию открытое, ход за человеком, один вопрос без ответа.
+ */
+export function discussion(address: string, overrides: Partial<Discussion> = {}): Discussion {
+  const [projectKey = '', number = '1'] = address.split('~');
+  return {
+    id: '55555555-5555-5555-5555-555555555555',
+    project_key: projectKey,
+    number: Number(number),
+    address,
+    title: 'Сколько хранить дела отменённых задач?',
+    status: 'open',
+    turn: 'human',
+    open_questions: 1,
+    created_by: { kind: 'agent', signature: 'claude' },
+    closed_at: null,
+    ...STAMPS,
+    ...overrides,
+  };
+}
+
+/** Обсуждение для своего экрана: карточка, привязанные задачи и последний итог. */
+export function discussionDetail(
+  address: string,
+  overrides: Partial<DiscussionDetail> = {},
+): DiscussionDetail {
+  return { ...discussion(address), tasks: [], conclusion: null, ...overrides };
+}
+
+/** Запись дела обсуждения: владелец — `discussion`, ключа задачи нет. */
+function discussionEntryBase(address: string, no: number, title: string, body: string) {
+  return {
+    id: `66666666-6666-6666-6666-00000000000${no}`,
+    seq: 200 + no,
+    no,
+    task_key: null,
+    project_key: null,
+    area: null,
+    discussion: address,
+    author: AGENT,
+    title,
+    body,
+    created_at: '2026-09-01T10:00:00Z',
+  };
+}
+
+/** Вопрос агента в обсуждении: блокирующим он не выбирается, но в нагрузке `true`. */
+export function discussionQuestion(
+  address: string,
+  no: number,
+  body = 'Хранение стоит денег.',
+): Entry {
+  return {
+    ...discussionEntryBase(address, no, 'Хранить вечно или год?', body),
+    type: 'question',
+    payload: { addressees: ['owner'], blocking: true },
+  };
+}
+
+/** Ответ человека в обсуждении. */
+export function discussionAnswer(address: string, no: number, questionNo: number): Entry {
+  return {
+    ...discussionEntryBase(address, no, '', 'Храним вечно: дело неизменяемо.'),
+    author: { kind: 'human', signature: 'owner' },
+    type: 'answer',
+    payload: { question_no: questionNo, outcome: 'answered', replaced_by: null },
+  };
+}
+
+/** Заметка человека в обсуждении. */
+export function discussionNote(address: string, no: number, title = 'Уточнение'): Entry {
+  return {
+    ...discussionEntryBase(address, no, title, 'Это касается и архивных проектов.'),
+    author: { kind: 'human', signature: 'owner' },
+    type: 'note',
+    payload: {},
+  };
+}
+
+/** Итог агента: три непустые части. */
+export function discussionConclusion(address: string, no: number) {
+  return {
+    ...discussionEntryBase(address, no, 'Дела хранятся вечно', ''),
+    type: 'conclusion' as const,
+    payload: {
+      decided: `Дела хранятся вечно (${address}#2)`,
+      superseded: 'ничего',
+      open: 'ничего',
+    },
+  };
 }

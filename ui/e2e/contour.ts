@@ -313,7 +313,8 @@ export function side(page: Page): Locator {
  * вопросов в демо-данных.
  */
 export async function shellReady(page: Page): Promise<void> {
-  await expect(side(page).locator('a[href="/questions"] .sr-only')).toBeVisible();
+  // `.first()`: подписей счётчика две, когда ждут и вопросы, и обсуждения (TRK-672).
+  await expect(side(page).locator('a[href="/questions"] .sr-only').first()).toBeVisible();
 }
 
 /**

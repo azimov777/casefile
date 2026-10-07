@@ -36,7 +36,10 @@ export interface IncomingQuestion {
    * Больше ничем один вопрос от другого не отличить — номер уникален внутри задачи.
    */
   id: string;
-  taskKey: string;
+  /** Задача, в деле которой задан вопрос; `null` у вопроса обсуждения. */
+  taskKey: string | null;
+  /** Адрес обсуждения `TRK~7`, в деле которого задан вопрос; `null` у вопроса в деле задачи. */
+  discussion: string | null;
   no: number;
   /** Строка описи записи: то, чем вопрос назван, а не всё его тело. */
   title: string;
@@ -153,16 +156,18 @@ export function useLiveJournal(): LiveJournal {
 
       if (frame.entry.type !== 'question') return;
       // Вопрос интересен человеку, только если спросили его самого. Вопросов в деле
-      // проекта не бывает (TRK-156), а вопрос обсуждения (TRK-669) владельцем называет
-      // `discussion`, и `task_key` у него пуст: уведомление о нём — дело экрана обсуждений
-      // (TRK-672), здесь его пропускаем.
+      // проекта не бывает (TRK-156); вопрос обсуждения (TRK-669) владельцем называет
+      // `discussion`, и `task_key` у него пуст — уведомление о нём ведёт на экран
+      // обсуждения (TRK-672).
       const taskKey = frame.entry.task_key;
-      if (taskKey === null) return;
+      const discussion = frame.entry.discussion ?? null;
+      const owner = taskKey ?? discussion;
+      if (owner === null) return;
       const me = queryClient.getQueryData<Bootstrap>(sessionKeys.bootstrap)?.participant?.name;
       if (me === undefined || me === null) return;
       if (!frame.entry.payload.addressees.includes(me)) return;
 
-      const id = `${taskKey}#${frame.entry.no}`;
+      const id = `${owner}#${frame.entry.no}`;
       if (announced.current.has(id)) return;
       announced.current.add(id);
 
@@ -172,6 +177,7 @@ export function useLiveJournal(): LiveJournal {
       const question: IncomingQuestion = {
         id,
         taskKey,
+        discussion,
         no: frame.entry.no,
         title: frame.entry.title,
         blocking: frame.entry.payload.blocking,

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
 import { MessageSquarePlus } from 'lucide-react';
+import { DiscussionRow, taskDiscussionsQueryOptions } from '@/entities/discussion';
 import { EntryBody, EntryIndex, type EntryIndexHandle, type Question } from '@/entities/entry';
 import { CLOSED_STATUSES, TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import {
@@ -128,6 +129,9 @@ export function TaskPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const pkg = useQuery(taskPackageQueryOptions(key));
+  // Обсуждения задачи (TRK-672): пакет преемника их не несёт, список берётся отбором
+  // `task`. Ошибка этого запроса карточку не ломает — блок скажет об отказе сам.
+  const discussions = useInfiniteQuery(taskDiscussionsQueryOptions(key));
   const rights = useProjectRights();
 
   /**
@@ -196,6 +200,7 @@ export function TaskPage() {
   );
 
   const { t } = useTranslation('task');
+  const { t: tDiscussions } = useTranslation('discussions');
   // Кнопка замечания стоит в блоке «Замечания», а подпись у неё та же, что у формы:
   // действие одно, и называться двумя фразами оно не должно.
   const { t: brick } = useTranslation('ui');
@@ -391,6 +396,14 @@ export function TaskPage() {
     });
   }
 
+  /*
+   * Обсуждения задачи (TRK-672, `TRK#51`, п. 8): адрес, название и чей ход. Вопросы
+   * человеку живут там, а не в деле задачи, поэтому блок есть на карточке; стоит он в
+   * правой колонке над заданием, а не в левой рядом с вопросами: ещё один пустой ряд в
+   * левой колонке вытолкнул бы начало описи за первый экран (`e2e/layout.spec.ts`).
+   */
+  const taskDiscussions = discussions.data?.pages.flatMap((page) => page.items) ?? [];
+
   // Последняя запись всего дела: опись приходит пакетом задачи целиком, поэтому это
   // именно последняя, а не последняя из подгруженных (`docs/FRONTEND.md`).
   const lastEntryNo = index.at(-1)?.no ?? null;
@@ -539,6 +552,34 @@ export function TaskPage() {
         </div>
 
         <div className="flex flex-col gap-4 min-w-0 card:col-start-2 card:row-start-2">
+          {taskDiscussions.length === 0 ? (
+            <div className={block({ kind: 'empty' })}>
+              <div className={EMPTY_ROW}>
+                <h2 className={blockTitle({ kind: 'empty' })} id="discussions">
+                  {tDiscussions('taskBlock.title')}
+                </h2>
+                <p className={EMPTY}>
+                  {discussions.isPending
+                    ? tDiscussions('taskBlock.loading')
+                    : tDiscussions('taskBlock.none')}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <section className={block()} aria-labelledby="discussions">
+              <h2 className={blockTitle()} id="discussions">
+                {tDiscussions('taskBlock.title')}
+              </h2>
+              <ul className={NOTICE_LIST}>
+                {taskDiscussions.map((discussion) => (
+                  <li key={discussion.address}>
+                    <DiscussionRow discussion={discussion} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <section className={block()} aria-labelledby="sections">
             <h2 className={blockTitle()} id="sections">
               {t('assignment')}

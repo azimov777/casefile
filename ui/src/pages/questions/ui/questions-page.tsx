@@ -36,6 +36,7 @@ import {
   SegmentedNavLink,
 } from '@/shared/ui';
 import { taskRefHref } from '@/shared/lib';
+import { DiscussionsHistory, DiscussionsInbox } from './discussion-sections';
 
 /**
  * Экран вопросов: входящая первым экраном, история вопросов — вторым уровнем.
@@ -177,6 +178,10 @@ function Inbox() {
         <p className="text-meta text-faint">{t('projectNote')}</p>
       </form>
 
+      {/* Обсуждения, ждущие человека, — первым разделом (TRK-672, `TRK#51`, п. 8): ради них
+          входящая и открывается. Остальное — прежние вопросы в делах и то, что осталось. */}
+      <DiscussionsInbox project={project} />
+
       {/*
        * Два списка рядом (решение Д16): на 1440 половина экрана перестаёт пустовать,
        * а вопросы и замечания перестают выглядеть продолжением друг друга. На узком
@@ -243,6 +248,7 @@ function Inbox() {
           <h2 className="text-screen" id="questions-section">
             {t('questionsTitle')}
           </h2>
+          <p className="m-0 text-meta text-muted">{t('questionsIntro')}</p>
 
           {/*
            * Флажок принадлежит вопросам и стоит у них: блокирующих замечаний не бывает,
@@ -660,6 +666,8 @@ function QuestionHistory() {
           {t('onlyMine')}
         </label>
       </form>
+
+      <DiscussionsHistory project={project} />
 
       {/* Заголовок раздела нужен не глазу, а уровням: строки истории — `h3`, и без
           `h2` между ними и `h1` дерево заголовков пропускало бы уровень (`axe`). */}

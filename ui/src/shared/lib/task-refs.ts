@@ -34,9 +34,14 @@ export type TextPart =
  * 3.7): ключ проекта, косая черта, ключ области по образцу бэкенда
  * (`../app/domain/areas.py`, `AREA_KEY_PATTERN`) и номер. Адрес области без
  * номера (`TRK/promotion`) ссылкой не становится: `API/v1` в прозе — путь, а не область.
+ *
+ * Четвёртая ветка — обсуждение `TRK~7` и его запись `TRK~7#3` (TRK-669, TRK-672,
+ * решение `TRK#51`): тильда не встречается ни в ключе задачи, ни в адресе проекта или
+ * области, поэтому с ними адрес обсуждения не путается. Обсуждение ссылкой становится и
+ * без номера записи — у него, в отличие от проекта, своя страница.
  */
 const TASK_REF =
-  /\b([A-Z][A-Z0-9]{1,15})(?:-(\d+)(?:#(\d+))?|#(\d+)|\/([a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?)#(\d+))\b/g;
+  /\b([A-Z][A-Z0-9]{1,15})(?:-(\d+)(?:#(\d+))?|#(\d+)|\/([a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?)#(\d+)|~(\d+)(?:#(\d+))?)\b/g;
 
 /** Разбирает строку на обычный текст и ссылки, сохраняя порядок и исходное написание. */
 export function splitTaskRefs(text: string): TextPart[] {
@@ -47,19 +52,22 @@ export function splitTaskRefs(text: string): TextPart[] {
     const at = match.index;
     if (at > last) parts.push({ kind: 'text', value: text.slice(last, at) });
 
-    const [value, project = '', number, entry, projectEntry, area, areaEntry] = match;
+    const [value, project = '', number, entry, projectEntry, area, areaEntry, discussion, post] =
+      match;
     parts.push({
       kind: 'ref',
       value,
       href:
-        area !== undefined
-          ? areaHref(`${project}/${area}`, Number(areaEntry))
-          : number === undefined
-            ? projectHref(project, Number(projectEntry))
-            : taskRefHref({
-                key: `${project}-${number}`,
-                entryNo: entry === undefined ? null : Number(entry),
-              }),
+        discussion !== undefined
+          ? discussionHref(`${project}~${discussion}`, post === undefined ? null : Number(post))
+          : area !== undefined
+            ? areaHref(`${project}/${area}`, Number(areaEntry))
+            : number === undefined
+              ? projectHref(project, Number(projectEntry))
+              : taskRefHref({
+                  key: `${project}-${number}`,
+                  entryNo: entry === undefined ? null : Number(entry),
+                }),
     });
     last = at + value.length;
   }
@@ -111,6 +119,25 @@ export function areaHref(address: string, entryNo: number | null = null): string
   const { projectKey, areaKey } = splitAreaAddress(address);
   const path = `/projects/${projectKey}/areas/${areaKey}`;
   return entryNo === null ? path : `${path}?entry=${entryNo}`;
+}
+
+/**
+ * Адрес страницы обсуждения по адресу `TRK~7` (TRK-672); с номером записи — страница с
+ * раскрытой записью его дела, тем же параметром `entry`, что у задачи, проекта и области.
+ * Тильда в сегменте пути законна и экранирования не требует.
+ */
+export function discussionHref(address: string, entryNo: number | null = null): string {
+  const path = `/discussions/${address}`;
+  return entryNo === null ? path : `${path}?entry=${entryNo}`;
+}
+
+/**
+ * Куда ведёт ключ из заголовка записи: задача `TRK-42` или обсуждение `TRK~7`. Заголовок
+ * ответа и записи в деле обсуждения называют вопрос ключом владельца дела, а владелец у
+ * дела бывает и обсуждением.
+ */
+export function ownerRefHref(key: string, entryNo: number | null): string {
+  return key.includes('~') ? discussionHref(key, entryNo) : taskRefHref({ key, entryNo });
 }
 
 /**

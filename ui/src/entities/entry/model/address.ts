@@ -1,4 +1,4 @@
-import { areaHref } from '@/shared/lib';
+import { areaHref, discussionHref } from '@/shared/lib';
 import type { EntryOwner } from './owner';
 
 /**
@@ -19,7 +19,9 @@ export function entryAddress(owner: EntryOwner, no: number, origin: string): str
   const path =
     owner.kind === 'area'
       ? areaHref(owner.key)
-      : `/${owner.kind === 'task' ? 'tasks' : 'projects'}/${encodeURIComponent(owner.key)}`;
+      : owner.kind === 'discussion'
+        ? discussionHref(owner.key)
+        : `/${owner.kind === 'task' ? 'tasks' : 'projects'}/${encodeURIComponent(owner.key)}`;
   const url = new URL(path, origin);
   url.searchParams.set('entry', String(no));
   return url.href;
