@@ -293,4 +293,4 @@
 **Как правильно:** адрес записи — непустой ключ владельца и `no`: `TRK-42#3`, `TRK#7` или
 `TRK/promotion#3`.
 **Где:** `app/db/repositories/entries.py`, `journal_page`; `app/services/journal.py`,
-`JournalEntry`; `tests/test_areas.py`, `test_the_journal_names_a_area_entry_by_its_address`.
+`JournalEntry`; `tests/test_areas.py`, `test_the_journal_names_an_area_entry_by_its_address`.
