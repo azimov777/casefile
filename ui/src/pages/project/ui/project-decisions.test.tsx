@@ -2,12 +2,19 @@ import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { API, bootstrap, collection, data, projectDetail } from '@testing/msw/responses';
+import {
+  API,
+  bootstrap,
+  collection,
+  data,
+  entryOfType,
+  projectDetail,
+} from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import type { ProjectDecision } from '@/entities/project';
-import { setToken } from '@/shared/api';
+import { setToken, type components } from '@/shared/api';
 
 const CREATED = '2026-09-01T10:00:00Z';
 
@@ -55,7 +62,7 @@ describe('решения проекта на экране проекта', () =>
   it('действующее — сверху со статусом, заменённое свёрнуто вместе с тем, что его заменило', async () => {
     const user = userEvent.setup();
     serve(DECISIONS);
-    renderApp('/projects/DEMO');
+    renderApp('/projects/DEMO?tab=decisions');
 
     const region = await screen.findByRole('region', { name: say.project('decisions.title') });
     const inForce = within(region).getByRole('list', { name: say.project('decisions.inForce') });
@@ -103,20 +110,43 @@ describe('решения проекта на экране проекта', () =>
     expect(target.searchParams.has('archive')).toBe(true);
   });
 
-  it('ссылка решения раскрывает его запись в деле проекта, не трогая остальной адрес', async () => {
+  it('ссылка решения открывает «Дело» с раскрытой записью — тем же адресом, что `DEMO#8`', async () => {
     const user = userEvent.setup();
     serve(DECISIONS);
-    renderApp('/projects/DEMO?attribute=repo');
+    const record = {
+      ...entryOfType(8, 'DEMO', 'decision'),
+      task_key: null,
+      project_key: 'DEMO',
+      title: 'Ветки задач сливаются в main скриптом',
+      body: 'Скрипт прогоняет оба набора.',
+    } as components['schemas']['EntryRead'];
+    server.use(
+      http.get(`${API}/api/v1/projects/DEMO/entries`, () => collection([record])),
+      http.get(`${API}/api/v1/projects/DEMO/entries/8`, () => data(record)),
+    );
+    renderApp('/projects/DEMO?tab=decisions');
 
     const region = await screen.findByRole('region', { name: say.project('decisions.title') });
     await user.click(within(region).getAllByRole('link', { name: 'DEMO#8' })[0] as HTMLElement);
 
-    expect(address.current).toBe('/projects/DEMO?attribute=repo&entry=8');
+    // Вкладка решений снята: запись сама открывает «Дело» — тот же адрес, что у ссылки
+    // `DEMO#8` из любого другого места.
+    expect(address.current).toBe('/projects/DEMO?entry=8');
+    expect(
+      within(screen.getByRole('navigation', { name: say.project('tabs.label') })).getByRole(
+        'link',
+        { name: say.project('tabs.case') },
+      ),
+    ).toHaveAttribute('aria-current', 'true');
+    expect(await screen.findByText('Скрипт прогоняет оба набора.')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Ветки задач сливаются в main скриптом/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('пустое состояние сказано словами', async () => {
     serve([]);
-    renderApp('/projects/DEMO');
+    renderApp('/projects/DEMO?tab=decisions');
 
     const region = await screen.findByRole('region', { name: say.project('decisions.title') });
     expect(region).toHaveTextContent(say.project('decisions.none'));
@@ -128,7 +158,7 @@ describe('решения проекта на экране проекта', () =>
       decision(3, { status: 'superseded', superseded_by: 4 }),
       decision(4, { status: 'superseded', superseded_by: 6 }),
     ]);
-    renderApp('/projects/DEMO');
+    renderApp('/projects/DEMO?tab=decisions');
 
     const region = await screen.findByRole('region', { name: say.project('decisions.title') });
     expect(region).toHaveTextContent(say.project('decisions.noneInForce'));

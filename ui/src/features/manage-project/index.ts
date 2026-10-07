@@ -1,8 +1,10 @@
 export type { Holder } from './api/projects';
+export type { HolderKind, HolderTab } from './model/holder-tab';
 export { useProjectRights, type ProjectRights } from './model/rights';
-export { ProjectArchiving } from './ui/archive-project';
+export { useHolderAddress } from './model/use-holder-address';
 export { AttributesSection } from './ui/attributes-section';
 export { CaseSection } from './ui/case-section';
 export { CreateProject } from './ui/create-project';
 export { CreateDirection, DirectionArchiving, EditDirection } from './ui/direction-dialogs';
-export { EditProject } from './ui/edit-project';
+export { DirectionMenu, ProjectMenu } from './ui/holder-menu';
+export { HOLDER_SCREEN, HolderScreen, type HolderTabLink } from './ui/holder-screen';

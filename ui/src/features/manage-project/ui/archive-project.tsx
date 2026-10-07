@@ -1,6 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Archive, ArchiveRestore } from 'lucide-react';
 import { errorMessage } from '@/shared/errors';
 import { Button, Callout, Dialog } from '@/shared/ui';
 import { useArchiveProject, useRestoreProject } from '../model/use-project-actions';
@@ -12,18 +11,19 @@ import { ReasonField } from './reason-field';
  * и говорит почему: причина уезжает в запись `archived` или `restored` дела проекта, и
  * это единственный след того, зачем проект замораживали.
  *
- * Показывать кнопку или нет, решает место вызова — по набору ключа (`main`) и по
- * `archived_at` из контракта: окно само не знает ни прав, ни состояния проекта.
+ * Открывать окно или нет, решает место вызова — по `archived_at` из контракта: окно само
+ * не знает ни прав, ни состояния проекта.
  */
 
 type Direction = 'archive' | 'restore';
 
 /**
- * Кнопка «В архив» у активного проекта и «Восстановить» у архивного — одна кнопка, чья
- * подпись следует за `archived_at`. Одна, а не две в разных местах: после удачного
- * архива окно закрывается, фокус возвращается на кнопку, и только потом перечитанная
- * карточка меняет её подпись. Будь это две кнопки, первая исчезла бы вместе с фокусом, и
- * человек с клавиатуры начинал бы страницу сначала.
+ * Окно «В архив» у активного проекта и «Восстановить» у архивного — одно окно, чей
+ * вопрос следует за `archived_at`. Своей кнопки у окна нет: его открывает пункт меню «⋯»
+ * в шапке экрана (`ProjectMenu`, TRK-618), и после закрытия фокус возвращается на «⋯»
+ * (`returnFocus`) — кнопку, которая переживает и архив, и восстановление: перечитанная
+ * карточка меняет пункты меню, а не саму кнопку, и человек с клавиатуры не начинает
+ * страницу сначала.
  *
  * Архив спрашивает ролью `alertdialog`: он замораживает проект и все его задачи — агенты
  * получат отказ на любое изменение, — и окно спрашивает об этом до, а не после.
@@ -31,31 +31,34 @@ type Direction = 'archive' | 'restore';
 export function ProjectArchiving({
   projectKey,
   archived,
+  open,
+  onOpenChange,
+  returnFocus,
 }: {
   projectKey: string;
   archived: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  returnFocus: RefObject<HTMLElement | null>;
 }) {
   const direction: Direction = archived ? 'restore' : 'archive';
-  const [open, setOpen] = useState(false);
   const { t } = useTranslation('project');
-  const Icon = direction === 'archive' ? Archive : ArchiveRestore;
 
   return (
     <Dialog
       alert={direction === 'archive'}
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={onOpenChange}
       title={t(`${direction}.title`, { key: projectKey })}
       description={t(`${direction}.intro`)}
       closeLabel={t('close')}
-      trigger={
-        <Button tone="quiet" size="sm">
-          <Icon className="size-(--ui-mark)" aria-hidden="true" />
-          {t(`${direction}.open`)}
-        </Button>
-      }
+      returnFocus={returnFocus}
     >
-      <ArchivingForm projectKey={projectKey} direction={direction} onDone={() => setOpen(false)} />
+      <ArchivingForm
+        projectKey={projectKey}
+        direction={direction}
+        onDone={() => onOpenChange(false)}
+      />
     </Dialog>
   );
 }

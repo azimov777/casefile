@@ -1,6 +1,5 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pencil } from 'lucide-react';
 import { descriptionTooLong, type ProjectDetail } from '@/entities/project';
 import { complainsAbout, errorMessage } from '@/shared/errors';
 import { Button, Callout, Dialog, Input } from '@/shared/ui';
@@ -8,28 +7,35 @@ import { useUpdateProject } from '../model/use-project-actions';
 import { DescriptionField } from './description-field';
 
 /**
- * Кнопка «Изменить» у карточки проекта и её окно: название и описание (`UI-175`).
- * Ключа в окне нет вовсе: он неизменяем, и поле, которое нельзя править, — шум.
+ * Окно «Изменить» проекта: название и описание (`UI-175`). Ключа в окне нет вовсе: он
+ * неизменяем, и поле, которое нельзя править, — шум.
+ *
+ * Своей кнопки у окна нет: его открывает пункт меню «⋯» в шапке экрана (`ProjectMenu`,
+ * TRK-618), и после закрытия фокус возвращается на «⋯» (`returnFocus`).
  */
-export function EditProject({ project }: { project: ProjectDetail }) {
-  const [open, setOpen] = useState(false);
+export function EditProject({
+  project,
+  open,
+  onOpenChange,
+  returnFocus,
+}: {
+  project: ProjectDetail;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  returnFocus: RefObject<HTMLElement | null>;
+}) {
   const { t } = useTranslation('project');
 
   return (
     <Dialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={onOpenChange}
       title={t('edit.title', { key: project.key })}
       description={t('edit.intro')}
       closeLabel={t('close')}
-      trigger={
-        <Button tone="quiet" size="sm">
-          <Pencil className="size-(--ui-mark)" aria-hidden="true" />
-          {t('edit.open')}
-        </Button>
-      }
+      returnFocus={returnFocus}
     >
-      <EditProjectForm project={project} onDone={() => setOpen(false)} />
+      <EditProjectForm project={project} onDone={() => onOpenChange(false)} />
     </Dialog>
   );
 }

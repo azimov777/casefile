@@ -14,6 +14,7 @@ import {
 } from '@/entities/entry';
 import { Button, QueryState } from '@/shared/ui';
 import type { Holder } from '../api/projects';
+import { keepCaseTab } from '../model/holder-tab';
 import { EntryForm } from './entry-form';
 
 /** Блок-список: без своих полей, строки описи идут до краёв поверхности. */
@@ -84,7 +85,9 @@ export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSect
         const updated = new URLSearchParams(current);
         updated.delete('type');
         for (const type of next) updated.append('type', type);
-        return updated;
+        // Отбор — правка открытой вкладки «Дело», а не уход с неё (TRK-618): если
+        // без него правило адреса открыло бы другую вкладку, в адрес встаёт `tab=case`.
+        return keepCaseTab(updated, holder.kind);
       },
       { replace: true },
     );

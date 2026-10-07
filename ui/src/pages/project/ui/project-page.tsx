@@ -1,103 +1,58 @@
-import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams, useSearchParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { projectQueryOptions } from '@/entities/project';
 import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import {
   AttributesSection,
   CaseSection,
-  EditProject,
-  ProjectArchiving,
+  HOLDER_SCREEN,
+  HolderScreen,
+  ProjectMenu,
+  useHolderAddress,
   useProjectRights,
+  type HolderTabLink,
 } from '@/features/manage-project';
 import { tasksHref } from '@/features/task-filters';
 import { ApiError } from '@/shared/api';
 import { useLanguage } from '@/shared/i18n';
-import { exactTime, readEntryNo } from '@/shared/lib';
-import { Callout, Markdown, QueryState } from '@/shared/ui';
+import { exactTime } from '@/shared/lib';
+import { Callout, QueryState } from '@/shared/ui';
 import { ProjectDecisions } from './project-decisions';
 import { ProjectDirections } from './project-directions';
-
-/** Колонка экрана: та же ширина и тот же шаг, что у карточки задачи. */
-const SCREEN = 'flex max-w-(--ui-page-max) flex-col gap-4';
+import { ProjectOverview } from './project-overview';
 
 /**
- * Экран проекта на чтение (UI-174, `docs/CONCEPT.md`, 3): карточка — ключ, название,
- * описание, — атрибуты с историей по клику, направления проекта (TRK-557), решения
- * проекта со статусом (TRK-554) и опись дела проекта с телами по клику.
+ * Экран проекта (UI-174; раскладка вкладками — TRK-618, решение проекта TRK#46): шапка —
+ * ключ, название, описание, «Задачи проекта», меню «⋯», — и вкладки «Обзор», «Решения»,
+ * «Атрибуты», «Направления», «Дело» под ней. Каркас общий со страницей направления
+ * (`HolderScreen`).
  *
- * Всё состояние — в адресе: `?entry=N` называет раскрытую запись дела, `?attribute=имя`
- * — атрибут, чья история открыта. Ссылку можно переслать, перезагрузка возвращает тот
- * же экран.
+ * Всё состояние — в адресе (`useHolderAddress`): `?tab=` называет вкладку, `?entry=N` —
+ * раскрытую запись дела, `?attribute=имя` — атрибут, чья история открыта. Без `tab`
+ * запись открывает «Дело», атрибут — «Атрибуты»: так ссылки `TRK#7`, квитанции и строка
+ * «Решения» карточки задачи доходят до записи без правки построителей ссылок.
  *
- * Действия с проектом (`UI-175`) стоят там, где лежит то, что они меняют: «Изменить»
- * — у карточки, «Добавить атрибут», «Изменить» и «Снять» — у атрибутов, «Написать
- * заметку» — у дела. Видны они, когда сеанс известен (`useProjectRights`): наборов токена нет,
- * запись открыта всем.
+ * Действия с проектом (`UI-175`): «Изменить» и «В архив» — в меню «⋯» шапки, «Добавить
+ * атрибут», «Изменить» и «Снять» — у атрибутов, «Написать заметку» — у дела. Видны они,
+ * когда сеанс известен (`useProjectRights`): наборов токена нет, запись открыта всем.
  *
  * Архивный проект (`UI-176`, `archived_at` из контракта) только читается: правки
  * карточки, атрибутов и заметки на нём нет вовсе, а не «есть и кончается отказом
- * `project_archived`». Вместо них — плашка «в архиве с …», а кнопка «В архив» набора
- * `main` становится «Восстановить» на том же месте (`ProjectArchiving`).
+ * `project_archived`». Вместо них — плашка «в архиве с …», а в меню «⋯» остаётся одно
+ * «Восстановить».
  */
 export function ProjectPage() {
   const { key = '' } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
   const project = useQuery(projectQueryOptions(key));
   const rights = useProjectRights();
+  const address = useHolderAddress('project');
   const { language } = useLanguage();
   const { t } = useTranslation('project');
 
-  const openAt = readEntryNo(searchParams.get('entry'));
-  const attribute = searchParams.get('attribute');
-
-  /**
-   * Правка одного параметра адреса, остальные — как были. `replace`, а не новая
-   * запись истории: раскрытие записи или атрибута — не «страница», и «назад» после
-   * трёх кликов ведёт туда, откуда человек пришёл, а не сворачивает их по одному
-   * (то же правило, что у карточки задачи, `task-page.tsx`, `rememberOpen`).
-   */
-  const remember = useCallback(
-    (name: 'entry' | 'attribute', value: string | null) => {
-      setSearchParams(
-        (current) => {
-          const updated = new URLSearchParams(current);
-          if (value === null) updated.delete(name);
-          else updated.set(name, value);
-          return updated;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
-
-  const rememberEntry = useCallback(
-    (no: number | null) => remember('entry', no === null ? null : String(no)),
-    [remember],
-  );
-  const rememberAttribute = useCallback(
-    (name: string | null) => remember('attribute', name),
-    [remember],
-  );
-
-  /**
-   * Адрес этого экрана с раскрытой записью дела — ссылка решения ведёт к его тексту в
-   * описи ниже. Остальное состояние адреса (открытый атрибут) остаётся как было.
-   */
-  const entryHref = useCallback(
-    (no: number) => {
-      const updated = new URLSearchParams(searchParams);
-      updated.set('entry', String(no));
-      return `?${updated.toString()}`;
-    },
-    [searchParams],
-  );
-
   if (project.error instanceof ApiError && project.error.code === 'project_not_found') {
     return (
-      <main className={SCREEN}>
+      <main className={HOLDER_SCREEN}>
         <h1 className="text-title">{t('missingTitle', { key })}</h1>
         <Callout>{t('missingText')}</Callout>
         <Link to="/tasks">{t('backToList')}</Link>
@@ -107,7 +62,7 @@ export function ProjectPage() {
 
   if (project.data === undefined) {
     return (
-      <main className={SCREEN}>
+      <main className={HOLDER_SCREEN}>
         <QueryState query={project} loading={t('loading', { key })} />
       </main>
     );
@@ -118,86 +73,87 @@ export function ProjectPage() {
   const archivedAt = card.archived_at ?? null;
   const frozen = archivedAt !== null;
   const canWrite = rights.write && !frozen;
+  const holder = { kind: 'project', key: card.key } as const;
+
+  // Числа вкладок — из карточки проекта, без своих запросов: действующие решения
+  // (статус считает бэкенд), атрибуты и активные направления. У дела числа нет:
+  // `meta.total` у дела проекта не считается.
+  const tabs: HolderTabLink[] = [
+    { tab: 'overview', label: t('tabs.overview') },
+    {
+      tab: 'decisions',
+      label: t('tabs.decisions'),
+      count: card.decisions.filter((decision) => decision.status === 'in_force').length,
+    },
+    { tab: 'attributes', label: t('tabs.attributes'), count: card.attributes.length },
+    { tab: 'directions', label: t('tabs.directions'), count: card.directions.length },
+    { tab: 'case', label: t('tabs.case') },
+  ];
 
   return (
-    <main className={SCREEN}>
-      {/* Пояснение экрана — первым блоком (TRK-363). У архивного проекта его нет: текст
-          называет правку и заметки, а они там закрыты. */}
-      {frozen ? null : (
-        <ExplanationPanel hintKey={HINT_KEYS.project}>{t('explanation.body')}</ExplanationPanel>
-      )}
-
-      <header className="flex flex-col gap-2">
-        <p className="text-label font-semibold tracking-caps text-faint uppercase">{t('kicker')}</p>
-        {/* Ключ — идентификатор контракта, моноширинным; название пишет агент или
-            человек, и оно переносится где угодно: длину чужой строки интерфейс не
-            выбирает, а горизонтальной прокрутки на телефоне быть не должно. */}
-        <h1 className="flex flex-wrap items-baseline gap-x-3 text-title wrap-anywhere">
-          <span className="font-mono">{card.key}</span>
-          <span>{card.title}</span>
-        </h1>
-        {/* Описание — короткое «что это» (до 320 знаков, `../docs/CONCEPT.md`, 3.2), в
-            markdown, как и всё, что пишут агенты. Пустое — сказано словами. */}
-        {card.description.trim() === '' ? (
-          <p className="text-muted italic">{t('noDescription')}</p>
-        ) : (
-          <div className="max-w-(--ui-text-max)">
-            <Markdown>{card.description}</Markdown>
-          </div>
-        )}
-        {/* Задачи проекта — тот же адрес, что у строки проекта в панели. Правка карточки
-            стоит в той же строке: она меняет то, что написано прямо над ней. */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <Link to={tasksHref('', { project: card.key })}>{t('tasks')}</Link>
-          {rights.manage && !frozen ? <EditProject project={card} /> : null}
-          {rights.manage ? <ProjectArchiving projectKey={card.key} archived={frozen} /> : null}
-        </div>
-        {/* Архив сказан словами под карточкой, а не одним цветом: почему на экране нет
-            ни одной кнопки правки, человек читает здесь же. */}
-        {frozen ? (
+    <HolderScreen
+      // Пояснение экрана — первым блоком (TRK-363). У архивного проекта его нет: текст
+      // называет правку и заметки, а они там закрыты.
+      explanation={
+        frozen ? null : (
+          <ExplanationPanel hintKey={HINT_KEYS.project}>{t('explanation.body')}</ExplanationPanel>
+        )
+      }
+      kicker={t('kicker')}
+      code={card.key}
+      title={card.title}
+      description={card.description}
+      noDescription={t('noDescription')}
+      links={<Link to={tasksHref('', { project: card.key })}>{t('tasks')}</Link>}
+      menu={rights.manage ? <ProjectMenu project={card} archived={frozen} /> : null}
+      notice={
+        // Архив сказан словами под шапкой, а не одним цветом: почему на экране нет ни
+        // одной кнопки правки, человек читает здесь же.
+        frozen ? (
           <Callout>
             {t(rights.manage ? 'archived.notice' : 'archived.noticeReadOnly', {
               when: exactTime(archivedAt, language),
             })}
           </Callout>
-        ) : null}
-      </header>
-
-      {/*
-       * Две колонки на точке `card`, как у карточки задачи, и каждая своим потоком.
-       * Атрибуты стоят первыми в разметке: это то, что о проекте верно сейчас, и на
-       * узком экране они встают над делом, а не за ним. Доли 2:3 — атрибуты это
-       * короткие пары «имя → значение», дело — таблица описи.
-       */}
-      <div className="flex flex-col gap-4 card:flex-row card:items-start">
-        <div className="flex flex-col gap-4 card:min-w-0 card:flex-[2_1_0]">
-          <AttributesSection
-            holder={{ kind: 'project', key: card.key }}
-            attributes={card.attributes}
-            canWrite={canWrite}
-            open={attribute}
-            onOpenChange={rememberAttribute}
-          />
-          {/* Направления — под атрибутами: части работы проекта без конца, каждая со своей
-              страницей (TRK-557). Над решениями: это места, куда из проекта переходят. */}
-          <ProjectDirections projectKey={card.key} canWrite={canWrite} />
-          {/* Решения — под атрибутами: тоже то, что о проекте верно сейчас, и на узком
-              экране они встают над делом, где лежит их текст (TRK-554). */}
-          <ProjectDecisions
-            projectKey={card.key}
-            decisions={card.decisions}
-            entryHref={entryHref}
-          />
-        </div>
-        <div className="flex flex-col gap-4 card:min-w-0 card:flex-[3_1_0]">
-          <CaseSection
-            holder={{ kind: 'project', key: card.key }}
-            canWrite={canWrite}
-            openAt={openAt}
-            onOpenChange={rememberEntry}
-          />
-        </div>
-      </div>
-    </main>
+        ) : null
+      }
+      tabsLabel={t('tabs.label')}
+      tabs={tabs}
+      current={address.tab}
+      tabHref={address.tabHref}
+    >
+      {address.tab === 'decisions' ? (
+        <ProjectDecisions
+          projectKey={card.key}
+          decisions={card.decisions}
+          entryHref={address.entryHref}
+        />
+      ) : address.tab === 'attributes' ? (
+        <AttributesSection
+          holder={holder}
+          attributes={card.attributes}
+          canWrite={canWrite}
+          open={address.attribute}
+          onOpenChange={address.rememberAttribute}
+        />
+      ) : address.tab === 'directions' ? (
+        <ProjectDirections projectKey={card.key} canWrite={canWrite} />
+      ) : address.tab === 'case' ? (
+        <CaseSection
+          holder={holder}
+          canWrite={canWrite}
+          openAt={address.openAt}
+          onOpenChange={address.rememberEntry}
+        />
+      ) : (
+        <ProjectOverview
+          projectKey={card.key}
+          directions={card.directions}
+          decisions={card.decisions}
+          entryHref={address.entryHref}
+          tabHref={address.tabHref}
+        />
+      )}
+    </HolderScreen>
   );
 }

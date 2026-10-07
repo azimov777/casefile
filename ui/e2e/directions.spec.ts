@@ -80,9 +80,9 @@ test('направление заводится на экране проекта
 }) => {
   const { chosen, other } = await seed(request);
 
-  // 1. Завести направление на экране проекта.
-  await page.goto(`/projects/${KEY}`);
-  const section = page.getByRole('region', { name: 'Направления' });
+  // 1. Завести направление на экране проекта, вкладка «Направления».
+  await page.goto(`/projects/${KEY}?tab=directions`);
+  const section = page.getByRole('region', { name: 'Направления', exact: true });
   await expect(section.getByText('Направлений у проекта пока нет.')).toBeVisible();
   await section.getByRole('button', { name: 'Новое направление' }).click();
   const create = page.getByRole('dialog', { name: `Новое направление в ${KEY}` });
@@ -95,8 +95,15 @@ test('направление заводится на экране проекта
   await expect(page).toHaveURL(new RegExp(`/projects/${KEY}/directions/promo$`));
   await expect(page.getByRole('heading', { level: 1 })).toContainText(ADDRESS);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(DIRECTION_TITLE);
-  await page.goto(`/projects/${KEY}`);
+  await page.goto(`/projects/${KEY}?tab=directions`);
   await expect(section.getByText(ADDRESS, { exact: true })).toBeVisible();
+  // «Обзор» называет его тоже: название ссылкой на страницу и адрес.
+  await page.goto(`/projects/${KEY}`);
+  const overview = page.locator(`li[data-overview-direction="${ADDRESS}"]`);
+  await expect(overview.getByRole('link', { name: new RegExp(DIRECTION_TITLE) })).toHaveAttribute(
+    'href',
+    `/projects/${KEY}/directions/promo`,
+  );
 
   // 2. Поставить его задаче в карточке — там же, где приоритет.
   await page.goto(`/tasks/${chosen}`);
@@ -164,7 +171,10 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 390, height: 844 });
 
     const pages = [
-      { path: `/projects/${KEY}`, ready: page.getByRole('region', { name: 'Направления' }) },
+      {
+        path: `/projects/${KEY}?tab=directions`,
+        ready: page.getByRole('region', { name: 'Направления', exact: true }),
+      },
       {
         path: `/projects/${KEY}/directions/measure`,
         ready: page.getByRole('region', { name: 'Дело направления' }),
@@ -209,7 +219,7 @@ test('атрибут направления: «Изменить» и «Снят�
   await api(request, 'put', `/api/v1/projects/${KEY}/directions/history/attributes/channel`, {
     value: 'reddit',
   });
-  await page.goto(`/projects/${KEY}/directions/history`);
+  await page.goto(`/projects/${KEY}/directions/history?tab=attributes`);
   const attributes = page.getByRole('region', { name: 'Атрибуты' });
   await expect(attributes.getByText('reddit')).toBeVisible();
 

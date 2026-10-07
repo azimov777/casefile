@@ -168,4 +168,33 @@ export const project = {
     submit: 'Восстановить проект',
     pending: 'Восстанавливаем…',
   },
+
+  /** Меню «⋯» в шапке экрана проекта (TRK-618): «Изменить», «В архив», «Восстановить». */
+  menu: {
+    label: 'Действия с проектом {{key}}',
+  },
+
+  /** Вкладки экрана проекта (TRK-618, решение TRK#46): `?tab=`, «Обзор» — без параметра. */
+  tabs: {
+    label: 'Разделы проекта',
+    overview: 'Обзор',
+    decisions: 'Решения',
+    attributes: 'Атрибуты',
+    directions: 'Направления',
+    case: 'Дело',
+  },
+
+  /** Вкладка «Обзор» (TRK-618): направления, последние решения и последнее в деле. */
+  overview: {
+    directions: 'Направления',
+    directionsNone: 'Направлений нет.',
+    decisions: 'Последние решения',
+    allDecisions_one: 'Все {{count, number}} решение',
+    allDecisions_few: 'Все {{count, number}} решения',
+    allDecisions_many: 'Все {{count, number}} решений',
+    allDecisions_other: 'Все {{count, number}} решения',
+    case: 'Последнее в деле',
+    caseNone: 'Дело пусто.',
+    allCase: 'Всё дело',
+  },
 } as const;
