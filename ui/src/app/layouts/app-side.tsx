@@ -7,6 +7,7 @@ import {
   Inbox,
   Info,
   KeyRound,
+  MessagesSquare,
   Plug,
   TriangleAlert,
   UserRound,
@@ -257,6 +258,20 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
                 {t('app.openQuestions', { count: bootstrap.data.open_questions })}
               </span>
               <span aria-hidden="true">{bootstrap.data.open_questions}</span>
+            </span>
+          )}
+          {/*
+           * Обсуждения, где ход за человеком (TRK-672): своим знаком рядом с числом вопросов,
+           * по той же причине, что и предупреждения ниже, — сложенное число назвало бы
+           * вопросами то, что ими не является. Число берётся из `bootstrap` как есть.
+           */}
+          {bootstrap.data === undefined || bootstrap.data.open_discussions === 0 ? null : (
+            <span className="inline-flex items-center gap-0.5 font-mono text-mark font-semibold text-attention tabular-nums">
+              <MessagesSquare className="size-(--ui-mark) shrink-0" aria-hidden="true" />
+              <span className="sr-only">
+                {t('app.openDiscussions', { count: bootstrap.data.open_discussions })}
+              </span>
+              <span aria-hidden="true">{bootstrap.data.open_discussions}</span>
             </span>
           )}
           {/*

@@ -9,6 +9,8 @@ export {
 export {
   caseHref,
   areaHref,
+  discussionHref,
+  ownerRefHref,
   projectHref,
   projectOfKey,
   readEntryNo,

@@ -38,7 +38,7 @@ function steps(project: string): { path: string; text: string }[] {
     { path: `/tasks/${project}-`, text: 'Это задание агенту и то, что по нему сделано' },
     { path: `/tasks/${project}-`, text: 'Дело — журнал задачи' },
     { path: `/projects/${project}`, text: 'Проект отвечает на вопрос «про что задачи».' },
-    { path: '/questions', text: 'Сюда приходят вопросы, которые агенты задали вам.' },
+    { path: '/questions', text: 'Сюда приходят обсуждения, в которых агент ждёт вашего ответа' },
     { path: '/connect', text: 'Агент работает с Casefile через MCP' },
     { path: '/access', text: 'Здесь всё, чем ходят в установку' },
   ];

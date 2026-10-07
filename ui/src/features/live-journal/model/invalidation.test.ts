@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { areaKeys } from '@/entities/area';
+import { discussionKeys } from '@/entities/discussion';
 import { questionKeys, type Entry, type EntryType } from '@/entities/entry';
 import { projectKeys } from '@/entities/project';
 import { sessionKeys } from '@/entities/session';
@@ -13,9 +14,14 @@ import { keysAfterReconnect, keysToInvalidate } from './invalidation';
  */
 function frame(
   type: EntryType,
-  owner: { taskKey: string | null; projectKey: string | null; area?: string | null },
+  owner: {
+    taskKey: string | null;
+    projectKey: string | null;
+    area?: string | null;
+    discussion?: string | null;
+  },
 ): JournalFrame {
-  return { seq: 1, type, entry: {} as Entry, area: null, ...owner };
+  return { seq: 1, type, entry: {} as Entry, area: null, discussion: null, ...owner };
 }
 
 describe('keysToInvalidate — запись дела проекта', () => {
@@ -89,6 +95,25 @@ describe('keysToInvalidate — запись дела задачи', () => {
   });
 });
 
+describe('keysToInvalidate — запись дела обсуждения (TRK-672)', () => {
+  it('перечитывает обсуждение, списки обсуждений, значок и открытые карточки задач', () => {
+    const result = keysToInvalidate(
+      frame('question', { taskKey: null, projectKey: null, discussion: 'TRK~7' }),
+    );
+
+    expect(result).toEqual({
+      immediate: [
+        discussionKeys.detail('TRK~7'),
+        discussionKeys.all,
+        sessionKeys.bootstrap,
+        ['task'],
+      ],
+      coalesced: [taskKeys.board],
+      deferred: [taskKeys.table],
+    });
+  });
+});
+
 describe('keysAfterReconnect', () => {
   it('после обрыва перечитывает разом и задачи, и проекты — что случилось, неизвестно', () => {
     const result = keysAfterReconnect();
@@ -97,6 +122,8 @@ describe('keysAfterReconnect', () => {
       ['task'],
       ['project'],
       ['area'],
+      ['discussion'],
+      discussionKeys.all,
       questionKeys.all,
       taskKeys.attention,
       sessionKeys.bootstrap,

@@ -7,7 +7,7 @@
  * ключей, где две трети всегда пусты. Ключ области — её адрес `TRK/promotion`.
  */
 export interface EntryOwner {
-  kind: 'task' | 'project' | 'area';
+  kind: 'task' | 'project' | 'area' | 'discussion';
   key: string;
 }
 
@@ -20,15 +20,17 @@ export function entryReference(owner: EntryOwner, no: number): string {
 }
 
 /**
- * Владелец записи по её ключам: у записи непуст ровно один из `task_key`, `project_key`
- * и `area`.
+ * Владелец записи по её ключам: у записи непуст ровно один из `task_key`, `project_key`,
+ * `area` и `discussion`.
  */
 export function ownerOfEntry(entry: {
   task_key?: string | null;
   project_key?: string | null;
   area?: string | null;
+  discussion?: string | null;
 }): EntryOwner {
   if (entry.task_key != null) return { kind: 'task', key: entry.task_key };
+  if (entry.discussion != null) return { kind: 'discussion', key: entry.discussion };
   if (entry.area != null) return { kind: 'area', key: entry.area };
   return { kind: 'project', key: entry.project_key ?? '' };
 }

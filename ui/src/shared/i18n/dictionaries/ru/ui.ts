@@ -98,6 +98,11 @@ export const ui = {
     openQuestions_few: '{{count, number}} открытых вопроса',
     openQuestions_many: '{{count, number}} открытых вопросов',
     openQuestions_other: '{{count, number}} открытых вопроса',
+    // Обсуждения, где ход за человеком (TRK-672): своим знаком рядом с вопросами.
+    openDiscussions_one: '{{count, number}} обсуждение ждёт вас',
+    openDiscussions_few: '{{count, number}} обсуждения ждут вас',
+    openDiscussions_many: '{{count, number}} обсуждений ждут вас',
+    openDiscussions_other: '{{count, number}} обсуждения ждут вас',
     openWarnings_one: '{{count, number}} задача закрыта не целиком',
     openWarnings_few: '{{count, number}} задачи закрыты не целиком',
     openWarnings_many: '{{count, number}} задач закрыты не целиком',

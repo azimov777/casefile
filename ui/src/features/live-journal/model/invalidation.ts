@@ -1,5 +1,6 @@
 import type { QueryKey } from '@tanstack/react-query';
 import { areaKeys } from '@/entities/area';
+import { discussionKeys } from '@/entities/discussion';
 import { questionKeys } from '@/entities/entry';
 import { projectKeys } from '@/entities/project';
 import { splitAreaAddress } from '@/shared/lib';
@@ -70,6 +71,26 @@ export function keysToInvalidate(frame: JournalFrame): Invalidation {
     };
   }
 
+  /*
+   * Запись дела обсуждения (TRK-672): перечитывается само обсуждение (карточка, лента,
+   * тела), все списки обсуждений — входящая, история, блок в карточке задачи — и значок.
+   * Вопрос и ответ обсуждения меняют признаки ожидания привязанных задач (`TRK#51`, п. 4),
+   * а кадра в их деле нет, поэтому открытые карточки задач перечитываются разом; доска
+   * и таблица — как от любой записи о задаче.
+   */
+  if (frame.discussion !== null) {
+    return {
+      immediate: [
+        discussionKeys.detail(frame.discussion),
+        discussionKeys.all,
+        sessionKeys.bootstrap,
+        ['task'],
+      ],
+      coalesced: [taskKeys.board],
+      deferred: [taskKeys.table],
+    };
+  }
+
   // `taskKey` не назван вместе с `projectKey` быть не может: `parseFrame` такой кадр
   // уже отбросил. Ветка остаётся только для типов, а не как настоящая проверка.
   if (frame.taskKey === null) return { immediate: [], coalesced: [], deferred: [] };
@@ -110,6 +131,8 @@ export function keysAfterReconnect(): Invalidation {
       ['task'],
       ['project'],
       ['area'],
+      ['discussion'],
+      discussionKeys.all,
       questionKeys.all,
       taskKeys.attention,
       sessionKeys.bootstrap,
