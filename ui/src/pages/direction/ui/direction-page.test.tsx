@@ -290,7 +290,38 @@ describe('страница направления', () => {
     expect(screen.queryByRole('button', { name: say.project('attribute.add') })).toBeNull();
     expect(screen.queryByRole('button', { name: say.direction('entry.open') })).toBeNull();
     // Атрибуты при этом читаются.
-    expect(screen.getByRole('button', { name: 'channel' })).toBeInTheDocument();
+    const channel = screen.getByRole('button', { name: /^channel$/ });
+    // …и в открытой истории архивного направления кнопок правки нет.
+    await userEvent.click(channel);
+    await screen.findByRole('region', { name: say.project('history', { name: 'channel' }) });
+    expect(
+      screen.queryByRole('button', {
+        name: say.project('attribute.changeLabel', { name: 'channel' }),
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', {
+        name: say.project('attribute.removeLabel', { name: 'channel' }),
+      }),
+    ).toBeNull();
+  });
+
+  it('«Изменить» и «Снять» атрибута — в открытой истории, а не под строкой', async () => {
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO/directions/promotion', { language: 'ru' });
+
+    const channel = await screen.findByRole('button', { name: /^channel$/ });
+    const change = say.project('attribute.changeLabel', { name: 'channel' });
+    const remove = say.project('attribute.removeLabel', { name: 'channel' });
+    expect(screen.queryByRole('button', { name: change })).toBeNull();
+    expect(screen.queryByRole('button', { name: remove })).toBeNull();
+
+    await user.click(channel);
+    const history = await screen.findByRole('region', {
+      name: say.project('history', { name: 'channel' }),
+    });
+    expect(within(history).getByRole('button', { name: change })).toBeInTheDocument();
+    expect(within(history).getByRole('button', { name: remove })).toBeInTheDocument();
   });
 
   it('направление архивного проекта: ни правки, ни архива, ни восстановления — сказано почему', async () => {
