@@ -3795,7 +3795,7 @@
           "projects"
         ],
         "summary": "Read project case entries",
-        "description": "Записи дела проекта с телами и нагрузкой, в порядке `no`.\n\nФильтры те же, что у дела задачи, и складываются по «и»: `types` сужает по типу,\n`after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют\nоба, побеждает больший. `attribute` отдаёт историю одного атрибута: только\n`attribute_created`, `attribute_changed`, `attribute_removed` с этим именем, без учёта\nрегистра — без него история листается вперемешку с остальным делом проекта.",
+        "description": "Записи дела проекта с телами и нагрузкой, в порядке `no`.\n\nФильтры те же, что у дела задачи, и складываются по «и»: `types` сужает по типу,\n`after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют\nоба, побеждает больший. `attribute` отдаёт историю одного атрибута: только\n`attribute_created`, `attribute_changed`, `attribute_removed` с этим именем, без учёта\nрегистра — без него история листается вперемешку с остальным делом проекта.\n\nУ решения и заметки — `status` и `superseded_by`, посчитанные при чтении (TRK#48):\nзапись действует, пока более поздняя запись её типа не назвала её в `supersedes`.\n`in_force=true` оставляет только действующие решения и заметки, `in_force=false` —\nтолько заменённые.",
         "operationId": "list_project_entries",
         "security": [
           {
@@ -3890,6 +3890,27 @@
               "title": "Attribute"
             },
             "description": "Read only entries about the attribute with this name: `attribute_created`, `attribute_changed`, `attribute_removed`; matching ignores case. Combines with `types` and the other filters"
+          },
+          {
+            "name": "in_force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`true` reads only the decisions and findings in force, `false` only the superseded ones; entries of other types have no status and match neither. Combines with `types` and the other filters",
+              "examples": [
+                true
+              ],
+              "title": "In Force"
+            },
+            "description": "`true` reads only the decisions and findings in force, `false` only the superseded ones; entries of other types have no status and match neither. Combines with `types` and the other filters"
           },
           {
             "name": "after_no",
@@ -4047,7 +4068,7 @@
           "projects"
         ],
         "summary": "Read one project case entry",
-        "description": "Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`.\n\nНомера, которого в деле проекта нет, — `404 entry_not_found`.",
+        "description": "Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`; у решения и заметки —\nсо статусом и преемником, как в списке.\n\nНомера, которого в деле проекта нет, — `404 entry_not_found`.",
         "operationId": "read_project_entry",
         "security": [
           {
@@ -9354,7 +9375,7 @@
                       "created": "#/components/schemas/PlainEntryRead",
                       "decision": "#/components/schemas/DecisionEntryRead",
                       "field_changed": "#/components/schemas/FieldChangedEntryRead",
-                      "finding": "#/components/schemas/PlainEntryRead",
+                      "finding": "#/components/schemas/FindingEntryRead",
                       "link_added": "#/components/schemas/LinkEntryRead",
                       "link_removed": "#/components/schemas/LinkEntryRead",
                       "moved": "#/components/schemas/MovedEntryRead",
@@ -9377,6 +9398,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/DecisionEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FindingEntryRead"
                     },
                     {
                       "$ref": "#/components/schemas/SummaryEntryRead"
@@ -9884,6 +9908,22 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "acceptance",
@@ -10310,6 +10350,22 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "answer",
@@ -10600,6 +10656,22 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "question",
@@ -10870,6 +10942,22 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "assignee_changed",
@@ -11086,6 +11174,22 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "attribute_changed",
@@ -11263,6 +11367,22 @@
             ],
             "title": "Action Id",
             "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
             "examples": [
               null
             ]
@@ -11540,6 +11660,22 @@
             ],
             "title": "Action Id",
             "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
             "examples": [
               null
             ]
@@ -12473,13 +12609,42 @@
               null
             ]
           },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or a direction's case, in the journal and in the answer that files the entry",
+            "examples": [
+              "in_force"
+            ]
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By",
+            "description": "Number of the entry in the same case that superseded this one, the direct successor rather than the end of a chain; `null` while in force and wherever `status` is `null`",
+            "examples": [
+              null
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/SupersedesPayload"
+          },
           "type": {
             "type": "string",
             "const": "decision",
             "title": "Type"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/DecisionPayload"
           }
         },
         "type": "object",
@@ -12496,28 +12661,7 @@
           "type"
         ],
         "title": "DecisionEntryRead",
-        "description": "Решение: в деле задачи — решение задачи, в деле проекта — решение проекта.\n\nНагрузка одна на оба дела: `supersedes` — номера решений того же проекта, которые это\nзаменило (`CONCEPT.md`, 3.2). У решения задачи и у решения проекта, подшитого до\nзамены, список пуст. Статуса здесь нет: он меняется без записи в этом деле и\nсчитается при чтении проекта и задачи (`ProjectDecisionRead`, `CitedDecisionRead`)."
-      },
-      "DecisionPayload": {
-        "properties": {
-          "supersedes": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array",
-            "title": "Supersedes",
-            "description": "Numbers of the earlier decisions of the same project that this project decision superseded; empty for a task decision",
-            "examples": [
-              [
-                12
-              ]
-            ]
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "DecisionPayload",
-        "description": "Нагрузка решения: какие решения проекта оно заменило.\n\nСписок со значением по умолчанию: решения задач и решения проекта, подшитые до замены\n(`TRK-554`), ключа не несут, а ответ несёт его всегда — форма записи одна."
+        "description": "Решение: в деле задачи — решение задачи, в деле проекта — решение проекта.\n\nЧисло задач, которые на решение проекта ссылаются, — в чтении проекта\n(`ProjectDecisionRead`), а не здесь."
       },
       "DecisionRefRead": {
         "properties": {
@@ -12560,7 +12704,7 @@
           "superseded"
         ],
         "title": "DecisionStatus",
-        "description": "Действует ли решение проекта. Хранимым значением не бывает: только при чтении."
+        "description": "Действует ли запись знания — решение или заметка дела проекта.\n\nХранимым значением не бывает: только при чтении. Имя осталось от решений, первых\nзаписей с заменой; у заметки те же два значения (TRK#48)."
       },
       "DecisionsChangedPayload": {
         "properties": {
@@ -13117,6 +13261,9 @@
             "$ref": "#/components/schemas/DecisionEntryRead"
           },
           {
+            "$ref": "#/components/schemas/FindingEntryRead"
+          },
+          {
             "$ref": "#/components/schemas/SummaryEntryRead"
           },
           {
@@ -13186,7 +13333,7 @@
             "created": "#/components/schemas/PlainEntryRead",
             "decision": "#/components/schemas/DecisionEntryRead",
             "field_changed": "#/components/schemas/FieldChangedEntryRead",
-            "finding": "#/components/schemas/PlainEntryRead",
+            "finding": "#/components/schemas/FindingEntryRead",
             "link_added": "#/components/schemas/LinkEntryRead",
             "link_removed": "#/components/schemas/LinkEntryRead",
             "moved": "#/components/schemas/MovedEntryRead",
@@ -13401,6 +13548,22 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "field_changed",
@@ -13502,6 +13665,182 @@
         ],
         "title": "FieldChangedPayload",
         "description": "Правка обвязки задачи: «было» и «стало» целиком.\n\nОтдельно от `SectionChangedPayload`, хотя поля похожи: там правка задания и только\nв `backlog`, здесь — то, что меняется в любом незакрытом статусе. Одна модель на\nоба случая означала бы «section» у приоритета.\n\nЗначения — строки, а не «строка либо список»: список остался здесь от снятых меток\n(TRK-18), ни одно сегодняшнее поле обвязки списком не является, и записей со списком\nв базе нет ни одной. Пока объединение было плоским, оно только расширяло тип «на\nвсякий случай»; появится поле-список — у него будет своя форма, а не общая на всех."
+      },
+      "FindingEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task, project or direction, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for a direction entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Key",
+            "description": "Key of the owning task; `null` for an entry of a project's or a direction's case",
+            "examples": [
+              "TRK-42"
+            ]
+          },
+          "project_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Key",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for a direction entry",
+            "examples": [
+              null
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Address of the owning direction for an entry of a direction's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "examples": [
+              null
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries `KEY/direction#M`, tasks `KEY-N` and URLs with a scheme (`https://…`). Any other string is refused; entry and task references must exist, URLs are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or a direction's case, in the journal and in the answer that files the entry",
+            "examples": [
+              "in_force"
+            ]
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By",
+            "description": "Number of the entry in the same case that superseded this one, the direct successor rather than the end of a chain; `null` while in force and wherever `status` is `null`",
+            "examples": [
+              null
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/SupersedesPayload"
+          },
+          "type": {
+            "type": "string",
+            "const": "finding",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type"
+        ],
+        "title": "FindingEntryRead",
+        "description": "Находка: в деле задачи — установленный факт, в деле проекта — заметка проекта."
       },
       "HealthResponse": {
         "properties": {
@@ -13777,6 +14116,22 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -14018,6 +14373,22 @@
             ],
             "title": "Action Id",
             "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
             "examples": [
               null
             ]
@@ -14721,11 +15092,26 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "enum": [
               "attempt",
-              "finding",
               "artifact",
               "note",
               "created"
@@ -14750,7 +15136,7 @@
           "type"
         ],
         "title": "PlainEntryRead",
-        "description": "Запись без нагрузки: попытка, находка, артефакт, заметка, заведение задачи или\nпроекта."
+        "description": "Запись без нагрузки: попытка, артефакт, заметка, заведение задачи или проекта."
       },
       "ProjectArchiveEntryRead": {
         "properties": {
@@ -14863,6 +15249,22 @@
             ],
             "title": "Action Id",
             "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
             "examples": [
               null
             ]
@@ -15221,7 +15623,7 @@
             },
             "type": "array",
             "title": "Supersedes",
-            "description": "Numbers of earlier decisions of this project that the new decision supersedes; only with `decision`. A number outside the project's case or of another type answers `entry_fields_invalid`; a decision superseded already, `decision_not_in_force` with its successor",
+            "description": "Numbers of earlier entries of the same type in this project's case that the new entry supersedes; only with `decision` and `finding`. A number outside the project's case or of another type answers `entry_fields_invalid`; an entry superseded already, `decision_not_in_force` or `finding_not_in_force` with its successor",
             "examples": [
               [
                 12
@@ -15236,7 +15638,7 @@
           "type"
         ],
         "title": "ProjectEntryCreate",
-        "description": "Запись агента или человека в деле проекта: заметка, решение, находка, артефакт.\n\nОтдельная модель, а не ветвь `EntryCreate`: набор типов у дела проекта свой\n(`CONCEPT.md`, 3.4, «Дело проекта»), и схема показывает его клиенту до запроса, а не\nотказом `entry_fields_invalid` после.\n\n`supersedes` — только у решения: новое решение проекта заменяет названные\n(`CONCEPT.md`, 3.2). Без значения по умолчанию в схеме (`default_factory`): иначе\nклиент интерфейса требовал бы его у каждой заметки (`docs/notes/api.md`)."
+        "description": "Запись агента или человека в деле проекта: заметка, решение, находка, артефакт.\n\nОтдельная модель, а не ветвь `EntryCreate`: набор типов у дела проекта свой\n(`CONCEPT.md`, 3.4, «Дело проекта»), и схема показывает его клиенту до запроса, а не\nотказом `entry_fields_invalid` после.\n\n`supersedes` — только у решения и находки: новая запись заменяет названные записи\nсвоего типа (`CONCEPT.md`, 3.2; TRK#48). Без значения по умолчанию в схеме\n(`default_factory`): иначе клиент интерфейса требовал бы его у каждой заметки\n(`docs/notes/api.md`)."
       },
       "ProjectRead": {
         "properties": {
@@ -15515,6 +15917,22 @@
             ],
             "title": "Action Id",
             "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
             "examples": [
               null
             ]
@@ -15833,6 +16251,22 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "remark",
@@ -16037,6 +16471,22 @@
             ],
             "title": "Action Id",
             "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
             "examples": [
               null
             ]
@@ -16262,6 +16712,22 @@
             ],
             "title": "Action Id",
             "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
             "examples": [
               null
             ]
@@ -16731,6 +17197,22 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "status_changed",
@@ -16986,6 +17468,22 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "summary",
@@ -17136,6 +17634,27 @@
         ],
         "title": "SummaryPayload",
         "description": "Сводка, как её **читают**: четыре части и, у закрывающей, пятая.\n\nТерпимость к отсутствию `unmeasured` — свойство чтения, а не подшивки: читаются и\nпромежуточные сводки, у которых части не бывает, и все дела, закрытые до её\nпоявления. Отдельной моделью от `SummaryPartsPayload` она стоит именно поэтому:\nпока чтение и создание делили одну модель, необязательное поле уезжало в\n`model_dump()` маршрута создания значением `null` и роняло **всякую** обычную\nсводку — домен честно отвергал часть, которой в промежуточной сводке не место\n(TRK-78). Одна модель на две роли расходится молча; две расходиться не умеют."
+      },
+      "SupersedesPayload": {
+        "properties": {
+          "supersedes": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Supersedes",
+            "description": "Numbers of the earlier entries of the same type in the same project's case that this decision or finding superseded; empty in a task's or a direction's case",
+            "examples": [
+              [
+                12
+              ]
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SupersedesPayload",
+        "description": "Нагрузка решения и заметки: какие записи того же типа и того же дела проекта эта\nзаменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2).\n\nСписок со значением по умолчанию: записи задач и направлений, решения проекта,\nподшитые до замены (`TRK-554`), и заметки проекта до TRK-656 ключа не несут, а ответ\nнесёт его всегда — форма записи одна."
       },
       "TaskAlreadyThereRead": {
         "properties": {
@@ -19307,6 +19826,22 @@
               null
             ]
           },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "verdict",
@@ -19551,6 +20086,22 @@
             ],
             "title": "Action Id",
             "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's case are superseded",
             "examples": [
               null
             ]

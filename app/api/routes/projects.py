@@ -18,6 +18,7 @@ from app.api.deps import (
     EntryNosQuery,
     EntryTypesQuery,
     IncludeArchivedQuery,
+    InForceQuery,
     LimitQuery,
     ProjectKeyPath,
     SessionDep,
@@ -317,6 +318,7 @@ async def list_project_entries(
     nos: EntryNosQuery = None,
     types: EntryTypesQuery = None,
     attribute: AttributeQuery = None,
+    in_force: InForceQuery = None,
     after_no: AfterNoQuery = None,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
     cursor: CursorQuery = None,
@@ -328,6 +330,11 @@ async def list_project_entries(
     оба, побеждает больший. `attribute` отдаёт историю одного атрибута: только
     `attribute_created`, `attribute_changed`, `attribute_removed` с этим именем, без учёта
     регистра — без него история листается вперемешку с остальным делом проекта.
+
+    У решения и заметки — `status` и `superseded_by`, посчитанные при чтении (TRK#48):
+    запись действует, пока более поздняя запись её типа не назвала её в `supersedes`.
+    `in_force=true` оставляет только действующие решения и заметки, `in_force=false` —
+    только заменённые.
     """
     project = await service.get_project(session, project_key)
     page = await case_service.list_project_entries(
@@ -337,12 +344,16 @@ async def list_project_entries(
         nos=nos,
         types=types,
         attribute=attribute,
+        in_force=in_force,
         after_no=after_no,
         limit=limit,
         cursor=cursor,
     )
     return CollectionResponse[EntryRead].of(
-        [entry_read(entry, project_key=project.key) for entry in page.items],
+        [
+            entry_read(entry, project_key=project.key, standing=page.standings.get(entry.no))
+            for entry in page.items
+        ],
         next_cursor=page.next_cursor,
     )
 
@@ -354,13 +365,17 @@ async def read_project_entry(
     session: SessionDep,
     actor: ActorDep,
 ) -> DataResponse[EntryRead]:
-    """Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`.
+    """Одна запись дела проекта по номеру — адрес из ссылки `TRK#7`; у решения и заметки —
+    со статусом и преемником, как в списке.
 
     Номера, которого в деле проекта нет, — `404 entry_not_found`.
     """
     project = await service.get_project(session, project_key)
     entry = await case_service.read_project_entry(session, project, entry_no, actor=actor)
-    return DataResponse[EntryRead](data=entry_read(entry, project_key=project.key))
+    standing = await decisions_service.standing_of(session, project, entry)
+    return DataResponse[EntryRead](
+        data=entry_read(entry, project_key=project.key, standing=standing)
+    )
 
 
 async def _detail(

@@ -267,6 +267,12 @@ PROJECT_ENTRY_TYPES: frozenset[EntryType] = frozenset(
     {EntryType.NOTE, EntryType.DECISION, EntryType.FINDING, EntryType.ARTIFACT}
 )
 
+#: Записи знания дела проекта — решение и заметка (решение TRK#48, раздел 2): только они
+#: заменяются через `supersedes` и только у них есть статус «действует / заменена»,
+#: который считается при чтении (`app/domain/decisions.py`). Запись заменяет прежнюю
+#: своего типа: решение — решение, заметка — заметку.
+REPLACEABLE_ENTRY_TYPES: frozenset[EntryType] = frozenset({EntryType.DECISION, EntryType.FINDING})
+
 #: Типы, у которых заголовок пишет автор. У остальных он выводится из нагрузки — см.
 #: раздел «Заголовок либо пишут, либо выводят» в начале файла.
 TITLED_ENTRY_TYPES: frozenset[EntryType] = frozenset(
@@ -303,11 +309,12 @@ MAX_REF_LENGTH = 2_000
 #: ответа ни от кого.
 MAX_ADDRESSEES = 20
 
-#: Поле нагрузки решения проекта: номера решений того же проекта, которые оно заменяет
-#: (`CONCEPT.md`, 3.2). Им же называется аргумент `add_project_entry`.
+#: Поле нагрузки решения и заметки дела проекта: номера записей того же типа и того же
+#: дела, которые новая запись заменяет (`CONCEPT.md`, 3.2; TRK#48). Им же называется
+#: аргумент `add_project_entry`.
 SUPERSEDES_FIELD = "supersedes"
 
-#: Сколько решений заменяет одно. Замена пересказывает то, что остаётся в силе, и запись,
+#: Сколько записей заменяет одна. Замена пересказывает то, что остаётся в силе, и запись,
 #: сводящая два десятка решений в одно, — уже пересмотр проекта, а не замена.
 MAX_SUPERSEDES = 20
 
@@ -876,7 +883,7 @@ def build_project_entry(
     body: Any = "",
     refs: Any = (),
     supersedes: Any = None,
-    decisions_supersede: bool = True,
+    replaceable: bool = True,
 ) -> EntryDraft:
     """Проверяет запись агента в дело проекта или направления и приводит её к
     каноническому виду.
@@ -887,16 +894,17 @@ def build_project_entry(
     не нужно. Тип задачи (`summary`, `question`, `attempt`, ...) — `not_allowed` со
     списком допустимых, служебный — `service_type`, как и в деле задачи.
 
-    Нагрузка есть у одного типа — решения проекта: `supersedes`, номера решений, которые
-    оно заменяет (`CONCEPT.md`, 3.2). Ключ кладётся у решения всегда, в том числе пустым:
-    форма записи одна на все интерфейсы. У остальных типов `supersedes` отвергается, а не
-    выбрасывается молча. Есть ли такие записи, решения ли это и действуют ли они,
-    проверяет сценарий (`app/services/decisions.py`).
+    Нагрузка есть у записей знания — решения и заметки (`REPLACEABLE_ENTRY_TYPES`):
+    `supersedes`, номера записей того же типа, которые новая заменяет (`CONCEPT.md`, 3.2;
+    TRK#48). Ключ кладётся у них всегда, в том числе пустым: форма записи одна на все
+    интерфейсы. У остальных типов `supersedes` отвергается, а не выбрасывается молча.
+    Есть ли такие записи, того ли они типа и действуют ли, проверяет сценарий
+    (`app/services/decisions.py`).
 
-    `decisions_supersede=False` — дело направления (`CONCEPT.md`, 3.7): механики решений
-    проекта у него нет, и `supersedes` отвергается у любого типа, а нагрузка решения
-    остаётся пустой, как у решения задачи. Первым параметром тогда приходит адрес
-    направления — им отказ называет, куда подшивали.
+    `replaceable=False` — дело направления (`CONCEPT.md`, 3.7): механики замены у него
+    нет, и `supersedes` отвергается у любого типа, а нагрузка решения и заметки остаётся
+    пустой, как у записей задачи. Первым параметром тогда приходит адрес направления — им
+    отказ называет, куда подшивали.
     """
     problems = FieldProblems()
     entry_type = _project_entry_type(type, problems)
@@ -908,20 +916,20 @@ def build_project_entry(
     replaced: list[int] = []
     with problems.field(SUPERSEDES_FIELD):
         replaced = _superseded_numbers(supersedes)
-    if replaced and not decisions_supersede:
+    if replaced and not replaceable:
         problems.add(SUPERSEDES_FIELD, "not_allowed", allowed_in="project_case")
-    elif replaced and entry_type is not None and entry_type is not EntryType.DECISION:
+    elif replaced and entry_type is not None and entry_type not in REPLACEABLE_ENTRY_TYPES:
         problems.add(
             SUPERSEDES_FIELD,
             "not_allowed",
-            allowed_for=EntryType.DECISION.value,
+            allowed_for=sorted(item.value for item in REPLACEABLE_ENTRY_TYPES),
             got=entry_type.value,
         )
     problems.raise_as(EntryFieldsInvalidError, key=project_key)
 
     assert entry_type is not None  # иначе замечание о типе уже прервало бы работу
     payload: dict[str, Any] = {}
-    if entry_type is EntryType.DECISION and decisions_supersede:
+    if entry_type in REPLACEABLE_ENTRY_TYPES and replaceable:
         payload[SUPERSEDES_FIELD] = replaced
     return EntryDraft(
         type=entry_type,
@@ -934,19 +942,20 @@ def build_project_entry(
 
 
 def superseded_numbers(payload: Mapping[str, Any]) -> list[int]:
-    """Номера решений, которые заменяет решение проекта, — из его нагрузки.
+    """Номера записей, которые заменяет решение или заметка дела проекта, — из нагрузки.
 
-    Решение, подшитое до механизма замены, ключа не несёт и не заменяет ничего. Одно
-    определение на сценарий статуса и на чтение — как `answer_outcome` у ответа.
+    Решение, подшитое до механизма замены, и заметка, подшитая до TRK-656, ключа не
+    несут и не заменяют ничего. Одно определение на сценарий статуса и на чтение — как
+    `answer_outcome` у ответа.
     """
     value = payload.get(SUPERSEDES_FIELD)
     return [item for item in value if isinstance(item, int)] if isinstance(value, list) else []
 
 
 def _superseded_numbers(value: Any) -> list[int]:
-    """Номера заменяемых решений: целые с 1, без повторов, по возрастанию.
+    """Номера заменяемых записей: целые с 1, без повторов, по возрастанию.
 
-    Порядок канонический, а не присланный: заменяемые решения — множество, и два
+    Порядок канонический, а не присланный: заменяемые записи — множество, и два
     порядка одного набора не должны давать двух разных записей.
     """
     if value is None:
@@ -1038,19 +1047,20 @@ def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str,
     подставлял умолчание полем модели, а MCP отдавал нагрузку как лежит, агент и человек
     читали один и тот же ответ по-разному (TRK-563).
 
-    Так читаются три типа. Ответ, подшитый до появления исходов (`question_no` и ничего
-    более), читается как `answered` без заменившего вопроса (TRK-563). Решение без
-    `supersedes` — решение задачи, решение направления (TRK-555) и решение проекта до
-    замены (TRK-554) — ничего не заменяет. Правка раздела без `check_no` — любая, кроме
-    точечной правки проверки — читается с `check_no: null` (TRK-565). Нагрузка остальных
-    типов отдаётся как лежит: трекер всегда кладёт в неё все ключи, которые есть у модели
-    чтения (сверка TRK-565); новый ключ в чужой нагрузке получает ветвь здесь же.
+    Так читаются четыре типа. Ответ, подшитый до появления исходов (`question_no` и ничего
+    более), читается как `answered` без заменившего вопроса (TRK-563). Решение и заметка
+    без `supersedes` — запись задачи, запись направления (TRK-555), решение проекта до
+    замены (TRK-554) и заметка проекта до TRK-656 — ничего не заменяют. Правка раздела
+    без `check_no` — любая, кроме точечной правки проверки — читается с `check_no: null`
+    (TRK-565). Нагрузка остальных типов отдаётся как лежит: трекер всегда кладёт в неё
+    все ключи, которые есть у модели чтения (сверка TRK-565); новый ключ в чужой нагрузке
+    получает ветвь здесь же.
     """
     data = dict(payload)
     if entry_type is EntryType.ANSWER:
         data["outcome"] = answer_outcome(payload).value
         data.setdefault("replaced_by", None)
-    elif entry_type is EntryType.DECISION:
+    elif entry_type in REPLACEABLE_ENTRY_TYPES:
         data.setdefault(SUPERSEDES_FIELD, [])
     elif entry_type is EntryType.SECTION_CHANGED:
         data.setdefault("check_no", None)

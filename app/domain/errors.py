@@ -418,8 +418,8 @@ class EntryFieldsInvalidError(ValidationError):
     `unknown_entry`, `not_a_question`; у ответа ещё `already_answered` (вопрос уже
     закрыт ответом) и `not_after_question` (заменивший вопрос задан не позже снимаемого);
     у `refs` — `not_a_reference` (строка не ссылка трекера и не URL со схемой: `7`, `#7`,
-    `docs/x.md`) и `malformed_entry_ref`; у `supersedes` решения проекта — `unknown_entry`
-    и `not_a_decision`.
+    `docs/x.md`) и `malformed_entry_ref`; у `supersedes` решения и заметки проекта —
+    `unknown_entry` и `not_a_decision` или `not_a_finding` (номер записи другого типа).
     """
 
     code = "entry_fields_invalid"
@@ -438,6 +438,20 @@ class DecisionNotInForceError(ConflictError):
 
     code = "decision_not_in_force"
     message = "Project decision is superseded by a later decision"
+
+
+class FindingNotInForceError(ConflictError):
+    """Заметка дела проекта уже заменена другой, а её заменяют снова.
+
+    Тот же отказ, что у решения (`DecisionNotInForceError`), для второй записи знания
+    (решение TRK#48, раздел 2): у заметки не бывает двух преемников, и цепочка замен
+    остаётся линейной. Код свой, а не общий с решением: код называет сущность, как
+    `project_archived` и `direction_archived` у одной механики архива. В
+    `details.findings` каждая такая заметка и её преемник (`ref`, `superseded_by`).
+    """
+
+    code = "finding_not_in_force"
+    message = "Project finding is superseded by a later finding"
 
 
 class SummaryRequiredError(ConflictError):

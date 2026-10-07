@@ -117,11 +117,12 @@ def test_anything_but_a_project_entry_is_not_a_decision_ref(raw: str, reason: st
 
 
 def test_a_successor_is_the_decision_that_named_the_earlier_one() -> None:
-    assert successors([(1, []), (2, [1]), (3, [2]), (4, [])]) == {1: 2, 2: 3}
+    d = EntryType.DECISION
+    assert successors([(1, d, []), (2, d, [1]), (3, d, [2]), (4, d, [])]) == {1: 2, 2: 3}
     # Обход проверки (два преемника) не делает статус случайным: побеждает более раннее.
-    assert successors([(5, [1]), (4, [1])]) == {1: 4}
+    assert successors([(1, d, []), (5, d, [1]), (4, d, [1])]) == {1: 4}
     # Ссылка вперёд — не замена: заменить можно только более раннее решение.
-    assert successors([(1, [2]), (2, [])]) == {}
+    assert successors([(1, d, [2]), (2, d, [])]) == {}
 
 
 def test_supersedes_lives_only_on_a_decision_and_is_kept_even_empty() -> None:
@@ -133,6 +134,7 @@ def test_supersedes_lives_only_on_a_decision_and_is_kept_even_empty() -> None:
     with pytest.raises(EntryFieldsInvalidError) as refused:
         build_project_entry("TRK", type="note", title="Заметка", supersedes=[1])
     assert _reasons(refused) == [("supersedes", "not_allowed")]
+    assert refused.value.details["fields"][0]["allowed_for"] == ["decision", "finding"]
 
 
 # --- Замена решения ----------------------------------------------------------------------

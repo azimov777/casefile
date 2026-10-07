@@ -226,6 +226,18 @@ AttributeQuery = Annotated[
     ),
 ]
 
+InForceQuery = Annotated[
+    bool | None,
+    Query(
+        description=(
+            "`true` reads only the decisions and findings in force, `false` only the "
+            "superseded ones; entries of other types have no status and match neither. "
+            "Combines with `types` and the other filters"
+        ),
+        examples=[True],
+    ),
+]
+
 
 def reject_unknown_query_params(request: Request) -> None:
     """Неизвестный параметр запроса — отказ с его именем, а не выдача без отбора.

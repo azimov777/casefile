@@ -83,6 +83,7 @@
 | `direction_archived` | Direction is archived: its card, attributes and case are frozen | Направление в архиве: карточка, атрибуты и дело заморожены (`CONCEPT.md`, 3.7). |
 | `direction_key_taken` | Direction key is already taken in this project | Ключ направления уже занят в этом проекте: ключи уникальны без учёта регистра. |
 | `direction_not_archived` | Direction is not archived | Восстанавливать нечего: направление не в архиве. |
+| `finding_not_in_force` | Project finding is superseded by a later finding | Заметка дела проекта уже заменена другой, а её заменяют снова. |
 | `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |
 | `installation_not_empty` | Only an installation without projects can take an archive | Приём архива в установку, где уже есть проекты. |
 | `last_admin` | The installation must keep at least one active administrator | Действие оставило бы установку без действующего администратора. |

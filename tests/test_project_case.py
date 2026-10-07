@@ -185,9 +185,10 @@ async def test_every_project_type_is_filed(
             db_session, project, actor=task_actor, type=entry_type, title=f"Запись {entry_type}"
         )
         assert entry.type == EntryType(entry_type)
-        # Нагрузка есть у одного типа — решения проекта: что оно заменило (TRK-554), и
-        # ключ стоит всегда, в том числе пустым.
-        assert entry.payload == ({"supersedes": []} if entry_type == "decision" else {})
+        # Нагрузка есть у записей знания — решения (TRK-554) и заметки (TRK-656): что они
+        # заменили, и ключ стоит всегда, в том числе пустым.
+        replaceable = entry_type in ("decision", "finding")
+        assert entry.payload == ({"supersedes": []} if replaceable else {})
 
 
 async def test_a_card_edit_files_field_changed_per_changed_field(

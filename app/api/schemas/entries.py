@@ -60,8 +60,10 @@ from app.domain.case import (
     VerdictOutcome,
     read_payload,
 )
+from app.domain.decisions import DecisionStatus
 from app.domain.links import LinkKind
 from app.domain.tasks import FIRST_CHECK_NUMBER, TaskField, TaskStatus
+from app.services.decisions import Standing
 
 _REFS_DESCRIPTION = (
     "References to task entries `KEY-N#M`, project entries `KEY#M`, direction entries "
@@ -331,11 +333,13 @@ class EmptyPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class DecisionPayload(BaseModel):
-    """Нагрузка решения: какие решения проекта оно заменило.
+class SupersedesPayload(BaseModel):
+    """Нагрузка решения и заметки: какие записи того же типа и того же дела проекта эта
+    заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2).
 
-    Список со значением по умолчанию: решения задач и решения проекта, подшитые до замены
-    (`TRK-554`), ключа не несут, а ответ несёт его всегда — форма записи одна.
+    Список со значением по умолчанию: записи задач и направлений, решения проекта,
+    подшитые до замены (`TRK-554`), и заметки проекта до TRK-656 ключа не несут, а ответ
+    несёт его всегда — форма записи одна.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -344,8 +348,9 @@ class DecisionPayload(BaseModel):
         default_factory=list,
         examples=[[12]],
         description=(
-            "Numbers of the earlier decisions of the same project that this project "
-            "decision superseded; empty for a task decision"
+            "Numbers of the earlier entries of the same type in the same project's case "
+            "that this decision or finding superseded; empty in a task's or a direction's "
+            "case"
         ),
     )
 
@@ -785,6 +790,20 @@ class _EntryReadBase(BaseModel):
     action_id: uuid.UUID | None = Field(
         default=None, examples=[None], description=_ACTION_ID_DESCRIPTION
     )
+    # Статус есть только у решения и заметки дела проекта (`_ReplaceableEntryRead`); у
+    # остальных типов поле стоит, чтобы форма записи была одна в REST и MCP, и всегда
+    # `null`. Умолчание — для ответов подшивки, сохранённых ключами идемпотентности до
+    # этих полей, как у `direction`.
+    status: None = Field(
+        default=None,
+        examples=[None],
+        description="Always `null`: only decisions and findings of a project's case have a status",
+    )
+    superseded_by: None = Field(
+        default=None,
+        examples=[None],
+        description="Always `null`: only decisions and findings of a project's case are superseded",
+    )
 
 
 _DIRECTION_OWNER_DESCRIPTION = (
@@ -851,26 +870,60 @@ class _ProjectEntryRead(_EntryReadBase):
     )
 
 
-class DecisionEntryRead(_ProjectOwnableEntryRead):
+class _ReplaceableEntryRead(_ProjectOwnableEntryRead):
+    """Общее у решения и заметки — записей знания, которые заменяются (TRK#48, раздел 2).
+
+    Нагрузка одна на все дела: `supersedes` — номера записей того же типа и того же дела
+    проекта, которые эта заменила. Статус и прямой преемник считаются при чтении дела
+    проекта — `GET /projects/{key}/entries` и `.../entries/{no}` (`CONCEPT.md`, 4.3).
+    Везде ещё они `null`: в деле задачи и направления замены нет, а лента и ответ
+    подшивки статус не считают — он меняется без записи в этом деле, и кадр ленты или
+    сохранённый ответ с ним устаревали бы.
+    """
+
+    payload: SupersedesPayload = Field(default_factory=SupersedesPayload)
+    status: DecisionStatus | None = Field(  # type: ignore[assignment]
+        default=None,
+        examples=[DecisionStatus.IN_FORCE],
+        description=(
+            "Computed on read of a project's case: `superseded` once a later entry of the "
+            "same type in the case names this one in `supersedes`, `in_force` until then. "
+            "`null` in a task's or a direction's case, in the journal and in the answer "
+            "that files the entry"
+        ),
+    )
+    superseded_by: int | None = Field(  # type: ignore[assignment]
+        default=None,
+        examples=[None],
+        description=(
+            "Number of the entry in the same case that superseded this one, the direct "
+            "successor rather than the end of a chain; `null` while in force and wherever "
+            "`status` is `null`"
+        ),
+    )
+
+
+class DecisionEntryRead(_ReplaceableEntryRead):
     """Решение: в деле задачи — решение задачи, в деле проекта — решение проекта.
 
-    Нагрузка одна на оба дела: `supersedes` — номера решений того же проекта, которые это
-    заменило (`CONCEPT.md`, 3.2). У решения задачи и у решения проекта, подшитого до
-    замены, список пуст. Статуса здесь нет: он меняется без записи в этом деле и
-    считается при чтении проекта и задачи (`ProjectDecisionRead`, `CitedDecisionRead`).
+    Число задач, которые на решение проекта ссылаются, — в чтении проекта
+    (`ProjectDecisionRead`), а не здесь.
     """
 
     type: Literal[EntryType.DECISION]
-    payload: DecisionPayload = Field(default_factory=DecisionPayload)
+
+
+class FindingEntryRead(_ReplaceableEntryRead):
+    """Находка: в деле задачи — установленный факт, в деле проекта — заметка проекта."""
+
+    type: Literal[EntryType.FINDING]
 
 
 class PlainEntryRead(_ProjectOwnableEntryRead):
-    """Запись без нагрузки: попытка, находка, артефакт, заметка, заведение задачи или
-    проекта."""
+    """Запись без нагрузки: попытка, артефакт, заметка, заведение задачи или проекта."""
 
     type: Literal[
         EntryType.ATTEMPT,
-        EntryType.FINDING,
         EntryType.ARTIFACT,
         EntryType.NOTE,
         EntryType.CREATED,
@@ -1034,6 +1087,7 @@ class ProjectArchiveEntryRead(_ProjectEntryRead):
 type EntryRead = Annotated[
     PlainEntryRead
     | DecisionEntryRead
+    | FindingEntryRead
     | SummaryEntryRead
     | QuestionEntryRead
     | AnswerEntryRead
@@ -1077,6 +1131,7 @@ def entry_read_schema() -> dict[str, Any]:
 
 _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
     EntryType.DECISION: DecisionEntryRead,
+    EntryType.FINDING: FindingEntryRead,
     EntryType.SUMMARY: SummaryEntryRead,
     EntryType.QUESTION: QuestionEntryRead,
     EntryType.ANSWER: AnswerEntryRead,
@@ -1106,6 +1161,7 @@ def entry_read(
     task_key: str | None = None,
     project_key: str | None = None,
     direction: str | None = None,
+    standing: Standing | None = None,
 ) -> EntryRead:
     """Собирает вариант ответа по типу записи.
 
@@ -1113,6 +1169,9 @@ def entry_read(
     направлением нет, только `task_id`, `project_id` или `direction_id`. Передаётся ровно
     один — ключ задачи для записи задачи, ключ проекта для записи дела проекта, адрес
     направления для записи дела направления.
+
+    `standing` — статус решения или заметки, посчитанный чтением дела проекта
+    (`app/services/decisions.py`); без него `status` и `superseded_by` — `null`.
 
     Тип, которого нет в таблице, — это запись без формы нагрузки, то есть дефект
     объединения, а не рабочее состояние: `KeyError` здесь честнее молчаливого
@@ -1135,6 +1194,8 @@ def entry_read(
         refs=list(entry.refs),
         created_at=entry.created_at,
         action_id=entry.action_id,
+        status=None if standing is None else standing.status,
+        superseded_by=None if standing is None else standing.superseded_by,
     )
 
 
@@ -1264,9 +1325,10 @@ class ProjectEntryCreate(_TitledEntryCreate):
     (`CONCEPT.md`, 3.4, «Дело проекта»), и схема показывает его клиенту до запроса, а не
     отказом `entry_fields_invalid` после.
 
-    `supersedes` — только у решения: новое решение проекта заменяет названные
-    (`CONCEPT.md`, 3.2). Без значения по умолчанию в схеме (`default_factory`): иначе
-    клиент интерфейса требовал бы его у каждой заметки (`docs/notes/api.md`).
+    `supersedes` — только у решения и находки: новая запись заменяет названные записи
+    своего типа (`CONCEPT.md`, 3.2; TRK#48). Без значения по умолчанию в схеме
+    (`default_factory`): иначе клиент интерфейса требовал бы его у каждой заметки
+    (`docs/notes/api.md`).
     """
 
     type: Literal[
@@ -1279,10 +1341,11 @@ class ProjectEntryCreate(_TitledEntryCreate):
         default_factory=list,
         examples=[[12]],
         description=(
-            "Numbers of earlier decisions of this project that the new decision supersedes; "
-            "only with `decision`. A number outside the project's case or of another type "
-            "answers `entry_fields_invalid`; a decision superseded already, "
-            "`decision_not_in_force` with its successor"
+            "Numbers of earlier entries of the same type in this project's case that the new "
+            "entry supersedes; only with `decision` and `finding`. A number outside the "
+            "project's case or of another type answers `entry_fields_invalid`; an entry "
+            "superseded already, `decision_not_in_force` or `finding_not_in_force` with its "
+            "successor"
         ),
     )
 
