@@ -18,7 +18,7 @@ from app.domain.errors import QuestionNotATaskEntryError
 from app.services import case as case_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
-from conftest import Connect, call, make_task, refuse
+from conftest import Connect, call, make_task, refuse, without_empty_standing
 
 QUESTION = "Хранить ли дела отменённых задач вечно?"
 
@@ -44,7 +44,7 @@ async def test_ask_about_a_task_opens_a_discussion_and_attaches_the_task(
         )
         address = asked["discussion"]
         again = await call(
-            session, "ask", key=address, addressees=["owner"], title="А архивных?"
+            session, "ask", key=address, addressees=["owner"], title="Архивных тоже?"
         )
         discussion_case = await call(session, "read_project_entries", key=address)
         task_case = await call(session, "read_entries", key=key)
@@ -204,7 +204,7 @@ async def test_get_task_carries_discussions_with_the_latest_conclusion(
     jsonschema.validate(package, declared["get_task"])
     response = await auth_client.get(f"/api/v1/tasks/{key}")
     assert response.status_code == 200, response.text
-    assert package == response.json()["data"]
+    assert package == without_empty_standing(response.json()["data"])
 
 
 async def test_the_entries_after_the_card_count_from_the_last_section_edit(
@@ -286,9 +286,7 @@ async def test_a_note_and_the_case_of_a_discussion_go_through_the_project_tools(
     """Заметка — `add_project_entry` по адресу, только типа `note`, без `supersedes`; дело —
     `read_project_entries` по адресу с подстрокой; отбора по статусу у обсуждения нет."""
     async with mcp_session(task_secret) as session:
-        asked = await call(
-            session, "ask", key=open_task.key, addressees=["owner"], title=QUESTION
-        )
+        asked = await call(session, "ask", key=open_task.key, addressees=["owner"], title=QUESTION)
         address = asked["discussion"]
         note = await call(
             session, "add_project_entry", key=address, type="note", title="Справка по теме"
@@ -322,8 +320,9 @@ async def test_close_discussion_closes_with_a_conclusion_and_frees_the_task(
         early = await refuse(session, "close_discussion", key=address, **parts)
         await call(session, "answer", key=address, question_no=asked["no"], body="Вечно")
         await call(session, "transition", key=key, to="in_progress")
-        await call(session, "add_summary", key=key, done="d", remaining="r", blockers="b",
-                   next_step="n")
+        await call(
+            session, "add_summary", key=key, done="d", remaining="r", blockers="b", next_step="n"
+        )
         closing = {
             "key": key,
             "summary": {

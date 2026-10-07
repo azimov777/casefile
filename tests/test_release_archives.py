@@ -72,8 +72,7 @@ DROP_WAITING = "a9cb1ec147c4"
 WITHDRAW_TASK_QUESTIONS = "3b9f4d192289"
 #: Тело такого ответа — литерал, как в самой миграции.
 WITHDRAWN_BODY = (
-    "Вопрос закрыт: вопросы теперь задаются в обсуждениях. "
-    "Агенту — переспросить через обсуждение."
+    "Вопрос закрыт: вопросы теперь задаются в обсуждениях. Агенту — переспросить через обсуждение."
 )
 
 
@@ -269,9 +268,7 @@ async def test_a_release_archive_comes_into_head_whole(
     assert len(stored["tasks"]) == len(before.rows("tasks"))
     waiting = [task for task in before.rows("tasks").values() if task["status"] == "waiting"]
     long = [project for project in before.rows("projects").values() if _long(project)]
-    withdrawn = (
-        _open_task_questions(before) if WITHDRAW_TASK_QUESTIONS in before.applied else set()
-    )
+    withdrawn = _open_task_questions(before) if WITHDRAW_TASK_QUESTIONS in before.applied else set()
     added = (
         (len(waiting) if DROP_WAITING in before.applied else 0)
         + (len(long) if LONG_DESCRIPTIONS in before.applied else 0)

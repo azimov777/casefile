@@ -1639,15 +1639,14 @@ WITHDRAW_QUESTIONS_PREVIOUS = DISCUSSIONS_REVISION
 
 #: Тело записи снятия — дословно из решения владельца (TRK-667#17, п. 2).
 WITHDRAWN_BODY = (
-    "Вопрос закрыт: вопросы теперь задаются в обсуждениях. "
-    "Агенту — переспросить через обсуждение."
+    "Вопрос закрыт: вопросы теперь задаются в обсуждениях. Агенту — переспросить через обсуждение."
 )
 
 _INSERT_TASKS_WITH_QUESTIONS = text(
     "INSERT INTO tasks (key, project_id, title, description, status, created_by_kind, "
     "created_by_signature) SELECT rows.key, projects.id, rows.title, 'd', rows.status, 'agent', "
     "'claude' FROM projects, (VALUES ('OLD-1', 'Два открытых', 'open'), "
-    "('OLD-2', 'Закрыта с открытым', 'done'), ('OLD-3', 'Без вопросов', 'open')) "
+    "('OLD-2', 'Закрыта, вопрос открыт', 'done'), ('OLD-3', 'Без вопросов', 'open')) "
     "AS rows (key, title, status) WHERE projects.key = 'OLD'"
 )
 #: Дело OLD-1: открытый блокирующий (#2), отвеченный (#3, ответ #4), снятый (#5, ответ #6)

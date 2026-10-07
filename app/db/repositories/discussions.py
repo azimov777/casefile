@@ -377,6 +377,8 @@ def turn_of(discussion: Any) -> ColumnElement[str | None]:
         .correlate(discussion)
         .exists()
     )
+    # Сам итог ответом не считается, даже подписанный человеком (токен владельца в MCP):
+    # иначе итог оказывался бы «записью человека после последнего итога» — самого себя.
     human_or_answer_since_conclusion = (
         select(1)
         .where(
@@ -384,7 +386,7 @@ def turn_of(discussion: Any) -> ColumnElement[str | None]:
             (reply.type == EntryType.ANSWER)
             | (
                 (reply.created_by_kind == AuthorKind.HUMAN)
-                & reply.type.in_(sorted(AGENT_ENTRY_TYPES))
+                & reply.type.in_(sorted(AGENT_ENTRY_TYPES - {EntryType.CONCLUSION}))
             ),
             ~select(1)
             .where(

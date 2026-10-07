@@ -301,7 +301,9 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     decisions = await decisions_service.cited_decisions(session, task.decisions, actor=actor)
     last_change = await case_service.last_status_change(session, task, actor=actor)
     deferred = await TaskRepository(session).is_deferred(task.not_before)
-    discussions = await discussions_service.task_discussions(session, task, actor=actor)
+    discussions = await discussions_service.task_discussions(
+        session, task, actor=actor, open_questions=discussion_questions
+    )
     return TaskPackage(
         task=task,
         state=_task_state(

@@ -159,20 +159,26 @@ async def list_discussions(
 
 
 async def task_discussions(
-    session: AsyncSession, task: Task, *, actor: Actor
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    open_questions: Sequence[tuple[Entry, str]],
 ) -> list[TaskDiscussion]:
     """Обсуждения, к которым задача привязана, для её пакета преемника — по адресу.
 
     Открытые и закрытые: итог закрытого тоже задаёт работу (`TRK#51`, п. 5). Открытые
-    вопросы — только у незакрытых (у закрытого их нет по построению). Запросов три на
-    любое число обсуждений: строки с признаками, вопросы, последние итоги.
+    вопросы приходят уже прочитанными — пары «вопрос и адрес обсуждения» из
+    `case.open_discussion_questions`, тем же списком, из которого пакет считает признаки:
+    второй раз их не читать и разойтись с признаками им негде. Запросов два на любое число
+    обсуждений: строки с признаками и последние итоги.
     """
     rows = await DiscussionRepository(session).of_task(task.id)
     if not rows:
         return []
     entries = EntryRepository(session)
     questions: dict[str, list[Entry]] = {}
-    for question, address in await entries.open_discussion_questions_of_task(task.id):
+    for question, address in open_questions:
         questions.setdefault(address, []).append(question)
     conclusions = await entries.last_conclusions([row.discussion.id for row in rows])
     return [
