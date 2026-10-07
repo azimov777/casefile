@@ -102,6 +102,7 @@ def register(tools: Toolset) -> None:
                         task_key=item.task_key,
                         project_key=item.project_key,
                         area=item.area,
+                        discussion=item.discussion,
                     )
                     for item in listed.items
                 ),

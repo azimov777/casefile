@@ -25,6 +25,7 @@ from app.api.routes import (
     accounts,
     areas,
     bootstrap,
+    discussions,
     installation,
     journal,
     links,
@@ -83,6 +84,7 @@ api_router.include_router(projects.router)
 api_router.include_router(areas.router)
 api_router.include_router(tasks.router)
 api_router.include_router(links.router)
+api_router.include_router(discussions.router)
 api_router.include_router(questions.router)
 api_router.include_router(remarks.router)
 api_router.include_router(journal.router)

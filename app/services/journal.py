@@ -93,9 +93,10 @@ type ClientGone = Callable[[], Awaitable[bool]]
 class JournalEntry:
     """Запись ленты вместе с ключом своего владельца.
 
-    Владелец записи — задача, проект или область (`CONCEPT.md`, 3.4 и 3.7), и непуст
-    ровно один ключ: `task_key` у записи дела задачи, `project_key` у записи дела проекта,
-    `area` (адрес `TRK/promotion`) у записи дела области. Так же, как колонки
+    Владелец записи — задача, проект, область или обсуждение (`CONCEPT.md`, 3.4 и 3.7;
+    решение `TRK#51`), и непуст ровно один ключ: `task_key` у записи дела задачи,
+    `project_key` у записи дела проекта, `area` (адрес `TRK/promotion`) у записи дела
+    области, `discussion` (адрес `TRK~7`) у записи дела обсуждения. Так же, как колонки
     владельца в базе (`ck_entries_one_owner`): ключ проекта у записи задачи был бы вторым
     адресом одной записи.
     """
@@ -104,6 +105,7 @@ class JournalEntry:
     task_key: str | None
     project_key: str | None
     area: str | None = None
+    discussion: str | None = None
 
 
 # --- Фильтр ---------------------------------------------------------------------------
@@ -174,8 +176,14 @@ async def read_journal(
     )
     return Page(
         items=[
-            JournalEntry(entry=entry, task_key=task_key, project_key=project_key, area=area)
-            for entry, task_key, project_key, area in page.items
+            JournalEntry(
+                entry=entry,
+                task_key=task_key,
+                project_key=project_key,
+                area=area,
+                discussion=discussion,
+            )
+            for entry, task_key, project_key, area, discussion in page.items
         ],
         next_cursor=page.next_cursor,
     )
@@ -394,7 +402,7 @@ async def stream_journal(
                     types=journal_filter.types,
                     limit=STREAM_BATCH_SIZE,
                 )
-            for entry, task_key, project_key, area in page.items:
+            for entry, task_key, project_key, area, discussion in page.items:
                 after = entry.seq
                 yield JournalMessage(
                     item=JournalEntry(
@@ -402,6 +410,7 @@ async def stream_journal(
                         task_key=task_key,
                         project_key=project_key,
                         area=area,
+                        discussion=discussion,
                     )
                 )
                 last_sent = loop.time()

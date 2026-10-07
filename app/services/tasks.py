@@ -55,7 +55,7 @@ from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
-from app.db.repositories import EntryRepository, TaskRepository
+from app.db.repositories import DiscussionRepository, EntryRepository, TaskRepository
 from app.domain import state as state_domain
 from app.domain.case import EntryHeading, is_blocking_question
 from app.domain.errors import (
@@ -288,6 +288,7 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     hierarchy = links_service.split_hierarchy(links)
     summary = await case_service.last_summary(session, task, actor=actor)
     questions = await case_service.open_questions(session, task, actor=actor)
+    discussion_questions = await case_service.open_discussion_questions(session, task, actor=actor)
     remarks = await case_service.open_remarks(session, task, actor=actor)
     # Опись читается до признаков: `last_entry_at` считается из неё, и отдельного
     # запроса ради признака здесь по-прежнему нет ни одного.
@@ -317,6 +318,7 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
             index,
             blocked=links_service.blocked(links),
             deferred=deferred,
+            discussion_questions=[question for question, _ in discussion_questions],
             remarks=remarks,
         ),
         summary=summary,
@@ -1073,16 +1075,18 @@ async def _transition_facts(
     if from_status is TaskStatus.IN_PROGRESS and to_status is TaskStatus.DONE:
         pending_checks = await case_service.verdict_gaps(session, task)
     blockers: list[str] | None = None
-    blocking_questions: list[int] | None = None
+    blocking_questions: list[str] | None = None
     deferred: bool | None = None
     if to_status is TaskStatus.IN_PROGRESS:
         blockers = await links_service.open_blockers(session, task)
-        blocking_questions = await case_service.open_blocking_question_nos(session, task)
+        blocking_questions = await case_service.open_blocking_question_refs(session, task)
         # Момент — из объекта задачи, уже с полями этого вызова; сравнивает его база.
         deferred = await TaskRepository(session).is_deferred(task.not_before)
     children: list[str] | None = None
+    discussions: list[str] | None = None
     if is_closed(to_status):
         children = await links_service.unclosed_children(session, task)
+        discussions = await DiscussionRepository(session).unclosed_of_task(task.id)
     return TransitionFacts(
         key=task.key,
         from_status=from_status,
@@ -1102,6 +1106,7 @@ async def _transition_facts(
         open_blockers=blockers,
         open_blocking_questions=blocking_questions,
         unclosed_children=children,
+        open_discussions=discussions,
         closing=closing,
         # Исполнитель — уже после полей этого вызова: переход проверяется после их
         # применения. Оба факта дешёвые и нужны только входу в `in_progress`, но

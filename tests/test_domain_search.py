@@ -437,6 +437,93 @@ def test_an_ordinary_typo_gets_no_invented_hint() -> None:
     assert "hint" not in details
 
 
+@pytest.mark.parametrize(
+    ("query", "reason", "position", "hint"),
+    [
+        # А. Значение из нескольких слов без кавычек.
+        (
+            "text: ~ столбец прокручивается",
+            "unexpected_token",
+            16,
+            'a value with spaces goes in quotes: text: ~ "столбец прокручивается"',
+        ),
+        # Б. Время с двоеточиями без кавычек.
+        (
+            "last_entry_at: >= 2026-09-07T23:40:33Z",
+            "unexpected_token",
+            31,
+            'a time goes in quotes: last_entry_at: >= "2026-09-07T23:40:33Z"',
+        ),
+        # В. `!empty()` вместо `!= empty()`.
+        (
+            "assignee: !empty()",
+            "unexpected_character",
+            10,
+            '"has a value" is written != empty(): assignee: != empty()',
+        ),
+        # Г. Текст без поля.
+        (
+            "OpenCode проверка",
+            "expected_colon",
+            9,
+            'to search titles and descriptions: text: ~ "OpenCode проверка"',
+        ),
+    ],
+)
+def test_the_four_common_slips_get_the_right_form_in_the_hint(
+    query: str, reason: str, position: int, hint: str
+) -> None:
+    """TRK-642: код, позиция и причина отказа прежние, добавлена только подсказка.
+
+    Четыре формы — по замеру отказов поиска и опыту на самой простой модели: она пишет
+    их сама, а отказ без подсказки стоил ей хода. Вторая форма записи не принимается.
+    """
+    with pytest.raises(InvalidSearchQueryError) as error:
+        parse_query(query)
+
+    details = error.value.details
+    assert (details["reason"], details["position"]) == (reason, position)
+    assert details["hint"] == hint
+
+
+@pytest.mark.parametrize(
+    ("query", "repaired"),
+    [
+        ("text: ~ столбец прокручивается and status: open", 'text: ~ "столбец прокручивается"'),
+        (
+            "last_entry_at: > 2026-09-07T23:40:33Z or status: open",
+            'last_entry_at: > "2026-09-07T23:40:33Z"',
+        ),
+        ("status: open and assignee: !empty()", "assignee: != empty()"),
+    ],
+)
+def test_the_hint_names_the_condition_that_was_written_not_the_whole_query(
+    query: str, repaired: str
+) -> None:
+    """Подсказка собрана из условия с ошибкой: остальной запрос в неё не попадает."""
+    with pytest.raises(InvalidSearchQueryError) as error:
+        parse_query(query)
+
+    assert str(error.value.details["hint"]).endswith(repaired)
+    assert str(error.value.details["hint"]).split(": ", 1)[1] != query
+
+
+@pytest.mark.parametrize(
+    "query",
+    ['text: ~ "столбец прокручивается"', "assignee: != empty()", "last_entry_at: > 2026-10-01"],
+)
+def test_the_forms_the_hints_point_to_parse(query: str) -> None:
+    """Подсказка ведёт только к тому, что язык принимает; дата без времени кавычек не просит."""
+    parse_query(query)
+
+
+def test_a_bare_word_gets_the_text_hint_but_a_field_name_without_a_colon_does_not() -> None:
+    """Одно слово не из полей — поиск текста; имя поля без двоеточия остаётся опечаткой."""
+    with pytest.raises(InvalidSearchQueryError) as error:
+        parse_query("OpenCode")
+    assert error.value.details["hint"] == ('to search titles and descriptions: text: ~ "OpenCode"')
+
+
 def test_every_example_of_the_description_parses() -> None:
     """Обзорная проверка 3: примеры из описания — рабочие запросы, а не иллюстрации.
 

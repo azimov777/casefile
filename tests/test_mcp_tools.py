@@ -530,7 +530,7 @@ async def test_transition_refuses_work_over_an_open_blocking_question(
         moved = await call(session, "transition", key=key, to="in_progress")
 
     assert "task_has_open_blocking_questions" in refused
-    assert f'"questions": [{question["no"]}]' in refused
+    assert f'"questions": ["{key}#{question["no"]}"]' in refused
     assert moved["status"] == "in_progress"
 
 

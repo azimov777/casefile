@@ -223,6 +223,70 @@ class AreaReasonRequiredError(ValidationError):
     message = "Archiving or restoring an area requires a reason"
 
 
+# --- Обсуждения -------------------------------------------------------------------
+
+
+class DiscussionNotFoundError(NotFoundError):
+    """Обсуждения с таким адресом нет: проект есть, номера в нём нет (решение `TRK#51`)."""
+
+    code = "discussion_not_found"
+    message = "Discussion not found"
+
+
+class InvalidDiscussionAddressError(ValidationError):
+    """Адрес обсуждения не разбирается как `ПРОЕКТ~номер`; форма — в `details.expected`."""
+
+    code = "invalid_discussion_address"
+    message = "Discussion address is invalid"
+
+
+class DiscussionClosedError(ConflictError):
+    """Обсуждение закрыто: любая запись, привязка, отвязка и повторное закрытие — отказ.
+
+    Закрытое обсуждение заморожено и снова не открывается (`TRK#51`, пункты 1 и 7):
+    уточнение — новое обсуждение со ссылкой на прежнее в `refs`. Возникает в одном месте —
+    `app/services/freeze.py`, после проверки архива проекта.
+    """
+
+    code = "discussion_closed"
+    message = "Discussion is closed: its case and its tasks are frozen"
+
+
+class DiscussionHasOpenQuestionsError(ConflictError):
+    """Закрытие обсуждения, в деле которого есть вопрос без ответа: адреса вопросов
+    (`TRK~7#3`) — в `details.questions`.
+
+    Конфликт состояния: то же закрытие пройдёт после `answer` на каждый вопрос — ответом
+    по существу или снятием (`withdrawn`). Иначе привязанные задачи перестали бы ждать
+    ответа, которого никто не дал (`TRK#51`, п. 7).
+    """
+
+    code = "discussion_has_open_questions"
+    message = "Discussion has questions with no answer"
+
+
+class DiscussionTaskExistsError(ConflictError):
+    """Задача уже привязана к этому обсуждению: привязка хранится одной строкой.
+
+    Конфликт состояния, а не ошибка формы, как `link_exists`: результат запроса уже
+    достигнут.
+    """
+
+    code = "discussion_task_exists"
+    message = "Task is already attached to the discussion"
+
+
+class DiscussionTaskNotFoundError(NotFoundError):
+    """Задача не привязана к этому обсуждению — отвязывать нечего.
+
+    Отдельный код, а не `task_not_found`: и задача, и обсуждение есть, нет именно
+    привязки, как у `link_not_found`.
+    """
+
+    code = "discussion_task_not_found"
+    message = "Task is not attached to the discussion"
+
+
 # --- Атрибуты проекта и области ---------------------------------------------------
 
 
@@ -629,12 +693,16 @@ class TaskBlockedError(ConflictError):
 
 
 class TaskHasOpenBlockingQuestionsError(ConflictError):
-    """Вход в `in_progress` при открытом вопросе `blocking`: номера вопросов в `details.questions`.
+    """Вход в `in_progress` при вопросе без ответа, который держит работу: адреса вопросов в
+    `details.questions` — `TRK-42#3` у вопроса `blocking` в деле задачи, `TRK~7#3` у вопроса
+    в незакрытом обсуждении, к которому задача привязана.
 
     Без статуса ожидания дверь в работу держит сам носитель (`CONCEPT.md`, 3.3; решение
-    владельца `TRK-569#9`, развилка 3), как блокер держит её у `task_blocked`. Конфликт
-    состояния: тот же переход пройдёт после `answer` на каждый из названных вопросов —
-    ответом по существу или снятием (`withdrawn`). Неблокирующий вопрос вход не держит.
+    владельца `TRK-569#9`, развилка 3), как блокер держит её у `task_blocked`. Вопрос
+    обсуждения держит всегда: признака `blocking` у него нет (решение `TRK#51`, п. 4).
+    Конфликт состояния: тот же переход пройдёт после `answer` на каждый из названных
+    вопросов — ответом по существу или снятием (`withdrawn`). Неблокирующий вопрос в деле
+    задачи вход не держит.
     """
 
     code = "task_has_open_blocking_questions"
@@ -692,6 +760,19 @@ class TaskHasUnclosedChildrenError(ConflictError):
 
     code = "task_has_unclosed_children"
     message = "Task has children that are not closed"
+
+
+class TaskHasOpenDiscussionsError(ConflictError):
+    """Закрытие или отмена задачи, пока привязанное к ней обсуждение не закрыто: адреса
+    обсуждений — в `details.discussions`.
+
+    Задача, привязанная к обсуждению, зависит от его итога (`TRK#51`, п. 4): закрыть её
+    раньше значило бы забыть обсуждение, а закрыть его потом было бы некому. Конфликт
+    состояния: тот же ход пройдёт, когда обсуждение закроют с итогом или задачу отвяжут.
+    """
+
+    code = "task_has_open_discussions"
+    message = "Task has discussions that are not closed"
 
 
 # --- Поиск ------------------------------------------------------------------------------

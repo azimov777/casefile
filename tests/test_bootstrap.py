@@ -27,6 +27,7 @@ from app.services.auth import TRACKER_ACTOR, Actor
 #: он живёт в `GET /api/v1/installation`.
 BOOTSTRAP_FIELDS = [
     "account",
+    "open_discussions",
     "open_questions",
     "open_warnings",
     "participant",

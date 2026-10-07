@@ -20,7 +20,8 @@ type TaskDetails = components['schemas']['TaskRead'];
 type Entry = components['schemas']['EntryRead'];
 type EntryHeading = components['schemas']['EntryHeadingRead'];
 type Summary = components['schemas']['SummaryEntryRead'];
-type Question = components['schemas']['QuestionEntryRead'];
+// Вопрос дела задачи (TRK-669): в пакете преемника и выдаче вопросов `task_key` — строка.
+type Question = components['schemas']['TaskQuestionRead'];
 type Remark = components['schemas']['RemarkEntryRead'];
 type AccessToken = components['schemas']['TokenRead'];
 type Participant = components['schemas']['ParticipantRead'];
@@ -89,6 +90,7 @@ export function bootstrap(overrides: Partial<Bootstrap> = {}): Bootstrap {
     ],
     open_questions: 2,
     open_warnings: 0,
+    open_discussions: 0,
     ...overrides,
   };
 }
@@ -574,6 +576,30 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
         body: '',
         type,
         payload: { reason: 'Демо отложено до выпуска' },
+      };
+    // Привязка к обсуждению (TRK-669) лежит и в деле задачи: здесь — оно.
+    case 'attached':
+    case 'detached':
+      return { ...base, body: '', type, payload: { task: taskKey, discussion: 'DEMO~1' } };
+    // Итог и закрытие бывают только в деле обсуждения (TRK-669): владелец — обсуждение.
+    case 'conclusion':
+      return {
+        ...base,
+        task_key: null,
+        discussion: 'DEMO~1',
+        title: 'Храним вечно',
+        body: '',
+        type,
+        payload: { decided: 'Храним вечно', superseded: 'ничего', open: 'ничего' },
+      };
+    case 'closed':
+      return {
+        ...base,
+        task_key: null,
+        discussion: 'DEMO~1',
+        body: '',
+        type,
+        payload: { conclusion_no: 4 },
       };
     default:
       // `created`, `decision`, `attempt`, `finding`, `artifact`, `remark`, `acceptance`,

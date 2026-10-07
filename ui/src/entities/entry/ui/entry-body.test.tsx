@@ -101,6 +101,17 @@ function expected(): Record<EntryType, (string | RegExp)[]> {
     ],
     archived: [say.ui('entry.headline.projectArchived'), /Демо отложено/],
     restored: [say.ui('entry.headline.projectRestored'), /Демо отложено/],
+    // Обсуждение (TRK-669): в деле задачи привязка называет адрес обсуждения; итог —
+    // три части подписями; закрытие — одной строкой.
+    attached: [say.ui('entry.headline.attachedTo'), 'DEMO~1'],
+    detached: [say.ui('entry.headline.detachedFrom'), 'DEMO~1'],
+    conclusion: [
+      say.ui('entry.conclusion.decided'),
+      say.ui('entry.conclusion.superseded'),
+      say.ui('entry.conclusion.open'),
+      'Храним вечно',
+    ],
+    closed: [say.ui('entry.headline.discussionClosed')],
   };
 }
 
@@ -125,6 +136,9 @@ const BUILT_HEADLINE: EntryType[] = [
   'attribute_removed',
   'archived',
   'restored',
+  'attached',
+  'detached',
+  'closed',
 ];
 
 function show(type: EntryType) {

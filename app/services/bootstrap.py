@@ -30,6 +30,7 @@ from app.db.models.project import Project
 from app.db.pagination import MAX_PAGE_SIZE
 from app.services import accounts as accounts_service
 from app.services import case as case_service
+from app.services import discussions as discussions_service
 from app.services import projects as projects_service
 from app.services.auth import Actor
 
@@ -57,6 +58,9 @@ class Bootstrap:
     #: никто ещё не принял недостаток и не вернул задачу замечанием. Адресата у
     #: предупреждения нет, поэтому число одно для любого токена.
     open_warnings: int
+    #: Незакрытые обсуждения, где ход за человеком (`turn: human`, решение `TRK#51`, п. 8):
+    #: входящая по обсуждениям. Адресата у хода нет — число одно для любого токена.
+    open_discussions: int
 
 
 async def read_bootstrap(
@@ -100,4 +104,5 @@ async def read_bootstrap(
         projects=page.items,
         open_questions=open_questions,
         open_warnings=await case_service.count_open_warnings(session),
+        open_discussions=await discussions_service.count_waiting_on_humans(session),
     )

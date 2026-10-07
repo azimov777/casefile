@@ -52,5 +52,6 @@ async def read_bootstrap(
             projects=[ProjectRead.model_validate(project) for project in state.projects],
             open_questions=state.open_questions,
             open_warnings=state.open_warnings,
+            open_discussions=state.open_discussions,
         )
     )

@@ -25,6 +25,7 @@ from app.domain.authors import ACTOR_LABEL_HEADER
 from app.domain.case import (
     ARCHIVE_ENTRY_TYPES,
     ATTRIBUTE_ENTRY_TYPES,
+    DISCUSSION_ONLY_ENTRY_TYPES,
     FACTS_BY_ENTRY_TYPE,
     EntryType,
     NoFacts,
@@ -386,8 +387,11 @@ async def test_the_index_carries_only_the_fields_of_its_own_type(
 
     # Записи об атрибутах и об архиве бывают только в деле проекта (TRK-157, TRK-159): их
     # факты сверяют `tests/test_project_attributes.py` и `tests/test_project_archive.py`
-    # по описи `get_project`.
-    in_a_task_case = set(EntryType) - ATTRIBUTE_ENTRY_TYPES - ARCHIVE_ENTRY_TYPES
+    # по описи `get_project`. Итог и закрытие — только в деле обсуждения (TRK-669), их
+    # факты сверяет `tests/test_discussions.py`.
+    in_a_task_case = (
+        set(EntryType) - ATTRIBUTE_ENTRY_TYPES - ARCHIVE_ENTRY_TYPES - DISCUSSION_ONLY_ENTRY_TYPES
+    )
     assert seen == {entry_type.value for entry_type in in_a_task_case}, sorted(seen)
 
 
@@ -468,6 +472,17 @@ async def _case_with_every_entry_type(
         actor=actor,
         kind=LinkKind.RELATES,
     )
+
+    # `attached` и `detached` — привязкой к обсуждению и её снятием (TRK-669): после
+    # снятия задача обсуждения не ждёт, и закрытие ниже проходит.
+    discussed = await client.post(
+        "/api/v1/discussions",
+        json={"project": project.key, "title": "a discussion", "tasks": [key]},
+    )
+    assert discussed.status_code == 201, discussed.text
+    address = discussed.json()["data"]["address"]
+    detached = await client.delete(f"/api/v1/discussions/{address}/tasks/{key}")
+    assert detached.status_code == 204, detached.text
 
     for entry_type in ("decision", "attempt", "finding", "artifact", "note"):
         await file(type=entry_type, title=f"a {entry_type}")

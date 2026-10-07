@@ -395,7 +395,7 @@ task_field_locked`, хотя ничего не изменилось бы.
 **Что:** с TRK-573 статуса ожидания нет, и вход в `in_progress` при вопросе с `blocking`
 без `answer` отклоняется `409 task_has_open_blocking_questions` с номерами вопросов в
 `details.questions` (решение владельца TRK-569#9, развилка 3). Факт для проверки считает
-`open_blocking_question_nos` — тот же список открытых вопросов и тот же
+`open_blocking_question_refs` — тот же список открытых вопросов и тот же
 `is_blocking_question`, из которых карточка считает признак `open_blocking_questions`.
 **Почему важно:** тест, демо или сценарий интерфейса, где агент задаёт блокирующий вопрос и
 потом снова берёт задачу в работу, раньше проходили, а теперь падают на входе — с кодом,
@@ -409,7 +409,7 @@ task_field_locked`, хотя ничего не изменилось бы.
 запросом. Порядок проверок — из таблицы валидаций `CONCEPT.md`, 3.3: исполнитель, блокер,
 вопрос.
 **Где:** `app/domain/tasks.py`, `check_no_open_blocking_questions`; `app/services/case.py`,
-`open_blocking_question_nos`; `app/services/tasks.py`, `_transition_facts`.
+`open_blocking_question_refs`; `app/services/tasks.py`, `_transition_facts`.
 
 ## Область задачи хранится ссылкой, а сравнивается и пишется в дело адресом (TRK-556)
 

@@ -272,7 +272,7 @@ async def test_a_waiting_task_goes_to_open_with_a_blocking_question_and_comes_ba
 
     with pytest.raises(TaskHasOpenBlockingQuestionsError) as error:
         await service.transition_task(db_session, task, actor=task_actor, to=TaskStatus.IN_PROGRESS)
-    assert error.value.details["questions"] == [question.no]
+    assert error.value.details["questions"] == [f"{task.key}#{question.no}"]
     assert task.status is TaskStatus.OPEN
 
     await case_service.answer(

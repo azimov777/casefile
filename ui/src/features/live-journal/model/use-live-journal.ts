@@ -152,14 +152,17 @@ export function useLiveJournal(): LiveJournal {
       invalidate(keysToInvalidate(frame), frame.taskKey);
 
       if (frame.entry.type !== 'question') return;
-      // Вопрос интересен человеку, только если спросили его самого. Тип записи сузил
-      // `frame.entry` до варианта задачи: у него `task_key` — всегда строка, вопросов
-      // в деле проекта не бывает (TRK-156).
+      // Вопрос интересен человеку, только если спросили его самого. Вопросов в деле
+      // проекта не бывает (TRK-156), а вопрос обсуждения (TRK-669) владельцем называет
+      // `discussion`, и `task_key` у него пуст: уведомление о нём — дело экрана обсуждений
+      // (TRK-672), здесь его пропускаем.
+      const taskKey = frame.entry.task_key;
+      if (taskKey === null) return;
       const me = queryClient.getQueryData<Bootstrap>(sessionKeys.bootstrap)?.participant?.name;
       if (me === undefined || me === null) return;
       if (!frame.entry.payload.addressees.includes(me)) return;
 
-      const id = `${frame.entry.task_key}#${frame.entry.no}`;
+      const id = `${taskKey}#${frame.entry.no}`;
       if (announced.current.has(id)) return;
       announced.current.add(id);
 
@@ -168,7 +171,7 @@ export function useLiveJournal(): LiveJournal {
       // нагрузку всех пятнадцати типов записи разом.
       const question: IncomingQuestion = {
         id,
-        taskKey: frame.entry.task_key,
+        taskKey,
         no: frame.entry.no,
         title: frame.entry.title,
         blocking: frame.entry.payload.blocking,

@@ -1540,3 +1540,92 @@ async def test_the_areas_rollback_brings_the_direction_names_back(
     await migrate(url, AREAS_REVISION)
     async with migration_engine.connect() as connection:
         assert await _entries_by_owner(connection, "area") == _ENTRIES_AS_WRITTEN
+
+
+# --- Обсуждения (TRK-669) -----------------------------------------------------------------
+
+#: Ревизия обсуждений и ревизия перед ней.
+DISCUSSIONS_REVISION = "5d0c8e3a71b4"
+DISCUSSIONS_PREVIOUS = AREAS_REVISION
+
+_INSERT_DISCUSSION = text(
+    "INSERT INTO discussions (project_id, number, title, created_by_kind, "
+    "created_by_signature) SELECT id, 1, 'Хранить ли дела вечно?', 'agent', 'claude' "
+    "FROM projects WHERE key = 'OLD'"
+)
+_INSERT_DISCUSSION_ENTRY = text(
+    "INSERT INTO entries (discussion_id, no, type, title, created_by_kind, "
+    "created_by_signature) SELECT id, 1, 'created', 'Discussion created', 'agent', 'claude' "
+    "FROM discussions"
+)
+
+
+async def test_a_discussion_entry_has_exactly_one_owner_after_the_discussions_migration(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Запись обсуждения держит пустыми три других колонки владельца; запись двух
+    владельцев отклоняет `ck_entries_one_owner` о четырёх колонках; номер обсуждения
+    уникален в проекте, статус — `open` по умолчанию, типы записей обсуждения проходят."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, DISCUSSIONS_PREVIOUS)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+
+    await migrate(url, DISCUSSIONS_REVISION)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_DISCUSSION)
+        await connection.execute(_INSERT_DISCUSSION_ENTRY)
+        await connection.execute(
+            text(
+                "INSERT INTO entries (discussion_id, no, type, title, payload, "
+                "created_by_kind, created_by_signature) SELECT id, 2, 'conclusion', 'Да', "
+                """'{"decided": "Да", "superseded": "ничего", "open": "ничего"}'::jsonb, """
+                "'agent', 'claude' FROM discussions"
+            )
+        )
+        owners = list(
+            await connection.execute(
+                text(
+                    "SELECT (task_id IS NULL), (project_id IS NULL), (area_id IS NULL), "
+                    "(discussion_id IS NULL) FROM entries ORDER BY no"
+                )
+            )
+        )
+        status = await connection.scalar(text("SELECT status FROM discussions"))
+    assert [tuple(row) for row in owners] == [(True, True, True, False)] * 2
+    assert status == "open"
+
+    with pytest.raises(Exception, match="ck_entries_one_owner"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO entries (project_id, discussion_id, no, type, title, "
+                    "created_by_kind, created_by_signature) SELECT project_id, id, 9, 'note', "
+                    "'Обоих', 'agent', 'claude' FROM discussions"
+                )
+            )
+    with pytest.raises(Exception, match="uq_discussions_project_id_number"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(_INSERT_DISCUSSION)
+
+
+async def test_the_discussions_rollback_refuses_while_discussion_entries_exist(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """Без записей обсуждений откат и повтор проходят; с ними откат отказывает: запись
+    без владельца базе не нужна, а удалить её нельзя."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, DISCUSSIONS_PREVIOUS)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+    await migrate(url, DISCUSSIONS_REVISION)
+
+    await migrate(url, DISCUSSIONS_PREVIOUS, down=True)
+    await migrate(url, DISCUSSIONS_REVISION)
+
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_DISCUSSION)
+        await connection.execute(_INSERT_DISCUSSION_ENTRY)
+
+    with pytest.raises(Exception, match="ck_entries_one_owner"):
+        await migrate(url, DISCUSSIONS_PREVIOUS, down=True)

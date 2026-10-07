@@ -1,4 +1,5 @@
-"""Заморозка архива: единственное место, где возникают отказы архива проекта и области.
+"""Заморозка: единственное место, где возникают отказы архива проекта и области и отказ
+закрытого обсуждения.
 
 Архивный проект заморожен целиком вместе с задачами и областями (`CONCEPT.md`, 3.2 и
 3.7): ни новой задачи, ни записи в дело проекта, его задач или областей, ни перехода,
@@ -9,6 +10,10 @@
 
 Архив проекта называется раньше архива области: восстановить область в архивном
 проекте всё равно нельзя, и агент, получивший `area_archived`, чинил бы не то.
+
+Закрытое обсуждение заморожено той же механикой (решение `TRK#51`, пункты 2 и 7):
+его дело и привязки не меняются, и снова оно не открывается. Отказ — `discussion_closed`,
+после архива проекта: в архивном проекте сначала нужен проект.
 
 ## Две опоры, одна проверка
 
@@ -48,12 +53,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.locks import lock_changes
 from app.db.models.area import Area
+from app.db.models.discussion import Discussion
 from app.db.models.project import Project
 from app.db.models.task import Task
-from app.db.repositories import AreaRepository, ProjectRepository
+from app.db.repositories import AreaRepository, DiscussionRepository, ProjectRepository
 from app.domain.areas import format_area_address
 from app.domain.case import EntryType
-from app.domain.errors import AreaArchivedError, ProjectArchivedError
+from app.domain.discussions import format_discussion_address
+from app.domain.errors import AreaArchivedError, DiscussionClosedError, ProjectArchivedError
 
 #: Записи, которые ложатся в дело архивного проекта и его задач: сами действия архива и
 #: снятие связи. Всё остальное архив отклоняет.
@@ -68,19 +75,23 @@ async def ensure_unfrozen(
     tasks: Iterable[Task] = (),
     projects: Iterable[Project] = (),
     areas: Iterable[Area] = (),
+    discussions: Iterable[Discussion] = (),
 ) -> None:
-    """Отказывает, если названный проект, проект задачи или области в архиве
-    (`ProjectArchivedError`), а затем — если названная область в архиве
-    (`AreaArchivedError`).
+    """Отказывает, если названный проект, проект задачи, области или обсуждения в архиве
+    (`ProjectArchivedError`), затем — если названная область в архиве
+    (`AreaArchivedError`), затем — если названное обсуждение закрыто
+    (`DiscussionClosedError`).
 
-    Звать под очередью изменений: архивирование и восстановление тоже её занимают, и
-    состояние, прочитанное под ней, не изменится до конца транзакции.
+    Звать под очередью изменений: архивирование, восстановление и закрытие тоже её
+    занимают, и состояние, прочитанное под ней, не изменится до конца транзакции.
     """
     areas = tuple(areas)
+    discussions = tuple(discussions)
     project_ids = (
         {task.project_id for task in tasks}
         | {project.id for project in projects}
         | {area.project_id for area in areas}
+        | {discussion.project_id for discussion in discussions}
     )
     archived = await ProjectRepository(session).first_archived(project_ids)
     if archived is not None:
@@ -99,6 +110,12 @@ async def ensure_unfrozen(
                 "archived_at": area_archived_at.isoformat(),
             }
         )
+    closed = await DiscussionRepository(session).first_closed(
+        {discussion.id for discussion in discussions}
+    )
+    if closed is not None:
+        # И единственная точка отказа закрытого обсуждения.
+        raise DiscussionClosedError(details={"key": format_discussion_address(*closed)})
 
 
 async def lock_unfrozen(
@@ -106,11 +123,12 @@ async def lock_unfrozen(
     *tasks: Task,
     project: Project | None = None,
     area: Area | None = None,
+    discussion: Discussion | None = None,
 ) -> None:
     """Очередь изменений и проверка заморозки — первым шагом мутирующего сценария.
 
     То же, что `lock_changes` (задачи перечитываются под очередью), и сразу после неё
-    `ensure_unfrozen` по названным задачам, проекту и области.
+    `ensure_unfrozen` по названным задачам, проекту, области и обсуждению.
     """
     await lock_changes(session, *tasks)
     await ensure_unfrozen(
@@ -118,4 +136,5 @@ async def lock_unfrozen(
         tasks=tasks,
         projects=() if project is None else (project,),
         areas=() if area is None else (area,),
+        discussions=() if discussion is None else (discussion,),
     )

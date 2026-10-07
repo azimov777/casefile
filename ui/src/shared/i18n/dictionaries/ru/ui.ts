@@ -321,6 +321,7 @@ export const ui = {
       remark: 'замечание',
       resolution: 'резолюция',
       acceptance: 'принятие',
+      conclusion: 'итог',
       note: 'заметка',
       created: 'заведение',
       status_changed: 'смена статуса',
@@ -331,6 +332,9 @@ export const ui = {
       link_removed: 'связь снята',
       moved: 'перенос в другой проект',
       warning: 'предупреждение',
+      attached: 'привязка к обсуждению',
+      detached: 'отвязка от обсуждения',
+      closed: 'обсуждение закрыто',
       attribute_created: 'атрибут заведён',
       attribute_changed: 'правка атрибута',
       attribute_removed: 'атрибут снят',
@@ -369,6 +373,13 @@ export const ui = {
       projectRestored: 'Проект восстановлен',
       areaArchived: 'Область в архиве',
       areaRestored: 'Область восстановлена',
+      // Обсуждение (TRK-669): заведение, закрытие и привязка задачи с обеих сторон.
+      discussionCreated: 'Обсуждение заведено',
+      discussionClosed: 'Обсуждение закрыто',
+      taskAttached: 'Задача привязана',
+      taskDetached: 'Задача отвязана',
+      attachedTo: 'Привязана к обсуждению',
+      detachedFrom: 'Отвязана от обсуждения',
       // Кем вторая задача приходится этой (UI-166). Только у `parent`/`child`: их
       // идентификатор, прочитанный фразой («parent DEMO-9»), называет роль наоборот —
       // у `blocks DEMO-3` и `relates DEMO-3` фраза читается верно и без слов.
@@ -397,6 +408,12 @@ export const ui = {
       blockers: 'Что мешает',
       nextStep: 'Следующий шаг',
       unmeasured: 'Чего проверки не измерили',
+    },
+    // Итог обсуждения (TRK-669): три части, как у сводки — четыре.
+    conclusion: {
+      decided: 'Решено',
+      superseded: 'Заменено',
+      open: 'Открыто',
     },
     addressees: 'Кому:',
     blocking: 'блокирующий',

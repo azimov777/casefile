@@ -99,6 +99,8 @@ const words = (text: string): HeadlinePart => ({ kind: 'words', text });
 
 /** Владелец дела — область: косая черта есть только в её адресе `TRK/promotion`. */
 const isArea = (ownerKey: string): boolean => ownerKey.includes('/');
+/** Владелец дела — обсуждение: тильда есть только в его адресе `TRK~7` (TRK-669). */
+const isDiscussion = (ownerKey: string): boolean => ownerKey.includes('~');
 const id = (text: string): HeadlinePart => ({ kind: 'id', text });
 const flag = (text: string): HeadlinePart => ({ kind: 'flag', text });
 
@@ -133,9 +135,11 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
           words(
             isArea(taskKey)
               ? t('entry.headline.areaCreated')
-              : taskKey.includes('-')
-                ? t('entry.headline.created')
-                : t('entry.headline.projectCreated'),
+              : isDiscussion(taskKey)
+                ? t('entry.headline.discussionCreated')
+                : taskKey.includes('-')
+                  ? t('entry.headline.created')
+                  : t('entry.headline.projectCreated'),
           ),
         ],
       };
@@ -266,6 +270,41 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
         ],
       };
 
+    /*
+     * Привязка задачи к обсуждению и её снятие (TRK-669): запись лежит в делах обеих
+     * сторон и называет другую. В деле задачи это адрес обсуждения — идентификатором, в
+     * деле обсуждения — ключ задачи ссылкой.
+     */
+    case 'attached':
+    case 'detached':
+      if (isDiscussion(taskKey)) {
+        return {
+          kind: 'built',
+          parts: [
+            words(
+              facts.type === 'attached'
+                ? t('entry.headline.taskAttached')
+                : t('entry.headline.taskDetached'),
+            ),
+            ...(facts.task_key == null ? [] : [{ kind: 'task' as const, key: facts.task_key }]),
+          ],
+        };
+      }
+      return {
+        kind: 'built',
+        parts: [
+          words(
+            facts.type === 'attached'
+              ? t('entry.headline.attachedTo')
+              : t('entry.headline.detachedFrom'),
+          ),
+          ...(facts.discussion == null ? [] : [id(facts.discussion)]),
+        ],
+      };
+
+    case 'closed':
+      return { kind: 'built', parts: [words(t('entry.headline.discussionClosed'))] };
+
     case 'answer':
       return answerHeadline(facts, taskKey, t);
 
@@ -330,8 +369,10 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
       };
 
     // Заголовок сводки — первая строка «следующего шага»: в ленте он стоял бы жирным
-    // над тем же текстом, а в описи это единственное, чем сводку назвать.
+    // над тем же текстом, а в описи это единственное, чем сводку назвать. Так же у
+    // итога обсуждения (TRK-669): первая строка «решено».
     case 'summary':
+    case 'conclusion':
       return { kind: 'derived' };
 
     // Вопрос, решение, попытка, находка, артефакт, замечание, заметка: заголовок
@@ -512,6 +553,14 @@ export function factsOfEntry(entry: Entry): EntryFacts {
       return { type: entry.type, name: entry.payload.name };
     case 'moved':
       return { type: 'moved', from_key: entry.payload.from_key, to_key: entry.payload.to_key };
+    // Привязка к обсуждению (TRK-669): обе стороны — ключ задачи и адрес обсуждения.
+    case 'attached':
+    case 'detached':
+      return {
+        type: entry.type,
+        task_key: entry.payload.task,
+        discussion: entry.payload.discussion,
+      };
     case 'warning':
       return {
         type: 'warning',

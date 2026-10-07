@@ -10,6 +10,7 @@ from app.db.models.account import Account
 from app.db.models.area import Area
 from app.db.models.attribute import AreaAttribute, ProjectAttribute
 from app.db.models.author import CreatedByMixin, created_by_columns
+from app.db.models.discussion import Discussion, DiscussionTask
 from app.db.models.entry import Entry
 from app.db.models.idempotency import IdempotencyKey
 from app.db.models.link import Link
@@ -26,6 +27,8 @@ __all__ = [
     "Base",
     "BaseModel",
     "CreatedByMixin",
+    "Discussion",
+    "DiscussionTask",
     "Entry",
     "IdempotencyKey",
     "Link",
