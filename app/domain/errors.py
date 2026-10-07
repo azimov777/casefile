@@ -342,9 +342,10 @@ class InvalidTaskKeyError(ValidationError):
 class TaskFieldsInvalidError(ValidationError):
     """Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`.
 
-    У `decisions` причины называют, почему ссылка — не решение проекта (`CONCEPT.md`,
-    3.2): `task_entry` (запись задачи `TRK-42#7`), `not_a_decision_ref` (не ссылка вида
-    `TRK#15`), `unknown_project`, `unknown_entry` и `not_a_decision` (запись дела проекта
+    У `decisions` причины называют, почему ссылка — не решение проекта или области
+    (`CONCEPT.md`, 3.2; TRK#57, раздел 5): `task_entry` (запись задачи `TRK-42#7`),
+    `not_a_decision_ref` (не ссылка вида `TRK#15` или `TRK/mcp#3`), `unknown_project`,
+    `unknown_area`, `unknown_entry` и `not_a_decision` (запись дела проекта или области
     другого типа).
     """
 
@@ -519,21 +520,21 @@ class QuestionNotATaskEntryError(ValidationError):
 
 
 class DecisionNotInForceError(ConflictError):
-    """Решение проекта уже заменено другим, а его называют как действующее.
+    """Решение проекта или области уже заменено другим, а его называют как действующее.
 
-    Два места, один отказ (`CONCEPT.md`, 3.2 и 3.3): новое решение не заменяет уже
-    заменённое — иначе у решения было бы два преемника, — и задача не ставит в `decisions`
-    новую ссылку на заменённое — иначе отменённое обрастало бы ссылками. В
+    Два места, один отказ (`CONCEPT.md`, 3.2 и 3.3; TRK#57, раздел 5): новое решение не
+    заменяет уже заменённое — иначе у решения было бы два преемника, — и задача не ставит в
+    `decisions` новую ссылку на заменённое — иначе отменённое обрастало бы ссылками. В
     `details.decisions` каждое такое решение и его преемник (`ref`, `superseded_by`).
     Конфликт состояния, а не ошибка формы: та же ссылка на преемника проходит.
     """
 
     code = "decision_not_in_force"
-    message = "Project decision is superseded by a later decision"
+    message = "Decision is superseded by a later decision"
 
 
 class FindingNotInForceError(ConflictError):
-    """Заметка дела проекта уже заменена другой, а её заменяют снова.
+    """Заметка дела проекта или области уже заменена другой, а её заменяют снова.
 
     Тот же отказ, что у решения (`DecisionNotInForceError`), для второй записи знания
     (решение TRK#48, раздел 2): у заметки не бывает двух преемников, и цепочка замен
@@ -543,7 +544,7 @@ class FindingNotInForceError(ConflictError):
     """
 
     code = "finding_not_in_force"
-    message = "Project finding is superseded by a later finding"
+    message = "Finding is superseded by a later finding"
 
 
 class SummaryRequiredError(ConflictError):

@@ -30,6 +30,9 @@
 - обсуждения (решение `TRK#51`): закрытое с итогом — вопрос, ответ, итог, привязка и
   отвязка задачи; открытое с вопросом к человеку — входящая по обсуждениям; заведённое
   человеком запиской — ход за агентом;
+- знание в делах областей (решение `TRK#57`, разделы 5–6): у `DEMO/core` и `DEMO/ui`
+  решения и заметки, одна заметка заменена другой; в `DEMO/ui` своя задача; третья
+  область, `DEMO/webhooks`, с решением уходит в архив;
 - связи всех трёх видов;
 - три автора: человек, постоянный агент и временный агент, подписанный меткой.
 
@@ -70,8 +73,15 @@ from app.services.tasks import TaskChanges
 #: Ключ демонстрационного проекта. Он же признак «демо уже наполнено».
 DEMO_PROJECT_KEY = "DEMO"
 
-#: Область демо-проекта: все его задачи, кроме одной «старой», заведены с ней (`area_required`).
+#: Область демо-проекта: все его задачи, кроме одной «старой» и задачи интерфейса, заведены
+#: с ней (`area_required`).
 DEMO_AREA = "DEMO/core"
+
+#: Вторая область демо-проекта со знанием и своей задачей (решение `TRK#57`).
+_UI_AREA = "DEMO/ui"
+
+#: Архивная область демо-проекта: её знание читается, а записи и новые задачи — нет.
+_ARCHIVED_AREA = "DEMO/webhooks"
 
 #: Область соседнего проекта: задача, переехавшая туда, обязана назвать область целевого проекта.
 _NEIGHBOUR_AREA = "LEGACY/past"
@@ -184,6 +194,7 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     accepted = await _accepted_warning_task(session, project, agent=agent, human=human)
     deferred = await _deferred_task(session, project, agent=agent)
     await _discussions(session, project, agent=agent, owner=owner, human=human, deferred=deferred)
+    interface = await _area_knowledge(session, project, agent=agent, owner=owner)
 
     return DemoData(
         project=project,
@@ -197,8 +208,115 @@ async def seed_demo(session: AsyncSession) -> DemoData:
             cancelled,
             accepted,
             deferred,
+            interface,
         ],
     )
+
+
+async def _area_knowledge(
+    session: AsyncSession, project: Project, *, agent: Actor, owner: Actor
+) -> Task:
+    """Знание в делах областей (решение `TRK#57`, разделы 5–6) и задача второй области.
+
+    `DEMO/core` получает решение и две заметки, где вторая заменяет первую: на странице
+    области видно «действует / заменена → преемник». `DEMO/ui` заводит владелец — с
+    решением человека, заметкой агента и своей задачей в `backlog` (кандидатом она не
+    становится). `DEMO/webhooks` с решением уходит в архив: знание архивной области
+    читается, а писать в неё нельзя. Задачи на решения областей не ссылаются: ссылку из
+    карточки задачи интерфейс покажет своей задачей.
+    """
+    core = await areas_service.get_area(session, DEMO_AREA)
+    await case_service.append_project_entry(
+        session,
+        core,
+        actor=agent,
+        type=EntryType.DECISION,
+        title="Номер задачи выдаётся после проверки полей",
+        body=(
+            "Отклонённый запрос не должен сжигать номер. Выбрано: проверка полей до выдачи "
+            "номера. Отвергнуто: возвращать номер в пул — номера в проекте идут подряд."
+        ),
+        refs=["DEMO-1"],
+    )
+    burnt = await case_service.append_project_entry(
+        session,
+        core,
+        actor=agent,
+        type=EntryType.FINDING,
+        title="Отклонённый запрос сжигает номер задачи",
+        body="Воспроизведено на DEMO-1: номер выдаётся раньше проверки полей.",
+    )
+    await case_service.append_project_entry(
+        session,
+        core,
+        actor=agent,
+        type=EntryType.FINDING,
+        title="Отклонённый запрос номер задачи больше не сжигает",
+        body=(
+            "После DEMO-1 номер выдаётся последним шагом; прежняя заметка описывала "
+            "поведение до исправления."
+        ),
+        refs=["DEMO-1"],
+        supersedes=[burnt.no],
+    )
+
+    ui = await areas_service.create_area(
+        session,
+        actor=owner,
+        address=_UI_AREA,
+        title="Интерфейс",
+        description="Экраны человека: доска, карточка задачи, страница проекта.",
+    )
+    await case_service.append_project_entry(
+        session,
+        ui,
+        actor=owner,
+        type=EntryType.DECISION,
+        title="Тексты интерфейса — только в словарях, сразу на двух языках",
+        body="Строка в коде экрана не переводится и расходится со вторым языком.",
+    )
+    await case_service.append_project_entry(
+        session,
+        ui,
+        actor=agent,
+        type=EntryType.FINDING,
+        title="Safari прячет полосу прокрутки, пока по списку не провели",
+        body="Длинный список на доске в Safari выглядит обрезанным; в Chromium полоса видна.",
+    )
+    interface = await tasks_service.create_task(
+        session,
+        actor=agent,
+        project=project,
+        area=_UI_AREA,
+        title="Подписи кнопок доски — из словаря интерфейса",
+        description="Две кнопки доски подписаны строкой в коде экрана и не переводятся.",
+        goal="Все подписи доски переводятся вместе с языком интерфейса",
+        context="Словари интерфейса уже есть на двух языках",
+        constraints="Порядок и вид кнопок не менять",
+        output="Подписи доски берутся из словарей",
+        checks=["Переключение языка меняет подписи всех кнопок доски"],
+        priority=TaskPriority.LOW,
+    )
+
+    webhooks = await areas_service.create_area(
+        session,
+        actor=owner,
+        address=_ARCHIVED_AREA,
+        title="Вебхуки",
+        description="Доставка событий трекера наружу.",
+    )
+    await case_service.append_project_entry(
+        session,
+        webhooks,
+        actor=agent,
+        type=EntryType.DECISION,
+        title="Вебхуков нет: потребители читают ленту",
+        body="Лента отдаёт те же записи по сквозному номеру и не теряет их при сбое потребителя.",
+    )
+    await areas_service.archive_area(
+        session, webhooks, actor=owner, reason="Вебхуки сняты: потребители читают ленту"
+    )
+    return interface
 
 
 async def _attributes(session: AsyncSession, project: Project, *, agent: Actor) -> None:

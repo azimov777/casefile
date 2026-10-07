@@ -349,12 +349,12 @@ class EmptyPayload(BaseModel):
 
 
 class SupersedesPayload(BaseModel):
-    """Нагрузка решения и заметки: какие записи того же типа и того же дела проекта эта
-    заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2).
+    """Нагрузка решения и заметки: какие записи того же типа и того же дела проекта или
+    области эта заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2; TRK#57, раздел 5).
 
-    Список со значением по умолчанию: записи задач и областей, решения проекта,
-    подшитые до замены (`TRK-554`), и заметки проекта до TRK-656 ключа не несут, а ответ
-    несёт его всегда — форма записи одна.
+    Список со значением по умолчанию: записи задач, решения проекта, подшитые до замены
+    (`TRK-554`), заметки проекта до TRK-656 и записи областей до TRK-658 ключа не несут,
+    а ответ несёт его всегда — форма записи одна.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -363,9 +363,8 @@ class SupersedesPayload(BaseModel):
         default_factory=list,
         examples=[[12]],
         description=(
-            "Numbers of the earlier entries of the same type in the same project's case "
-            "that this decision or finding superseded; empty in a task's or an area's "
-            "case"
+            "Numbers of the earlier entries of the same type in the same project's or "
+            "area's case that this decision or finding superseded; empty in a task's case"
         ),
     )
 
@@ -867,19 +866,25 @@ class _EntryReadBase(BaseModel):
     action_id: uuid.UUID | None = Field(
         default=None, examples=[None], description=_ACTION_ID_DESCRIPTION
     )
-    # Статус есть только у решения и заметки дела проекта (`_ReplaceableEntryRead`); у
-    # остальных типов поле стоит, чтобы форма записи была одна в REST и MCP, и всегда
-    # `null`. Умолчание — для ответов подшивки, сохранённых ключами идемпотентности до
-    # этих полей, как у `area`.
+    # Статус есть только у решения и заметки дела проекта или области
+    # (`_ReplaceableEntryRead`); у остальных типов поле стоит, чтобы форма записи была одна
+    # в REST и MCP, и всегда `null`. Умолчание — для ответов подшивки, сохранённых ключами
+    # идемпотентности до этих полей, как у `area`.
     status: None = Field(
         default=None,
         examples=[None],
-        description="Always `null`: only decisions and findings of a project's case have a status",
+        description=(
+            "Always `null`: only decisions and findings of a project's or an area's case "
+            "have a status"
+        ),
     )
     superseded_by: None = Field(
         default=None,
         examples=[None],
-        description="Always `null`: only decisions and findings of a project's case are superseded",
+        description=(
+            "Always `null`: only decisions and findings of a project's or an area's case "
+            "are superseded"
+        ),
     )
 
 
@@ -988,11 +993,12 @@ class _ReplaceableEntryRead(_ProjectOwnableEntryRead):
     """Общее у решения и заметки — записей знания, которые заменяются (TRK#48, раздел 2).
 
     Нагрузка одна на все дела: `supersedes` — номера записей того же типа и того же дела
-    проекта, которые эта заменила. Статус и прямой преемник считаются при чтении дела
-    проекта — `GET /projects/{key}/entries` и `.../entries/{no}` (`CONCEPT.md`, 4.3).
-    Везде ещё они `null`: в деле задачи и области замены нет, а лента и ответ
-    подшивки статус не считают — он меняется без записи в этом деле, и кадр ленты или
-    сохранённый ответ с ним устаревали бы.
+    проекта или области, которые эта заменила. Статус и прямой преемник считаются при
+    чтении дела проекта или области — `GET /projects/{key}/entries`,
+    `.../areas/{area_key}/entries` и их `.../{no}` (`CONCEPT.md`, 4.3; TRK#57, раздел 5).
+    Везде ещё они `null`: в деле задачи замены нет, а лента и ответ подшивки статус не
+    считают — он меняется без записи в этом деле, и кадр ленты или сохранённый ответ с
+    ним устаревали бы.
     """
 
     payload: SupersedesPayload = Field(default_factory=SupersedesPayload)
@@ -1000,10 +1006,10 @@ class _ReplaceableEntryRead(_ProjectOwnableEntryRead):
         default=None,
         examples=[DecisionStatus.IN_FORCE],
         description=(
-            "Computed on read of a project's case: `superseded` once a later entry of the "
-            "same type in the case names this one in `supersedes`, `in_force` until then. "
-            "`null` in a task's or an area's case, in the journal and in the answer "
-            "that files the entry"
+            "Computed on read of a project's or an area's case: `superseded` once a later "
+            "entry of the same type in the case names this one in `supersedes`, `in_force` "
+            "until then. `null` in a task's case, in the journal and in the answer that "
+            "files the entry"
         ),
     )
     superseded_by: int | None = Field(  # type: ignore[assignment]
@@ -1018,7 +1024,8 @@ class _ReplaceableEntryRead(_ProjectOwnableEntryRead):
 
 
 class DecisionEntryRead(_ReplaceableEntryRead):
-    """Решение: в деле задачи — решение задачи, в деле проекта — решение проекта.
+    """Решение: в деле задачи — решение задачи, в деле проекта — решение проекта, в деле
+    области — решение области.
 
     Число задач, которые на решение проекта ссылаются, — в чтении проекта
     (`ProjectDecisionRead`), а не здесь.
@@ -1028,7 +1035,8 @@ class DecisionEntryRead(_ReplaceableEntryRead):
 
 
 class FindingEntryRead(_ReplaceableEntryRead):
-    """Находка: в деле задачи — установленный факт, в деле проекта — заметка проекта."""
+    """Находка: в деле задачи — установленный факт, в деле проекта или области — его
+    заметка."""
 
     type: Literal[EntryType.FINDING]
 
@@ -1537,8 +1545,9 @@ class ProjectEntryCreate(_TitledEntryCreate):
 class AreaEntryCreate(_TitledEntryCreate):
     """Запись агента или человека в деле области: заметка, решение, находка, артефакт.
 
-    Те же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: механики
-    решений проекта у дела области нет, и лишнее поле схема отвергает до сценария.
+    Те же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: замену у
+    дела области ведёт агент через MCP, интерфейс записей не заменяет, и поля без вызова
+    REST не держит (решение TRK#53). Лишнее поле схема отвергает до сценария.
     """
 
     type: Literal[

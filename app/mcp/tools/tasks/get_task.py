@@ -77,10 +77,10 @@ def link(value: TaskLink) -> LinkView:
 
 
 class DecisionRefView(BaseModel):
-    """Project decision named by its reference."""
+    """Project or area decision named by its reference."""
 
     ref: str = Field(
-        description="Address of the `decision` entry in the project's case",
+        description="Address of the `decision` entry in its project's or area's case",
         examples=["TRK#15"],
     )
     title: str
@@ -88,7 +88,7 @@ class DecisionRefView(BaseModel):
 
 
 class CitedDecisionView(DecisionRefView):
-    """Project decision the task relies on, with its status computed on read."""
+    """Project or area decision the task relies on, with its status computed on read."""
 
     superseded_by: DecisionRefView | None = Field(
         description=(
@@ -168,8 +168,9 @@ class TaskPackageView(BaseModel):
     decisions: list[CitedDecisionView] = Field(
         default=None,  # type: ignore[assignment]
         description=(
-            "Project decisions the task relies on, in the order of its `decisions` field. "
-            "The project's other decisions in force are listed by `get_project`"
+            "Project and area decisions the task relies on, in the order of its `decisions` "
+            "field. The other decisions in force of a project or area are listed by "
+            "`get_project`"
         ),
     )
     features: FeaturesView
@@ -258,9 +259,9 @@ def register(tools: Toolset) -> None:
     @tools.tool(title="Get task", annotations=READ_ONLY)
     async def get_task(key: TaskKeyArg, brief: BriefArg = False) -> TaskPackageView:
         """Returns everything about one task in a single call: `state` first, card, parent
-        and children, links from both sides, the project decisions it relies on, computed
-        features, latest summary, open questions of its case, unresolved remarks, the
-        discussions it is attached to, case index and transition targets.
+        and children, links from both sides, the project and area decisions it relies on,
+        computed features, latest summary, open questions of its case, unresolved remarks,
+        the discussions it is attached to, case index and transition targets.
 
         `state` is computed on read: last transition with its reason, parts of the latest
         summary, entries after it, open questions of the case and of its discussions,

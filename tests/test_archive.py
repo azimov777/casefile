@@ -35,11 +35,13 @@ from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
 from app.domain.tokens import TokenKind
 from app.services import archive as archive_service
+from app.services import areas as areas_service
+from app.services import case as case_service
 from app.services import oauth as oauth_service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
 from app.services import tokens as tokens_service
-from app.services.auth import TRACKER_ACTOR
+from app.services.auth import TRACKER_ACTOR, Actor
 from app.services.setup import ensure_agent_token, ensure_local_token
 from conftest import Connect, call
 
@@ -368,6 +370,41 @@ async def test_a_moved_task_comes_in_with_its_previous_keys(
         "TRK-1",
         ["OPS-1"],
     )
+
+
+async def test_an_area_entry_that_supersedes_comes_in_with_the_same_status(
+    auth_client: AsyncClient, db_session: AsyncSession, main_actor: Actor
+) -> None:
+    """Запись дела области с `supersedes` переезжает как есть, и после приёма статус
+    считается тем же правилом: A заменена B, B действует (TRK-658, решение TRK#57)."""
+    await populate(auth_client)
+    core = await areas_service.get_area(db_session, "TRK/core")
+    first = await case_service.append_project_entry(
+        db_session, core, actor=main_actor, type="finding", title="A"
+    )
+    second = await case_service.append_project_entry(
+        db_session, core, actor=main_actor, type="finding", title="B", supersedes=[first.no]
+    )
+    path = "/api/v1/projects/TRK/areas/core/entries"
+    before = (await auth_client.get(path, params={"types": ["finding"]})).json()["data"]
+    archive = (await auth_client.get(ARCHIVE)).json()["data"]
+
+    await wipe(db_session)
+    target_ui, _ = await fresh_installation(db_session)
+    ui = bearer(target_ui)
+    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=ui)
+    assert response.status_code == 200, response.text
+
+    after = await auth_client.get(path, params={"types": ["finding"]}, headers=ui)
+    assert after.status_code == 200, after.text
+    assert after.json()["data"] == before
+    assert [
+        (item["no"], item["payload"], item["status"], item["superseded_by"])
+        for item in after.json()["data"]
+    ] == [
+        (first.no, {"supersedes": []}, "superseded", second.no),
+        (second.no, {"supersedes": [first.no]}, "in_force", None),
+    ]
 
 
 async def test_an_installation_with_projects_refuses_the_archive(

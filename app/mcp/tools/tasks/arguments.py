@@ -15,12 +15,12 @@ from app.domain.tasks import MAX_DECISIONS
 #: это та ссылка, которой практику одной задачи выдают за решение проекта (`CONCEPT.md`,
 #: 3.2, «Слухи»).
 DECISIONS_RULE = (
-    "References `PROJECT#N` to `decision` entries of a project's case, up to "
-    f"{MAX_DECISIONS}: the project decisions the task relies on. A task entry such as "
-    "`TRK-42#7` is refused with `task_fields_invalid` (`task_entry`), a project entry of "
-    "another type with `not_a_decision`. A reference not yet in the field leads to a "
-    "decision in force; a superseded one is refused with `decision_not_in_force`, its "
-    "successor in `details`"
+    "References `PROJECT#N` or `PROJECT/area#N` to `decision` entries of a project's or an "
+    f"area's case, up to {MAX_DECISIONS}: the decisions the task relies on. A task entry "
+    "such as `TRK-42#7` is refused with `task_fields_invalid` (`task_entry`), a project or "
+    "area entry of another type with `not_a_decision`. A reference not yet in the field "
+    "leads to a decision in force; a superseded one is refused with "
+    "`decision_not_in_force`, its successor in `details`"
 )
 
 #: Область задачи (`CONCEPT.md`, 3.3, 3.7): адрес области её проекта. Ставит

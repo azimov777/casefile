@@ -52,11 +52,12 @@
 
 ## Дело области
 
-Механика дела проекта целиком (`CONCEPT.md`, 3.7): те же типы, те же служебные записи,
-номер внутри области под блокировкой её строки. Поэтому функции дела проекта
-принимают владельцем и область (`CaseOwner`), а не дублируются: различаются только
-заголовки служебных записей («Area archived») и решения — механики `supersedes` у
-дела области нет. Служебные записи области ставит `app/services/areas.py`.
+Механика дела проекта целиком (`CONCEPT.md`, 3.7; решение TRK#57, раздел 5): те же
+типы, те же служебные записи, та же замена решений и заметок со статусом при чтении,
+номер внутри области под блокировкой её строки. Поэтому функции дела проекта принимают
+владельцем и область (`CaseOwner`, `app/services/decisions.py`), а не дублируются:
+различаются только заголовки служебных записей («Area archived») и выборка по владельцу.
+Служебные записи области ставит `app/services/areas.py`.
 
 ## Дело обсуждения
 
@@ -152,14 +153,10 @@ from app.services import freeze
 from app.services import participants as participants_service
 from app.services.auth import Actor
 
-#: Владелец дела без хода работы: проект или область (`CONCEPT.md`, 3.4 и 3.7). У обоих
-#: одни типы записей, атрибуты и архив, и одни функции дела ниже.
-type CaseOwner = Project | Area
-
-
-def owner_name(owner: CaseOwner) -> str:
-    """Ключ проекта или адрес области: им владелец назван в ссылках и отказах."""
-    return owner.address if isinstance(owner, Area) else owner.key
+# Владелец дела без хода работы и его имя объявлены у знания (`app/services/decisions.py`):
+# этот модуль импортирует тот, а не наоборот. Отсюда их берут прежним путём.
+from app.services.decisions import CaseOwner as CaseOwner
+from app.services.decisions import owner_name as owner_name
 
 
 def _owner_word(owner: CaseOwner) -> str:
@@ -187,9 +184,8 @@ class TaskEntry:
 class CasePage(Page[Entry]):
     """Страница дела проекта или области и статусы её записей, посчитанные при чтении.
 
-    `standings` — по номеру записи, только у решений и заметок дела проекта (решение
-    TRK#48, раздел 2): у остальных типов и у всех записей дела области (`CONCEPT.md`,
-    3.7) статуса нет, и номера в словаре нет.
+    `standings` — по номеру записи, только у решений и заметок (решение TRK#48, раздел 2;
+    у области — TRK#57, раздел 5): у остальных типов статуса нет, и номера в словаре нет.
     """
 
     standings: Mapping[int, decisions_service.Standing] = field(default_factory=dict)
@@ -823,21 +819,20 @@ async def append_project_entry(
     refs: Any = (),
     supersedes: Any = None,
 ) -> Entry:
-    """Подшивает запись агента в дело проекта: `note`, `decision`, `finding`, `artifact`.
+    """Подшивает запись агента в дело проекта или области: `note`, `decision`, `finding`,
+    `artifact`.
 
     Набор `task`, как и у записей дела задачи (`CONCEPT.md`, 3.2, «Права»). Форму
     проверяет домен (`build_project_entry`), существование ссылок — здесь, тем же
     `_check_refs`, что у задачи: ссылка `TRK#7` из дела задачи и `TRK-42#3` из дела
     проекта проверяются одним кодом.
 
-    Решение или заметка проекта с `supersedes` заменяет названные записи своего типа
-    (`CONCEPT.md`, 3.2; TRK#48). Что они есть, того же типа и ещё действуют, проверяется
-    под очередью изменений, занятой до проверок: иначе две одновременные записи заменили
-    бы одну и ту же, и у неё оказалось бы два преемника. Заморозка архива — тем же первым
-    шагом, чтобы архив назвал отказ раньше правил замены.
-
-    Владелец — проект или область (`CONCEPT.md`, 3.7): в деле области те же типы,
-    но механики замены нет, и `supersedes` отвергает домен.
+    Решение или заметка с `supersedes` заменяет названные записи своего типа в своём деле
+    — проекта или области, механика одна (`CONCEPT.md`, 3.2; TRK#48; TRK#57, раздел 5).
+    Что они есть, того же типа и ещё действуют, проверяется под очередью изменений,
+    занятой до проверок: иначе две одновременные записи заменили бы одну и ту же, и у неё
+    оказалось бы два преемника. Заморозка архива — тем же первым шагом, чтобы архив назвал
+    отказ раньше правил замены.
     """
     draft = build_project_entry(
         owner_name(project),
@@ -846,7 +841,6 @@ async def append_project_entry(
         body=body,
         refs=refs,
         supersedes=supersedes,
-        replaceable=not isinstance(project, Area),
     )
     if isinstance(project, Area):
         await freeze.lock_unfrozen(session, area=project)
@@ -855,10 +849,9 @@ async def append_project_entry(
     problems = FieldProblems()
     await _check_refs(session, project, draft, problems)
     problems.raise_as(EntryFieldsInvalidError, key=owner_name(project))
-    if isinstance(project, Project):
-        await decisions_service.check_superseded(
-            session, project, draft.type, superseded_numbers(draft.payload)
-        )
+    await decisions_service.check_superseded(
+        session, project, draft.type, superseded_numbers(draft.payload)
+    )
     return await _append(
         session,
         project,
@@ -890,28 +883,14 @@ async def list_project_entries(
     (`CONCEPT.md`, 3.2). `text` — подстрока заголовка или тела без учёта регистра (TRK#48,
     раздел 3): поиск знания по делу, опись которого записей знания не несёт.
 
-    У решения и заметки дела проекта — статус и прямой преемник (TRK#48, раздел 2).
-    `in_force` отбирает по статусу: `True` — действующие решения и заметки, `False` —
-    заменённые, `None` — без условия; складывается с остальными фильтрами по «и». Записи
-    без статуса — другие типы и всё дело области — не попадают ни под `True`, ни под
-    `False`. Статусы считаются одним запросом на дело и только тогда, когда они нужны:
-    для отбора или для решения и заметки на странице.
+    У решения и заметки — статус и прямой преемник (TRK#48, раздел 2), в деле проекта и в
+    деле области одинаково (TRK#57, раздел 5). `in_force` отбирает по статусу: `True` —
+    действующие решения и заметки, `False` — заменённые, `None` — без условия;
+    складывается с остальными фильтрами по «и». Записи без статуса — другие типы — не
+    попадают ни под `True`, ни под `False`. Статусы считаются одним запросом на дело и
+    только тогда, когда они нужны: для отбора или для решения и заметки на странице.
     """
     repository = EntryRepository(session)
-    if isinstance(project, Area):
-        if in_force is not None:
-            return CasePage(items=[], next_cursor=None)
-        page = await repository.list_area_page(
-            project.id,
-            nos=nos,
-            types=types,
-            attribute=attribute,
-            text=text,
-            after_no=after_no,
-            limit=limit,
-            cursor=cursor,
-        )
-        return CasePage(items=page.items, next_cursor=page.next_cursor)
     standings = None
     exclude_nos: frozenset[int] = frozenset()
     if in_force is not None:
@@ -925,7 +904,9 @@ async def list_project_entries(
             exclude_nos = standings.superseded
         else:
             nos = sorted(standings.superseded if nos is None else standings.superseded & set(nos))
-    page = await repository.list_project_page(
+    page = await (
+        repository.list_area_page if isinstance(project, Area) else repository.list_project_page
+    )(
         project.id,
         nos=nos,
         types=types,
@@ -952,7 +933,7 @@ async def read_project_entry(
     session: AsyncSession, project: CaseOwner, no: int, *, actor: Actor
 ) -> Entry:
     """Одна запись дела проекта или области по номеру — адрес из ссылки `TRK#7` или
-    `TRK/promotion#3`. Статус решения или заметки проекта — `decisions.standing_of`."""
+    `TRK/promotion#3`. Статус решения или заметки — `decisions.standing_of`."""
     repository = EntryRepository(session)
     entry = (
         await repository.get_by_area_no(project.id, no)
@@ -970,10 +951,10 @@ async def project_case_index(
     """Опись дела проекта или области: заголовки без тел. Вердиктов в этих делах нет,
     и помечать устаревшие незачем — опись отдаётся как есть.
 
-    У проекта в описи нет решений и заметок: чтение проекта несёт действующие отдельными
-    списками и число всех по типам (`decisions.case_knowledge`, решение TRK#48, раздел 3).
-    У области статуса и замены нет (`CONCEPT.md`, 3.7), списков тоже, и её опись
-    несёт все записи дела."""
+    В описи нет решений и заметок: чтение проекта и области несёт действующие отдельными
+    списками и число всех по типам (`decisions.case_knowledge`, решение TRK#48, раздел 3;
+    у области — та же форма, TRK#57, раздел 6). Правило формы одно: из описи уходит то,
+    что стоит в списках действующих или заменено."""
     repository = EntryRepository(session)
     if isinstance(project, Area):
         return await repository.area_headings(project.id)
