@@ -220,7 +220,9 @@ next() {
   fi
 }
 case "$*" in
-  "compose exec -T db sh -c psql "*) next schema "" ;;
+  "compose exec -T db sh -c psql "*)
+    [ ! -s "$SCENE/psql-fails" ] || { echo "psql: error: connection failed" >&2; exit 2; }
+    next schema no-table ;;
   "compose exec -T db sh -c pg_dump "*)
     [ ! -s "$SCENE/dump-fails" ] || exit 1
     [ ! -s "$SCENE/dump-empty" ] || exit 0
@@ -230,6 +232,7 @@ case "$*" in
     exit "$(cat "$SCENE/restore" 2>/dev/null || echo 0)" ;;
   "compose stop "*) exit 0 ;;
   "run --rm --pull never --network none --entrypoint alembic "*)
+    [ ! -s "$SCENE/heads-fails" ] || { echo "FAILED to import migrations" >&2; exit 1; }
     echo "$(cat "$SCENE/head") (head)" ;;
   "inspect -f {{index .Config.Labels \"com.docker.compose.project\"}} "*) echo test-project ;;
   "inspect -f {{index .Config.Labels \"casefile.updater.revision\"}} "*) cat "$SCENE/revision" ;;
@@ -918,3 +921,42 @@ def test_a_snapshot_that_cannot_be_restored_is_kept_and_named(updater: Updater) 
     assert f"docker compose cp updater:{updater.snapshot} ." in out
     assert updater.snapshot.exists()
     assert updater.called("compose up -d --no-deps db api mcp ui"), "откат идёт как прежде"
+
+
+def test_an_unreadable_database_revision_takes_the_snapshot_before_up(updater: Updater) -> None:
+    """TRK-652: psql не ответил — выпуск может нести миграцию: снимок до `up`, причина в логе."""
+    updater.set(wanted="sha256:new", head="rev2", psql_fails="1")
+
+    out = updater.run("updater", "update\n")
+
+    calls = updater.calls.read_text().splitlines()
+    dump = next(n for n, c in enumerate(calls) if c.startswith("compose exec -T db sh -c pg_dump"))
+    assert dump < calls.index(UP), "снимок раньше `up`"
+    assert "could not read the schema revision of the database; snapshot taken first" in out
+    assert "updated to 0.2.0" in out, "обновление из-за неясности не пропущено"
+
+
+def test_a_failed_head_of_the_image_takes_the_snapshot_before_up(updater: Updater) -> None:
+    """TRK-652: `alembic heads` образа упал — тоже снимок до `up`, причина в логе."""
+    updater.set(wanted="sha256:new", schema="rev1\n", heads_fails="1")
+
+    out = updater.run("updater", "update\n")
+
+    calls = updater.calls.read_text().splitlines()
+    dump = next(n for n, c in enumerate(calls) if c.startswith("compose exec -T db sh -c pg_dump"))
+    assert dump < calls.index(UP), "снимок раньше `up`"
+    assert "could not read the latest schema revision of the new image; snapshot taken first" in out
+    assert "updated to 0.2.0" in out
+
+
+def test_a_database_without_the_version_table_is_updated_without_a_snapshot(
+    updater: Updater,
+) -> None:
+    """TRK-652: таблицы версии нет (первый запуск) — как прежде: без снимка, выпуск ставится."""
+    updater.set(wanted="sha256:new", head="rev2")
+
+    out = updater.run("updater", "update\n")
+
+    assert not updater.called("compose exec -T db sh -c pg_dump")
+    assert updater.called(UP)
+    assert "updated to 0.2.0" in out

@@ -89,7 +89,7 @@ x-app-service: &app-service
 # Ревизия службы `updater`: по ней `updater-renew` узнаёт обновлятор прежнего выпуска.
 # Это хеш определения `updater` без самой метки; тест сверяет его и называет верное
 # значение, когда служба поменялась (`tests/test_auto_update.py`).
-x-updater-revision: &updater-revision "75f2c08fdd98"
+x-updater-revision: &updater-revision "c8bd1ca12522"
 
 services:
   db:
@@ -522,11 +522,13 @@ services:
             "$$(hostname)" 2>/dev/null
         }
 
-        # Ревизия схемы базы; пусто — базы или таблицы версии нет.
+        # Ревизия схемы базы. Три исхода различаются: `no-table` — таблицы версии нет (пустая
+        # база, обычный первый запуск); ревизия — база прочлась; пусто — не прочлась (psql
+        # упал, базы нет, ответ пуст) и про схему неизвестно ничего (TRK-652).
         schema_revision() {
           docker compose exec -T db sh -c \
-            'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT version_num FROM alembic_version"' \
-            </dev/null 2>/dev/null
+            'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT CASE WHEN to_regclass('"'"'public.alembic_version'"'"') IS NULL THEN '"'"'no-table'"'"' ELSE (xpath('"'"'/row/version_num/text()'"'"', query_to_xml('"'"'SELECT version_num FROM public.alembic_version'"'"', false, true, '"'"''"'"')))[1]::text END"' \
+            </dev/null 2>/dev/null | head -n 1
         }
 
         # Последняя ревизия, которую знает образ: без сети и без базы.
@@ -611,17 +613,30 @@ services:
           # Без миграции снимка нет: платить за него на каждом обновлении незачем. Прежний
           # снимок в томе при этом остаётся, но откату он не годится: `taken` пуст.
           taken=
+          why=
           schema_before=$$(schema_revision)
-          schema_after=$$([ -z "$$schema_before" ] || image_head "$$(image_of api)")
-          if [ -n "$$schema_after" ] && [ "$$schema_after" != "$$schema_before" ]; then
+          schema_after=
+          if [ -z "$$schema_before" ]; then
+            # Не прочлась ревизия базы: выпуск может нести миграцию, а проверить нельзя.
+            why="could not read the schema revision of the database"
+            schema_after=$$(image_head "$$(image_of api)")
+          elif [ "$$schema_before" != no-table ]; then
+            schema_after=$$(image_head "$$(image_of api)")
+            if [ -z "$$schema_after" ]; then
+              why="could not read the latest schema revision of the new image"
+            elif [ "$$schema_after" != "$$schema_before" ]; then
+              why="the release changes the database ($$schema_before -> $$schema_after)"
+            fi
+          fi
+          if [ -n "$$why" ]; then
             if ! take_snapshot; then
               [ -z "$$changed" ] || cat /tmp/previous-compose.yml >"$$COMPOSE_FILE"
               hold_back
-              log "could not take a snapshot of the database before a release that changes it; not updating this time"
+              log "could not take a snapshot of the database before a release that may change it ($$why); not updating this time"
               return 0
             fi
             taken=1
-            log "the release changes the database ($$schema_before -> $$schema_after); snapshot taken first ($$(wc -c <"$$SNAPSHOT") bytes), kept in the volume $$(snapshot_volume) as $$(basename "$$SNAPSHOT")"
+            log "$$why; snapshot taken first ($$(wc -c <"$$SNAPSHOT") bytes), kept in the volume $$(snapshot_volume) as $$(basename "$$SNAPSHOT")"
           fi
           previous=$$(running_images)
           running=$$(running_of api)
@@ -650,7 +665,16 @@ services:
             docker tag "$$(image_of ui)" "$$(kept ui:failed)"
             # Упавший выпуск успел сдвинуть схему — базу обратно из снимка. Записи после
             # снимка при этом теряются: это цена отката на прежний код с его схемой.
-            if [ -n "$$taken" ] && [ -s "$$SNAPSHOT" ] && [ "$$(schema_revision)" != "$$schema_before" ]; then
+            # Схема сдвинулась: ревизия иная, чем была. Если прежняя не прочлась, судить можно
+            # лишь по ревизии образа: она стала головой — миграция прошла.
+            now=$$(schema_revision)
+            moved=
+            if [ -n "$$schema_before" ]; then
+              [ "$$now" = "$$schema_before" ] || moved=1
+            elif [ -n "$$schema_after" ] && [ "$$now" = "$$schema_after" ]; then
+              moved=1
+            fi
+            if [ -n "$$taken" ] && [ -s "$$SNAPSHOT" ] && [ -n "$$moved" ]; then
               if restore_snapshot; then
                 log "database restored from the snapshot taken before the update (schema $$schema_before); changes made since then are gone; the snapshot stays in the volume $$(snapshot_volume), file $$(basename "$$SNAPSHOT")"
               else
