@@ -84,6 +84,7 @@ function seed(request: APIRequestContext): Promise<Seeded> {
         '/api/v1/tasks',
         {
           project: 'DEMO',
+          area: 'DEMO/core',
           title: GREEK.title,
           description: GREEK.description,
           goal: GREEK.goal,

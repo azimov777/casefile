@@ -1083,9 +1083,12 @@ export interface paths {
          *     этот прежний ключ. Уходящий ключ дописывается в `previous_keys` и дальше ведёт на
          *     задачу везде, где принимается ключ. Статус не важен: закрытая задача переносится
          *     тоже. Связи, родство и дело не меняются; в дело задачи подшивается `moved` с обоими
-         *     проектами, обоими ключами и причиной. Область снимается тем же действием: она
-         *     принадлежит проекту, а в новом такой нет; если она стояла, в дело ложится
-         *     `field_changed` (`field: area`, «стало» — `null`).
+         *     проектами, обоими ключами и причиной. Область обязательна: она принадлежит
+         *     проекту, и прежняя остаётся в старом, поэтому в `area` приходит адрес области
+         *     целевого проекта. Она ставится тем же действием, в дело ложится `field_changed`
+         *     (`field: area`, «было» — прежняя область или `null`). Без неё — `422 area_required`
+         *     с областями целевого проекта в `details.areas`; чужая область — `422
+         *     area_project_mismatch`, архивная — `409 area_archived`.
          *
          *     Отказы: набор `task` — `403 permission_denied`; пустая причина — `422
          *     task_move_reason_required`; неизвестный проект — `404 project_not_found`; текущий
@@ -6268,7 +6271,7 @@ export interface components {
             priority: components["schemas"]["TaskPriority"];
             /**
              * Area
-             * @description Address `PROJECT/key` of an area of the task's own project, or null for none. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`
+             * @description Address `PROJECT/key` of an area of the task's own project. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (a task in an archived area can move to another one). Not inherited from the parent; set in any status but `done` and `cancelled`. Required: without it `422 area_required`, with the project's areas in `details.areas`
              * @example TRK/promotion
              */
             area?: string | null;
@@ -6388,6 +6391,12 @@ export interface components {
              */
             reason: string;
             /**
+             * Area
+             * @description Address `PROJECT/key` of an area of the target project; required: without it `422 area_required`, with the target project's areas in `details.areas`. Replaces the old area, which stays in the old project
+             * @example TRK/promotion
+             */
+            area?: string | null;
+            /**
              * Version
              * @description Version the client last saw; omit it to skip the check
              * @example 3
@@ -6420,6 +6429,12 @@ export interface components {
              * @example Репозиторий один, задачи интерфейса ведутся в TRK
              */
             reason: string;
+            /**
+             * Area
+             * @description Address `PROJECT/key` of an area of the target project, put on every task of the list; required: without it each task is refused with `area_required`
+             * @example TRK/promotion
+             */
+            area?: string | null;
         };
         /**
          * TaskMoveBatchRead
@@ -6925,7 +6940,7 @@ export interface components {
             priority?: components["schemas"]["TaskPriority"];
             /**
              * Area
-             * @description Address `PROJECT/key` of an area of the task's own project, or null for none. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (taking the task out of it is always allowed). Not inherited from the parent; set in any status but `done` and `cancelled`. Pass null to take the task out of its area
+             * @description Address `PROJECT/key` of an area of the task's own project. Another project's area answers `area_project_mismatch`, an unknown one `area_not_found`, an archived one `area_archived` (a task in an archived area can move to another one). Not inherited from the parent; set in any status but `done` and `cancelled`. Null is refused with `422 area_required`: an area can be changed, not taken off
              * @example TRK/promotion
              */
             area?: string | null;

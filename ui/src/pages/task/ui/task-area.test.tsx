@@ -21,7 +21,7 @@ import { setToken } from '@/shared/api';
 /*
  * Область в карточке задачи (TRK-557, TRK#16, ч. 4): название рядом с проектом
  * ссылкой на страницу области, адрес в полосе свойств рядом с приоритетом и правка
- * там же — выбор из областей проекта или «без области».
+ * там же — выбор из областей проекта; «без области» — только у старой задачи без неё.
  */
 
 const PROMOTION: TaskArea = {
@@ -116,7 +116,7 @@ describe('область в карточке задачи', () => {
     ]);
   });
 
-  it('«без области» снимает её: `area: null`', async () => {
+  it('у задачи с областью пункта «без области» нет: снять область нельзя', async () => {
     serve(PROMOTION);
     const user = userEvent.setup();
     renderApp('/tasks/DEMO-7', { language: 'ru' });
@@ -125,13 +125,29 @@ describe('область в карточке задачи', () => {
       await screen.findByRole('button', { name: say.area('task.label', { key: 'DEMO-7' }) }),
     );
     const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByRole('radio', { name: /Популяризация/ });
+    expect(
+      within(dialog).queryByRole('radio', { name: new RegExp(say.area('task.none')) }),
+    ).toBeNull();
+  });
+
+  it('у старой задачи без области пустое значение видно и выбрано, и ей можно поставить область', async () => {
+    serve(null);
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-7', { language: 'ru' });
+
     await user.click(
-      await within(dialog).findByRole('radio', { name: new RegExp(say.area('task.none')) }),
+      await screen.findByRole('button', { name: say.area('task.label', { key: 'DEMO-7' }) }),
     );
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      await within(dialog).findByRole('radio', { name: new RegExp(say.area('task.none')) }),
+    ).toBeChecked();
+    await user.click(within(dialog).getByRole('radio', { name: /Коммерция/ }));
     await user.click(within(dialog).getByRole('button', { name: say.area('task.submit') }));
 
     await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]?.body).toEqual({ area: null });
+    expect(writes[0]?.body).toEqual({ area: 'DEMO/commerce' });
   });
 
   it('неизменённый выбор закрывает окно без запроса; отказ бэкенда — словами', async () => {

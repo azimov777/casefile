@@ -30,6 +30,8 @@ export const errors = {
   area_not_archived: 'The area is not archived.',
   area_not_found: 'This project has no area with that key.',
   area_project_mismatch: 'A task can only join an area of its own project.',
+  area_required:
+    'A task needs an area: pick one of the project’s areas (a project without areas needs one first).',
   area_reason_required: 'Archiving or restoring an area requires a reason.',
   assignee_mismatch: 'The task is assigned to someone else.',
   assignee_required: 'The task has no assignee.',

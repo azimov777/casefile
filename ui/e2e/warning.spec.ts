@@ -46,6 +46,7 @@ async function closedNotInFull(request: APIRequestContext): Promise<string> {
     '/api/v1/tasks',
     {
       project: 'DEMO',
+      area: 'DEMO/core',
       title: 'Подсказка о сгоревшем номере на телефоне',
       description: 'Заведена сквозным тестом закрытия не целиком.',
       goal: 'Подсказку видно на телефоне',

@@ -61,8 +61,16 @@ async function seedOnce(request: APIRequestContext): Promise<Seeded> {
     body: 'Счётчик проекта выдаёт номер атомарным запросом.',
   });
   const oldNo = old.no as number;
+  await api(
+    request,
+    'post',
+    '/api/v1/projects/TRK/areas',
+    { key: 'decisions', title: 'Решения', description: 'Область сквозного теста решений.' },
+    [201, 409],
+  );
   const task = await api(request, 'post', '/api/v1/tasks', {
     project: 'TRK',
+    area: 'TRK/decisions',
     title: TASK,
     description: 'Заведена сквозным тестом решений проекта.',
     decisions: [`TRK#${oldNo}`],
