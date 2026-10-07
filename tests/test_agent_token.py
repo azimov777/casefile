@@ -68,7 +68,7 @@ async def test_the_agent_gets_a_main_token_in_a_file_and_the_secret_is_never_pri
     run: RunCommand,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Токен набора `main` у участника-агента, в файле `0600` и больше нигде."""
+    """Токен участника-агента, в файле `0600` и больше нигде."""
     await run("local-token", secrets / "ui-token")
     capsys.readouterr()
 

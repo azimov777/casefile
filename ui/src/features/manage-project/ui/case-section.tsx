@@ -1,10 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { NotebookPen } from 'lucide-react';
-import { EntryIndex, headingOfEntry, holderCaseQueryOptions } from '@/entities/entry';
+import { useSearchParams } from 'react-router';
+import {
+  CaseFilters,
+  EmptyByTypesNotice,
+  EntryIndex,
+  HiddenByTypeNotice,
+  headingOfEntry,
+  holderCaseQueryOptions,
+  readEntryTypes,
+} from '@/entities/entry';
 import { Button, QueryState } from '@/shared/ui';
 import type { Holder } from '../api/projects';
+import { keepCaseTab } from '../model/holder-tab';
 import { EntryForm } from './entry-form';
 
 /** Блок-список: без своих полей, строки описи идут до краёв поверхности. */
@@ -33,7 +43,14 @@ interface CaseSectionProps {
  * тело уже в памяти, и держать два пути к одному телу незачем.
  */
 export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSectionProps) {
-  const feed = useInfiniteQuery(holderCaseQueryOptions(holder));
+  const [searchParams, setSearchParams] = useSearchParams();
+  /*
+   * Отбор по типу живёт в адресе, как на экране «Дело» задачи: повторяющийся `?type=`.
+   * Бэкенд получает его параметром `types`; пустой отбор уходит без параметра — все
+   * записи. Остальные параметры адреса (`tab`, `entry`, `attribute`) отбор не трогает.
+   */
+  const types = useMemo(() => readEntryTypes(searchParams.getAll('type')), [searchParams]);
+  const feed = useInfiniteQuery(holderCaseQueryOptions(holder, types.length > 0 ? { types } : {}));
   const [writing, setWriting] = useState(false);
   const noteButton = useRef<HTMLButtonElement>(null);
   const formPlace = useRef<HTMLDivElement>(null);
@@ -61,6 +78,34 @@ export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSect
 
   const entries = feed.data?.pages.flatMap((page) => page.items) ?? [];
   const index = entries.map(headingOfEntry);
+
+  function changeTypes(next: string[]) {
+    setSearchParams(
+      (current) => {
+        const updated = new URLSearchParams(current);
+        updated.delete('type');
+        for (const type of next) updated.append('type', type);
+        // Отбор — правка открытой вкладки «Дело», а не уход с неё (TRK-618): если
+        // без него правило адреса открыло бы другую вкладку, в адрес встаёт `tab=case`.
+        return keepCaseTab(updated, holder.kind);
+      },
+      { replace: true },
+    );
+  }
+
+  /*
+   * Запись из адреса не должна прятаться отбором, оставшимся от прошлого чтения
+   * (ссылки `TRK#7` типа не несут): если её нет в отобранной выдаче — об этом сказано
+   * словами, со сбросом, как на экране «Дело» задачи.
+   */
+  const hidden =
+    types.length > 0 &&
+    openAt !== null &&
+    feed.data !== undefined &&
+    !feed.isFetching &&
+    !feed.hasNextPage &&
+    !entries.some((entry) => entry.no === openAt);
+  const reference = `${holder.key}#${openAt}`;
 
   return (
     <section className={LIST_BLOCK} aria-labelledby={headingId}>
@@ -91,6 +136,16 @@ export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSect
         </div>
       ) : null}
 
+      <div className="border-b border-b-line px-3 py-2">
+        <CaseFilters selected={types} onChange={changeTypes} />
+      </div>
+
+      {hidden ? (
+        <div className="px-3 py-2">
+          <HiddenByTypeNotice reference={reference} onReset={() => changeTypes([])} />
+        </div>
+      ) : null}
+
       {feed.data === undefined ? (
         <div className="px-3 py-2">
           <QueryState
@@ -100,7 +155,14 @@ export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSect
         </div>
       ) : (
         <>
-          <EntryIndex owner={holder} index={index} openAt={openAt} onOpenChange={onOpenChange} />
+          {types.length > 0 && index.length === 0 ? (
+            <div className="px-3 py-2">
+              {/* Сброс — в строке состояния фильтра, как на экране «Дело» задачи. */}
+              <EmptyByTypesNotice />
+            </div>
+          ) : (
+            <EntryIndex owner={holder} index={index} openAt={openAt} onOpenChange={onOpenChange} />
+          )}
           {feed.hasNextPage ? (
             <div className="px-3 py-2">
               <Button

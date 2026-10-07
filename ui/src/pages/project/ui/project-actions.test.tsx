@@ -119,13 +119,29 @@ describe('видимость действий: запись открыта вс�
     expect(
       await within(attributes).findByRole('button', { name: say.project('attribute.add') }),
     ).toBeInTheDocument();
+    // В закрытом списке строка читается как справка: кнопок правки под ней нет.
     expect(
-      within(attributes).getByRole('button', {
+      within(attributes).queryByRole('button', {
+        name: say.project('attribute.changeLabel', { name: 'repo' }),
+      }),
+    ).toBeNull();
+    expect(
+      within(attributes).queryByRole('button', {
+        name: say.project('attribute.removeLabel', { name: 'repo' }),
+      }),
+    ).toBeNull();
+    // «Изменить» и «Снять» — в открытой истории атрибута.
+    await userEvent.click(within(attributes).getByRole('button', { name: /^repo$/ }));
+    const history = await within(attributes).findByRole('region', {
+      name: say.project('history', { name: 'repo' }),
+    });
+    expect(
+      within(history).getByRole('button', {
         name: say.project('attribute.changeLabel', { name: 'repo' }),
       }),
     ).toBeInTheDocument();
     expect(
-      within(attributes).getByRole('button', {
+      within(history).getByRole('button', {
         name: say.project('attribute.removeLabel', { name: 'repo' }),
       }),
     ).toBeInTheDocument();
@@ -327,6 +343,7 @@ describe('атрибуты', () => {
     const user = userEvent.setup();
     renderApp('/projects/DEMO?tab=attributes', { language: 'ru' });
 
+    await user.click(await screen.findByRole('button', { name: /^repo$/ }));
     await user.click(
       await screen.findByRole('button', {
         name: say.project('attribute.changeLabel', { name: 'repo' }),
@@ -400,6 +417,7 @@ describe('атрибуты', () => {
     const user = userEvent.setup();
     renderApp('/projects/DEMO?tab=attributes', { language: 'ru' });
 
+    await user.click(await screen.findByRole('button', { name: /^repo$/ }));
     await user.click(
       await screen.findByRole('button', {
         name: say.project('attribute.removeLabel', { name: 'repo' }),
@@ -500,6 +518,19 @@ describe('архив и восстановление (UI-176)', () => {
     expect(
       screen.queryByRole('button', {
         name: say.project('attribute.changeLabel', { name: 'repo' }),
+      }),
+    ).toBeNull();
+    // …и в открытой истории архивного проекта кнопок правки тоже нет.
+    await user.click(screen.getByRole('button', { name: /^repo$/ }));
+    await screen.findByRole('region', { name: say.project('history', { name: 'repo' }) });
+    expect(
+      screen.queryByRole('button', {
+        name: say.project('attribute.changeLabel', { name: 'repo' }),
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', {
+        name: say.project('attribute.removeLabel', { name: 'repo' }),
       }),
     ).toBeNull();
     expect(screen.getByText(/Проект в архиве с/)).toBeInTheDocument();

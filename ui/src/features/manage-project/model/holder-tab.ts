@@ -58,8 +58,8 @@ export function holderTab(search: URLSearchParams, kind: HolderKind): HolderTab 
 /**
  * Параметры адреса, открывающие вкладку `tab` из нынешних `search`.
  *
- * Раскрытое на чужой вкладке снимается: запись — у всех, кроме «Дела», атрибут — у всех,
- * кроме «Атрибутов». Иначе вернувшийся на вкладку застал бы раскрытым то, что закрыл
+ * Раскрытое на чужой вкладке снимается: запись и отбор по типу — у всех, кроме «Дела»,
+ * атрибут — у всех, кроме «Атрибутов». Иначе вернувшийся на вкладку застал бы раскрытым то, что закрыл
  * уходом, а `entry` к тому же перебивал бы вкладку по правилу выше. Остальные параметры
  * (проход по пояснениям `walk`) остаются. `tab` пишется, только когда без него правило
  * открыло бы другую вкладку: адрес «Обзора» — это адрес проекта без хвоста.
@@ -70,7 +70,11 @@ export function tabSearch(
   tab: HolderTab,
 ): URLSearchParams {
   const next = new URLSearchParams(search);
-  if (tab !== 'case') next.delete('entry');
+  if (tab !== 'case') {
+    next.delete('entry');
+    // Отбор дела по типу (`?type=`, TRK-621) — тоже состояние «Дела».
+    next.delete('type');
+  }
   if (tab !== 'attributes') next.delete('attribute');
   next.delete(TAB_PARAM);
   if (holderTab(next, kind) !== tab) next.set(TAB_PARAM, tab);
@@ -97,4 +101,14 @@ export function rememberOnTab(
   else next.set(name, value);
   if (holderTab(next, kind) !== tab) next.set(TAB_PARAM, tab);
   return next;
+}
+
+/**
+ * Параметры адреса после правки отбора по типу (`?type=`) на вкладке «Дело»: вкладка
+ * остаётся «Делом». Снятый отбор у дела, открытого `?tab=case`, `tab` и так держит;
+ * здесь — случай, когда «Дело» открыла запись (`?entry=N`) или адрес без `tab` вовсе.
+ */
+export function keepCaseTab(search: URLSearchParams, kind: HolderKind): URLSearchParams {
+  if (holderTab(search, kind) !== 'case') search.set(TAB_PARAM, 'case');
+  return search;
 }

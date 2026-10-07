@@ -103,8 +103,17 @@ test('атрибут ставится без причины, меняется и
   await expect(add).toBeHidden();
   await expect(attributes.getByText('github.com/old/casefile')).toBeVisible();
 
+  // «Изменить» и «Снять» стоят не под строкой, а в открытой истории атрибута. Имя атрибута —
+  // кнопка раскрытия; её имя несёт знак `▸` псевдоэлементом, а «Изменить атрибут …» содержит
+  // то же имя, поэтому она ищется по точному имени со знаком (так её называет и диктор).
+  const row = attributes.locator(`li[data-attribute="${name}"]`);
+  await expect(attributes.getByRole('button', { name: `Изменить атрибут ${name}` })).toHaveCount(0);
+  await expect(attributes.getByRole('button', { name: `Снять атрибут ${name}` })).toHaveCount(0);
+  await row.getByRole('button', { name: `▸ ${name}`, exact: true }).click();
+  const history = page.getByRole('region', { name: `История атрибута ${name}` });
+
   // Изменение без причины не уходит.
-  const change = attributes.getByRole('button', { name: `Изменить атрибут ${name}` });
+  const change = history.getByRole('button', { name: `Изменить атрибут ${name}` });
   await change.click();
   const edit = page.getByRole('dialog', { name: `Атрибут ${name}` });
   await edit.getByLabel('Значение').fill('github.com/azimov777/casefile');
@@ -124,14 +133,9 @@ test('атрибут ставится без причины, меняется и
   await edit.getByRole('button', { name: 'Сохранить' }).click();
   await expect(edit).toBeHidden();
   await expect(change).toBeFocused();
-  await expect(attributes.getByText('github.com/azimov777/casefile')).toBeVisible();
+  // Значение стоит в строке и в карточке истории: берём строку, она первая.
+  await expect(attributes.getByText('github.com/azimov777/casefile').first()).toBeVisible();
 
-  // Имя атрибута — кнопка раскрытия; её имя несёт знак `▸` псевдоэлементом, а
-  // «Изменить атрибут …» содержит то же имя, поэтому она ищется по точному имени со
-  // знаком (так её называет и диктор).
-  const row = attributes.locator(`li[data-attribute="${name}"]`);
-  await row.getByRole('button', { name: `▸ ${name}`, exact: true }).click();
-  const history = page.getByRole('region', { name: `История атрибута ${name}` });
   const changed = history.locator('article[data-type="attribute_changed"]');
   await expect(changed.locator('[data-side="was"]')).toContainText('github.com/old/casefile');
   await expect(changed.locator('[data-side="now"]')).toContainText('github.com/azimov777/casefile');
@@ -142,8 +146,10 @@ test('атрибут ставится без причины, меняется и
   await expect(index.getByRole('row').filter({ hasText: 'attribute_changed' })).toHaveCount(1);
 
   // Снятие — окно-вопрос, без причины не уходит.
+  // Уход на «Дело» закрыл историю атрибута: вернувшись, её открывают снова.
   await sections.getByRole('link', { name: /^Атрибуты/ }).click();
-  await attributes.getByRole('button', { name: `Снять атрибут ${name}` }).click();
+  await row.getByRole('button', { name: `▸ ${name}`, exact: true }).click();
+  await history.getByRole('button', { name: `Снять атрибут ${name}` }).click();
   const remove = page.getByRole('alertdialog', { name: `Снять атрибут ${name}?` });
   const beforeRemove = writes.length;
   await remove.getByRole('button', { name: 'Снять атрибут' }).click();
@@ -209,6 +215,11 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await fontsReady(page);
 
       const attributes = page.getByRole('region', { name: 'Атрибуты' });
+      // Кнопки правки стоят в открытой истории атрибута: открываем её, если ещё закрыта.
+      const openAxeHistory = async () => {
+        const toggle = attributes.getByRole('button', { name: '▸ axe', exact: true });
+        if ((await toggle.count()) > 0) await toggle.click();
+      };
       const dialogs: {
         open: () => Promise<unknown>;
         name: string;
@@ -230,12 +241,18 @@ for (const colorScheme of ['light', 'dark'] as const) {
           role: 'dialog',
         },
         {
-          open: () => attributes.getByRole('button', { name: 'Изменить атрибут axe' }).click(),
+          open: async () => {
+            await openAxeHistory();
+            await attributes.getByRole('button', { name: 'Изменить атрибут axe' }).click();
+          },
           name: 'Атрибут axe',
           role: 'dialog',
         },
         {
-          open: () => attributes.getByRole('button', { name: 'Снять атрибут axe' }).click(),
+          open: async () => {
+            await openAxeHistory();
+            await attributes.getByRole('button', { name: 'Снять атрибут axe' }).click();
+          },
           name: 'Снять атрибут axe?',
           role: 'alertdialog',
         },

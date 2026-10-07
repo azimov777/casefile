@@ -203,3 +203,51 @@ for (const colorScheme of ['light', 'dark'] as const) {
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   });
 }
+
+test('атрибут направления: «Изменить» и «Снять» — в открытой истории, с причиной', async ({
+  page,
+  request,
+}) => {
+  await seed(request);
+  await api(
+    request,
+    'post',
+    `/api/v1/projects/${KEY}/directions`,
+    { key: 'history', title: `История ${RUN}`, description: 'Направление для правки атрибута.' },
+    [201, 409],
+  );
+  await api(request, 'put', `/api/v1/projects/${KEY}/directions/history/attributes/channel`, {
+    value: 'reddit',
+  });
+  await page.goto(`/projects/${KEY}/directions/history?tab=attributes`);
+  const attributes = page.getByRole('region', { name: 'Атрибуты' });
+  await expect(attributes.getByText('reddit')).toBeVisible();
+
+  // В закрытом списке кнопок правки нет.
+  await expect(attributes.getByRole('button', { name: 'Изменить атрибут channel' })).toHaveCount(0);
+  await expect(attributes.getByRole('button', { name: 'Снять атрибут channel' })).toHaveCount(0);
+
+  await attributes.getByRole('button', { name: '▸ channel', exact: true }).click();
+  const history = page.getByRole('region', { name: 'История атрибута channel' });
+  await history.getByRole('button', { name: 'Изменить атрибут channel' }).click();
+  const edit = page.getByRole('dialog', { name: 'Атрибут channel' });
+  await edit.getByLabel('Значение').fill('hacker news');
+  await edit.getByLabel('Причина').fill(`Другая площадка ${RUN}`);
+  await edit.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(edit).toBeHidden();
+  // Значение стоит в строке и в карточке истории: берём строку, она первая.
+  await expect(attributes.getByText('hacker news').first()).toBeVisible();
+
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await fontsReady(page);
+    expect((await new AxeBuilder({ page }).analyze()).violations, `${width}px`).toEqual([]);
+  }
+
+  await history.getByRole('button', { name: 'Снять атрибут channel' }).click();
+  const remove = page.getByRole('alertdialog', { name: 'Снять атрибут channel?' });
+  await remove.getByLabel('Причина').fill(`Площадка не нужна ${RUN}`);
+  await remove.getByRole('button', { name: 'Снять атрибут' }).click();
+  await expect(remove).toBeHidden();
+  await expect(attributes.locator('li[data-attribute="channel"]')).toHaveCount(0);
+});

@@ -249,7 +249,7 @@ async def test_the_demo_human_is_the_owner_the_init_command_creates(
     """Иначе блокирующий вопрос ушёл бы участнику, чьего токена никому не выдавали.
 
     Первый экран после `init` и `demo` обязан показать ненулевое число вопросов, а
-    показывает он их владельцу — тому самому, чей токен напечатала инициализация.
+    показывает он их владельцу — тому самому, чей токен лежит в фикстуре.
     """
     owner: Participant = await participants_service.get_participant(db_session, DEFAULT_OWNER_NAME)
 

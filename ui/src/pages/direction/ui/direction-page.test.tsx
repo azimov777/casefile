@@ -273,11 +273,41 @@ describe('страница направления', () => {
     // «Восстановить» — за «⋯»: у архивного направления активного проекта меню есть.
     expect(await menuButton()).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: say.direction('entry.open') })).toBeNull();
-
     // Атрибуты при этом читаются, но без правки.
     await user.click(tab(say.direction('tabs.attributes')));
-    expect(await screen.findByRole('button', { name: 'channel' })).toBeInTheDocument();
+    const channel = await screen.findByRole('button', { name: /^channel$/ });
     expect(screen.queryByRole('button', { name: say.project('attribute.add') })).toBeNull();
+    // …и в открытой истории архивного направления кнопок правки нет.
+    await user.click(channel);
+    await screen.findByRole('region', { name: say.project('history', { name: 'channel' }) });
+    expect(
+      screen.queryByRole('button', {
+        name: say.project('attribute.changeLabel', { name: 'channel' }),
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', {
+        name: say.project('attribute.removeLabel', { name: 'channel' }),
+      }),
+    ).toBeNull();
+  });
+
+  it('«Изменить» и «Снять» атрибута — в открытой истории, а не под строкой', async () => {
+    const user = userEvent.setup();
+    renderApp('/projects/DEMO/directions/promotion?tab=attributes', { language: 'ru' });
+
+    const channel = await screen.findByRole('button', { name: /^channel$/ });
+    const change = say.project('attribute.changeLabel', { name: 'channel' });
+    const remove = say.project('attribute.removeLabel', { name: 'channel' });
+    expect(screen.queryByRole('button', { name: change })).toBeNull();
+    expect(screen.queryByRole('button', { name: remove })).toBeNull();
+
+    await user.click(channel);
+    const history = await screen.findByRole('region', {
+      name: say.project('history', { name: 'channel' }),
+    });
+    expect(within(history).getByRole('button', { name: change })).toBeInTheDocument();
+    expect(within(history).getByRole('button', { name: remove })).toBeInTheDocument();
   });
 
   it('направление архивного проекта: меню нет вовсе — ни правки, ни архива, ни восстановления, сказано почему', async () => {
@@ -313,5 +343,48 @@ describe('страница направления', () => {
     expect(
       screen.getByRole('link', { name: say.direction('page.backToProject', { key: 'DEMO' }) }),
     ).toHaveAttribute('href', '/projects/DEMO');
+  });
+});
+
+describe('фильтр по типу в деле направления (TRK-621)', () => {
+  /** Дело направления с отбором по `types`, как у бэкенда. */
+  function filtered() {
+    return http.get(`${API}${PATH}/entries`, ({ request }) => {
+      const url = new URL(request.url);
+      seen.push(url);
+      const types = url.searchParams.getAll('types');
+      return collection(types.length === 0 ? CASE : CASE.filter((e) => types.includes(e.type)));
+    });
+  }
+
+  it('без выбора запрос дела уходит без types', async () => {
+    server.use(filtered());
+    renderApp('/projects/DEMO/directions/promotion', { language: 'ru' });
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 3 }) });
+
+    const reads = seen.filter((url) => url.pathname === `${PATH}/entries`);
+    expect(reads.length).toBeGreaterThan(0);
+    for (const url of reads) expect(url.searchParams.has('types')).toBe(false);
+  });
+
+  it('с выбором запрос дела уходит с types', async () => {
+    server.use(filtered());
+    renderApp('/projects/DEMO/directions/promotion?type=decision', { language: 'ru' });
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 1 }) });
+
+    const reads = seen.filter((url) => url.pathname === `${PATH}/entries`);
+    expect(reads.at(-1)?.searchParams.getAll('types')).toEqual(['decision']);
+  });
+
+  it('пустая выдача по отбору — честное пустое состояние со сбросом', async () => {
+    const user = userEvent.setup();
+    server.use(filtered());
+    renderApp('/projects/DEMO/directions/promotion?type=note', { language: 'ru' });
+
+    expect(await screen.findByText(say.case('emptyByTypes'))).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: say.case('filters.reset') }));
+
+    await screen.findByRole('table', { name: say.ui('index.count', { count: 3 }) });
+    expect(address.current).toBe('/projects/DEMO/directions/promotion');
   });
 });

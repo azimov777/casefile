@@ -51,8 +51,11 @@ export {
   sectionEditsHeadline,
   type SectionEditsRun,
 } from './model/section-edits';
+export { readEntryTypes } from './model/entry-types';
 export { entryReference, ownerOfEntry, type EntryOwner } from './model/owner';
 export { AuthorName } from './ui/author-name';
+export { CaseFilters } from './ui/case-filters';
+export { EmptyByTypesNotice, HiddenByTypeNotice } from './ui/case-type-notices';
 export { CopyEntryLink } from './ui/copy-entry-link';
 export { EntryBody } from './ui/entry-body';
 export { EntryCard } from './ui/entry-card';

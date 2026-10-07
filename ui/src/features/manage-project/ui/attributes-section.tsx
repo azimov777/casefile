@@ -28,7 +28,7 @@ interface AttributesSectionProps {
  *
  * Раздел живёт в действиях, а не на экране: его рисуют два экрана — проект и
  * направление (TRK-557), — а экраны друг друга не импортируют. Здесь же стоят его
- * действия: «Добавить», «Изменить» и «Снять».
+ * действия: «Добавить» над списком, «Изменить» и «Снять» — в открытой истории атрибута.
  *
  * Порядок — тот, что отдал бэкенд (по имени без учёта регистра). Значение — простой
  * текст, который трекер не толкует (`AttributeRead.value`): он показывается как есть,
@@ -77,7 +77,9 @@ export function AttributesSection({
                 className="flex flex-col gap-1 border-b border-b-line px-3 py-2 last:border-b-0"
                 data-attribute={attribute.name}
               >
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                {/* Строка-справка: имя и значение рядом (на 390 px имя над значением),
+                    время последнего изменения — под значением. */}
+                <div className="grid grid-cols-1 gap-x-4 gap-y-1 min-[900px]:grid-cols-[12rem_1fr]">
                   {/*
                    * Имя — кнопка: раскрытие истории это действие, и с клавиатуры оно
                    * тоже нужно. Вид тот же, что у заголовка записи в описи
@@ -86,29 +88,27 @@ export function AttributesSection({
                    */}
                   <button
                     type="button"
-                    className="cursor-pointer border-none border-current bg-transparent p-0 text-left font-mono font-semibold text-text wrap-anywhere before:text-muted before:content-['▸_'] max-fold:min-h-(--ui-tap) hover:underline aria-expanded:before:content-['▾_']"
+                    className="cursor-pointer self-start justify-self-start border-none border-current bg-transparent p-0 text-left font-mono font-semibold text-text wrap-anywhere before:text-muted before:content-['▸_'] max-fold:min-h-(--ui-tap) hover:underline aria-expanded:before:content-['▾_']"
                     aria-expanded={expanded}
                     aria-controls={expanded ? historyId : undefined}
                     onClick={() => onOpenChange(expanded ? null : attribute.name)}
                   >
                     {attribute.name}
                   </button>
-                  <span className="text-meta text-muted">
-                    <RelativeTime value={attribute.updated_at} />
-                  </span>
-                </div>
-                <p className="whitespace-pre-wrap wrap-anywhere">{attribute.value}</p>
-                {/* Действия — под значением, а не в строке имени: на 390 px имя, время и
-                    две кнопки в одну строку не встают, а перенос посреди них читается
-                    хуже, чем своя строка. */}
-                {canWrite ? (
-                  <div className="flex flex-wrap gap-2">
-                    <ChangeAttribute holder={holder} attribute={attribute} />
-                    <RemoveAttribute holder={holder} attribute={attribute} />
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <p className="whitespace-pre-wrap wrap-anywhere">{attribute.value}</p>
+                    <span className="text-meta text-muted">
+                      <RelativeTime value={attribute.updated_at} />
+                    </span>
                   </div>
-                ) : null}
+                </div>
                 {expanded ? (
-                  <AttributeHistory holder={holder} name={attribute.name} id={historyId} />
+                  <AttributeHistory
+                    holder={holder}
+                    attribute={attribute}
+                    canWrite={canWrite}
+                    id={historyId}
+                  />
                 ) : null}
               </li>
             );
@@ -130,7 +130,18 @@ export function AttributesSection({
  * Записи показаны теми же карточками, что в ленте дела задачи (`EntryCard`): «было /
  * стало» и причина под ним.
  */
-function AttributeHistory({ holder, name, id }: { holder: Holder; name: string; id: string }) {
+function AttributeHistory({
+  holder,
+  attribute,
+  canWrite,
+  id,
+}: {
+  holder: Holder;
+  attribute: ProjectAttribute;
+  canWrite: boolean;
+  id: string;
+}) {
+  const name = attribute.name;
   const feed = useInfiniteQuery(holderCaseQueryOptions(holder, { attribute: name }));
   const { t } = useTranslation('project');
   const { t: tDirection } = useTranslation('direction');
@@ -144,6 +155,13 @@ function AttributeHistory({ holder, name, id }: { holder: Holder; name: string; 
       aria-label={t('history', { name })}
       className="flex flex-col gap-2 pt-1"
     >
+      {/* Правка и снятие — первым блоком открытой истории, а не под каждой строкой. */}
+      {canWrite ? (
+        <div className="flex flex-wrap gap-2">
+          <ChangeAttribute holder={holder} attribute={attribute} />
+          <RemoveAttribute holder={holder} attribute={attribute} />
+        </div>
+      ) : null}
       {feed.data === undefined ? (
         <QueryState query={feed} loading={t('historyLoading')} />
       ) : history.length === 0 && !feed.hasNextPage ? (

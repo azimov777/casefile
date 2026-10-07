@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { say } from '@testing/say';
-import { ENTRY_TYPES, isServiceEntry, type EntryType } from '@/entities/entry';
+import { ENTRY_TYPES, isServiceEntry, type EntryType } from '../api/entries';
 import { CaseFilterMenu } from './case-filter-menu';
 
 /*

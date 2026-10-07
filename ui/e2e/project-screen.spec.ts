@@ -269,6 +269,43 @@ function screens(page: Page, decisionNo: number): { name: string; path: string; 
   ];
 }
 
+test('дело проекта: фильтр по типу note — в описи только заметки, type=note в адресе, перезагрузка сохраняет', async ({
+  page,
+  request,
+}) => {
+  await seed(request);
+  const noteTitle = `Заметка для отбора по типу, прогон ${RUN}`;
+  await api(request, 'post', '/api/v1/projects/TRK/entries', {
+    type: 'note',
+    title: noteTitle,
+    body: 'Заметка проекта для сквозного сценария фильтра.',
+  });
+
+  await page.goto('/projects/TRK?tab=case');
+  const table = page.getByRole('table');
+  await expect(table.getByRole('button', { name: DECISION })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Фильтр', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Типы записей' })
+    .getByRole('button', { name: 'note', exact: true })
+    .click();
+  await page.keyboard.press('Escape');
+
+  await expect(page).toHaveURL(/[?&]type=note(&|$)/);
+  await expect(table.getByRole('button', { name: noteTitle })).toBeVisible();
+  await expect(table.getByRole('button', { name: DECISION })).toHaveCount(0);
+  // Заведение проекта — запись другого типа: под отбором её в описи нет.
+  await expect(table.getByRole('button', { name: /^Project created$|Проект заведён/ })).toHaveCount(
+    0,
+  );
+
+  await page.reload();
+  await expect(page).toHaveURL(/[?&]type=note(&|$)/);
+  await expect(table.getByRole('button', { name: noteTitle })).toBeVisible();
+  await expect(table.getByRole('button', { name: DECISION })).toHaveCount(0);
+});
+
 for (const colorScheme of ['light', 'dark'] as const) {
   for (const viewport of [
     { width: 1440, height: 900 },

@@ -91,7 +91,7 @@ export function hideArchive(query: string | null | undefined, now: Date): Archiv
 
 /**
  * Складывает запрос с любым правилом по «и» — то же, что `hideArchive`, для правила
- * не архива: условие столбца доски (`./waiting.ts`) складывается тем же путём и теми же
+ * не архива: условие столбца доски «ждут ответа» складывается тем же путём и теми же
  * объяснениями отказа.
  */
 export function composeWith(query: string | null | undefined, rule: string): ArchiveQuery {

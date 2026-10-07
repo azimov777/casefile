@@ -97,7 +97,7 @@ async def test_an_empty_installation_gets_an_owner_and_a_main_token_in_a_file(
     run: RunCommand,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Пустая установка: владелец заведён, ключ набора `main` в файле `0600`, ключ работает."""
+    """Пустая установка: владелец заведён, ключ владельца в файле `0600`, ключ работает."""
     code = await run(token_file)
 
     assert code == 0

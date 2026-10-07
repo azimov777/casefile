@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { holderTab, rememberOnTab, tabSearch } from './holder-tab';
+import { holderTab, keepCaseTab, rememberOnTab, tabSearch } from './holder-tab';
 
 /** Параметры адреса из строки: так их видит страница. */
 const at = (search: string) => new URLSearchParams(search);
@@ -73,6 +73,18 @@ describe('адрес вкладки', () => {
     expect(tabSearch(at('attribute=repo&entry=7'), 'project', 'overview').toString()).toBe('');
   });
 
+  it('отбор дела по типу (`type`) — состояние «Дела»: уход с него отбор снимает', () => {
+    expect(tabSearch(at('tab=case&type=note'), 'project', 'decisions').toString()).toBe(
+      'tab=decisions',
+    );
+    expect(tabSearch(at('tab=case&type=note'), 'project', 'case').toString()).toBe(
+      'type=note&tab=case',
+    );
+    expect(tabSearch(at('type=note&type=decision'), 'direction', 'attributes').toString()).toBe(
+      'tab=attributes',
+    );
+  });
+
   it('чужие параметры адреса остаются', () => {
     expect(tabSearch(at('walk=3'), 'project', 'case').toString()).toBe('walk=3&tab=case');
   });
@@ -95,5 +107,15 @@ describe('раскрытие записи и атрибута не меняет 
     expect(
       rememberOnTab(at('tab=attributes'), 'direction', 'attribute', 'channel').toString(),
     ).toBe('tab=attributes&attribute=channel');
+  });
+});
+
+describe('правка отбора по типу не уводит с «Дела»', () => {
+  it('снятый отбор у дела, открытого записью или без `tab`, закрепляет `tab=case`', () => {
+    expect(keepCaseTab(at(''), 'project').toString()).toBe('tab=case');
+    expect(keepCaseTab(at('tab=case'), 'project').toString()).toBe('tab=case');
+    expect(keepCaseTab(at('entry=5'), 'project').toString()).toBe('entry=5');
+    // У направления «Дело» — вкладка по умолчанию: закреплять нечего.
+    expect(keepCaseTab(at(''), 'direction').toString()).toBe('');
   });
 });
