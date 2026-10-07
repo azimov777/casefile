@@ -601,11 +601,11 @@ UI-133#5 о том, что совпадение `created_at` — деталь р
 
 ## Дело проекта живёт в той же таблице записей: владелец — `task_id` или `project_id`
 
-**Что:** у записи ровно один владелец — задача, проект или (заметка «Направление — третий
-владелец…» ниже) направление; `entries.task_id` допускает `NULL`, рядом `entries.project_id`
-и `entries.direction_id`, а «ровно один» держит `ck_entries_one_owner`
-(`num_nonnulls(task_id, project_id, direction_id) = 1`). Номер `no` уникален внутри владельца:
-уникальности `(task_id, no)`, `(project_id, no)` и `(direction_id, no)`; `NULL` в них
+**Что:** у записи ровно один владелец — задача, проект или (заметка «Область — третий
+владелец…» ниже) область; `entries.task_id` допускает `NULL`, рядом `entries.project_id`
+и `entries.area_id`, а «ровно один» держит `ck_entries_one_owner`
+(`num_nonnulls(task_id, project_id, area_id) = 1`). Номер `no` уникален внутри владельца:
+уникальности `(task_id, no)`, `(project_id, no)` и `(area_id, no)`; `NULL` в них
 различны, и записи одного владельца чужую не задевают (TRK-156).
 **Почему важно:** отдельная таблица записей проекта дала бы вторую `IDENTITY` и второй `seq` —
 второй журнал, который концепция запрещает (`CONCEPT.md`, 4.1), и правило слияния двух хвостов
@@ -614,7 +614,7 @@ UI-133#5 о том, что совпадение `created_at` — деталь р
 читает `entries` с `JOIN tasks`, теперь теряет записи проекта молча — внутренним соединением
 их не видно.
 **Как правильно:** выборка поперёк записей, где владелец может быть проектом (лента), —
-внешние соединения с `tasks`, `projects` и `directions` (`EntryRepository.journal_page`). Выборки по
+внешние соединения с `tasks`, `projects` и `areas` (`EntryRepository.journal_page`). Выборки по
 вопросам, замечаниям и признакам задач остаются внутренними: таких записей у проекта нет.
 Номер записи проекта выдаёт `allocate_project_no` под блокировкой строки проекта, после
 очереди изменений — тот же порядок захвата. Откат ревизии `5c1d8e7a2b90` отказывает на
@@ -743,28 +743,28 @@ ASCII-шаблоном, поэтому `str.lower()` в домене и `lower()
 **Где:** `app/db/migrations/versions/20260928_1200_onboarding_state.py`;
 `app/db/models/account.py`; `tests/test_migrations.py`.
 
-## Направление — третий владелец записи дела, а атрибуты направления — своя таблица
+## Область — третий владелец записи дела, а атрибуты области — своя таблица
 
 **Что:** у записи дела три возможных владельца: `entries.task_id`, `project_id` и
-`direction_id`, и `ck_entries_one_owner` считает все три (`num_nonnulls(...) = 1`). У записи
-направления `project_id` пуст: проект направления — колонка `directions.project_id`, а не
-второй владелец записи. Номер `no` уникален и внутри направления
-(`uq_entries_direction_id_no`), выдаёт его `allocate_direction_no` под блокировкой строки
-направления после очереди изменений. Атрибуты направления — отдельная таблица
-`direction_attributes` той же формы, что `project_attributes`; `AttributeRepository`
+`area_id`, и `ck_entries_one_owner` считает все три (`num_nonnulls(...) = 1`). У записи
+области `project_id` пуст: проект области — колонка `areas.project_id`, а не
+второй владелец записи. Номер `no` уникален и внутри области
+(`uq_entries_area_id_no`), выдаёт его `allocate_area_no` под блокировкой строки
+области после очереди изменений. Атрибуты области — отдельная таблица
+`area_attributes` той же формы, что `project_attributes`; `AttributeRepository`
 выбирает таблицу по владельцу в одной точке (`_owned`) (TRK-555).
 **Почему важно:** выборка «всё о проекте» по одному `Entry.project_id` не видит дел его
-направлений — это та же ловушка, что была с делом проекта и `JOIN tasks`. Общая таблица
+областей — это та же ловушка, что была с делом проекта и `JOIN tasks`. Общая таблица
 атрибутов с двумя колонками владельца потребовала бы двух частичных уникальных индексов по
 `lower(name)` и проверки «ровно один владелец» ради экономии одной таблицы; у атрибутов
 общей ленты, ради которой записи живут в одной таблице, нет. Откат ревизии отказывает, пока
-есть записи направлений: без колонки у такой записи не остаётся владельца.
+есть записи областей: без колонки у такой записи не остаётся владельца.
 **Как правильно:** выборка поперёк записей с адресом владельца — внешние соединения с
-`directions` и вторым псевдонимом `projects` для ключа проекта направления
-(`journal_page`). Направление, только что созданное сценарием, получает проект объектом
-(`Direction(project=...)`): адрес собирается из `Direction.project`, а связь у новой строки
+`areas` и вторым псевдонимом `projects` для ключа проекта области
+(`journal_page`). Область, только что созданная сценарием, получает проект объектом
+(`Area(project=...)`): адрес собирается из `Area.project`, а связь у новой строки
 сама не подгрузится.
-**Где:** `app/db/models/entry.py`; `app/db/models/direction.py`; `app/db/models/attribute.py`,
-`DirectionAttribute`; `app/db/repositories/attributes.py`, `_owned`;
-`app/db/repositories/entries.py`, `allocate_direction_no`, `journal_page`;
+**Где:** `app/db/models/entry.py`; `app/db/models/area.py`; `app/db/models/attribute.py`,
+`AreaAttribute`; `app/db/repositories/attributes.py`, `_owned`;
+`app/db/repositories/entries.py`, `allocate_area_no`, `journal_page`;
 `app/db/migrations/versions/20261006_1130_directions.py`; `tests/test_migrations.py`.

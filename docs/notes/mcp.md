@@ -569,10 +569,10 @@ MCP, и в `openapi.json`/`openapi.ts` — оба перегенерирован
 
 ## Запись дела проекта адресуется ключом проекта, и в ответах два поля владельца
 
-**Что:** `EntryView` (и `EntryRead` в REST) несёт `task_key`, `project_key` и `direction`, и
+**Что:** `EntryView` (и `EntryRead` в REST) несёт `task_key`, `project_key` и `area`, и
 непусто ровно одно: у записи задачи — ключ задачи, у записи дела проекта (`add_project_entry`) —
-ключ проекта, у записи дела направления — его адрес (`TRK/promotion#3`, TRK-555). Короткий ответ подшивки в дело проекта — своя форма `AppendedProjectEntryView`: в
-ней `project_key` (ключ проекта или адрес направления) вместо `task_key` и нет `title` — у всех типов записи проекта заголовок
+ключ проекта, у записи дела области — её адрес (`TRK/promotion#3`, TRK-555). Короткий ответ подшивки в дело проекта — своя форма `AppendedProjectEntryView`: в
+ней `project_key` (ключ проекта или адрес области) вместо `task_key` и нет `title` — у всех типов записи проекта заголовок
 присылает агент, и поле всегда было бы `null`.
 **Почему важно:** `wait_journal` без отбора и с отбором `project` отдаёт записи обоих
 владельцев одним списком; код, читающий `task_key` как строку, на записи проекта получит
@@ -1297,46 +1297,46 @@ Claude Code, Codex, Cursor, чат Claude Desktop (расширение `casefil
 TRK-561).
 **Где:** `app/mcp/tools/case/views.py`, `WarningFactsView`; `app/domain/case.py`, `WarningFacts`.
 
-## У направления нет своих инструментов: его ведут инструменты проекта по адресу (TRK-555)
+## У области нет своих инструментов: её ведут инструменты проекта по адресу (TRK-555)
 
-**Что:** `CaseOwnerKeyArg` — «ключ проекта или адрес направления» — у `get_project`,
+**Что:** `CaseOwnerKeyArg` — «ключ проекта или адрес области» — у `get_project`,
 `update_project`, `archive_project`, `restore_project`, `set_attribute`, `remove_attribute`,
 `add_project_entry` и `read_project_entries`; кого искать, решает косая черта
-(`get_owner`). `create_project` с адресом заводит направление, `get_project` по адресу
-отдаёт направление той же формой `ProjectView` с пустыми `decisions` и `directions`. У
+(`get_owner`). `create_project` с адресом заводит область, `get_project` по адресу
+отдаёт область той же формой `ProjectView` с пустыми `decisions` и `areas`. У
 `create_task` и `move_task` остаётся `ProjectKeyArg`.
 **Почему важно:** выбор сделан замером `tools/list` (tiktoken, кодировка o200k_base, JSON без
-пробелов, как TRK-539#7; цифры — в деле TRK-555). Отдельное чтение направления с описью
+пробелов, как TRK-539#7; цифры — в деле TRK-555). Отдельное чтение области с описью
 повторило бы в `outputSchema` всю форму фактов описи — около 2 900 токенов; один
-`create_direction` стоил 483, а с ним прирост выходил за предел задачи в 1 000.
-**Как правильно:** новый инструмент проекта, чьё действие у направления то же, принимает
+`create_area` стоил 483, а с ним прирост выходил за предел задачи в 1 000.
+**Как правильно:** новый инструмент проекта, чьё действие у области то же, принимает
 `CaseOwnerKeyArg` и ищет владельца `get_owner`. Короткие ответы создающих инструментов
 (`AttributeSetView`, `AttributeRemovedView`, `AppendedProjectEntryView`, `ProjectKeyView`)
-несут адрес направления в прежнем поле ключа: новое обязательное поле уронило бы повтор
+несут адрес области в прежнем поле ключа: новое обязательное поле уронило бы повтор
 вчерашнего вызова (запись «Сузить форму ответа создающего инструмента можно, расширить —
-нельзя»). Полная запись (`EntryView`) несёт адрес полем `direction`, как REST.
-**Где:** `app/mcp/arguments.py`, `CaseOwnerKeyArg`; `app/services/directions.py`, `get_owner`;
+нельзя»). Полная запись (`EntryView`) несёт адрес полем `area`, как REST.
+**Где:** `app/mcp/arguments.py`, `CaseOwnerKeyArg`; `app/services/areas.py`, `get_owner`;
 `app/mcp/tools/registries/create_project.py`; `app/mcp/tools/registries/get_project.py`;
 `app/mcp/tools/case/views.py`, `EntryView`.
 
-## Поле `direction` стоит в метадате 179 токенов, и бюджет TRK-555 удержан сокращением чужих формулировок (TRK-556)
+## Поле `area` стоит в метадате 179 токенов, и бюджет TRK-555 удержан сокращением чужих формулировок (TRK-556)
 
-**Что:** поле `direction` в `get_task` (форма `TaskDirectionView`), `create_task`,
+**Что:** поле `area` в `get_task` (форма `TaskAreaView`), `create_task`,
 `update_task`, `search_tasks` (аргумент, строка, список `fields`) и `move_task` (одна фраза)
 добавило к `tools/list` 347 токенов от `264213ee` с первыми формулировками и 323 с
 короткими; описание `CaseOwnerKeyArg` без перечня отказов (`project_not_found`,
-`direction_not_found`) у восьми инструментов вернуло 144. Итог — +179 при 257 оставшихся
+`area_not_found`) у восьми инструментов вернуло 144. Итог — +179 при 257 оставшихся
 после TRK-555 (замер: tiktoken, кодировка o200k_base, JSON `tools/list` без пробелов, отсортированный
 по имени; `list_tools` сервера из `create_server`).
-**Почему важно:** предел прироста 1 000 токенов на программу направлений (TRK-555#12) —
+**Почему важно:** предел прироста 1 000 токенов на программу областей (TRK-555#12) —
 цена каждого подключения агента; первая версия описаний его превышала. Отказы
 по-прежнему названы в `docs/ERRORS.md` и в тексте самого отказа.
 **Как правильно:** новое поле инструмента писать без примеров и без перечня отказов
 (`examples` стоят 8–10 токенов на поле), форму ответа — без докстринга у вложенной
 модели; перед сдачей мерить `tools/list` до и после. Новая вложенная модель ответа стоит
 около 100 токенов в каждом инструменте, чья схема её содержит.
-**Где:** `app/mcp/tools/tasks/views.py`, `TaskDirectionView`;
-`app/mcp/tools/tasks/arguments.py`, `DIRECTION_RULE`; `app/mcp/arguments.py`,
+**Где:** `app/mcp/tools/tasks/views.py`, `TaskAreaView`;
+`app/mcp/tools/tasks/arguments.py`, `AREA_RULE`; `app/mcp/arguments.py`,
 `CaseOwnerKeyArg`.
 
 ## Краткий ответ `get_task(brief=true)` собирается вручную, а пропускаемые поля в схеме необязательны (TRK-579)

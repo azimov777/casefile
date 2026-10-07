@@ -279,18 +279,18 @@
 `tests/test_mutation_races.py`, `test_withdrawing_a_question_and_answering_it_cannot_interleave`,
 `test_two_withdrawals_of_one_question_cannot_both_be_first`.
 
-## Запись дела направления в ленте называет адрес, а отбор по проекту берёт и дела направлений
+## Запись дела области в ленте называет адрес, а отбор по проекту берёт и дела областей
 
 **Что:** с TRK-555 у записи ленты три ключа владельца: `task_key`, `project_key` и
-`direction` — адрес `TRK/promotion`; непуст ровно один (`JournalEntry`, `EntryRead`,
-`EntryView`). Отбор `project` отдаёт дело проекта, дела его задач и дела его направлений
-одним хвостом (`Direction.project_id = …` третьим условием).
+`area` — адрес `TRK/promotion`; непуст ровно один (`JournalEntry`, `EntryRead`,
+`EntryView`). Отбор `project` отдаёт дело проекта, дела его задач и дела его областей
+одним хвостом (`Area.project_id = …` третьим условием).
 **Почему важно:** потребитель, который адресует запись по `project_key`, на записи
-направления получит `null`, а не чужой адрес: у записи направления `project_key` пуст
+области получит `null`, а не чужой адрес: у записи области `project_key` пуст
 намеренно, иначе `TRK#3` назвал бы не ту запись. Живой поток интерфейса до TRK-557 такие
 кадры пропускает (`parseFrame` отвергает кадр без ключа задачи и проекта) — это безопасно,
 кадр не попадает в чужое дело.
 **Как правильно:** адрес записи — непустой ключ владельца и `no`: `TRK-42#3`, `TRK#7` или
 `TRK/promotion#3`.
 **Где:** `app/db/repositories/entries.py`, `journal_page`; `app/services/journal.py`,
-`JournalEntry`; `tests/test_directions.py`, `test_the_journal_names_a_direction_entry_by_its_address`.
+`JournalEntry`; `tests/test_areas.py`, `test_the_journal_names_a_area_entry_by_its_address`.
