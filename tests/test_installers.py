@@ -154,6 +154,7 @@ case "$*" in
     echo "1 sh"
     if [ "$n" -gt 0 ]; then echo $((n - 1)) >"$SCENE/busy"; echo "7 docker"; fi ;;
   "compose ps -aq db") cat "$SCENE/db" 2>/dev/null ;;
+  "volume ls "*) cat "$SCENE/volume" 2>/dev/null ;;
   "compose exec -T db sh -c psql "*) cat "$SCENE/revision" 2>/dev/null ;;
   "compose config") cat "$SCENE/config" 2>/dev/null ;;
   "run --rm --pull never "*) cat "$SCENE/head" 2>/dev/null ;;
@@ -2318,6 +2319,48 @@ def test_a_failed_snapshot_stops_the_installer_before_up(tmp_path: Path) -> None
         assert "could not take a snapshot of the database" in done.stderr, name
         assert not [c for c in calls if c.startswith("compose up ")], name
         assert calls[-1] == "start container-updater", name
+
+
+def test_a_database_volume_without_a_db_container_gets_the_db_up_and_a_snapshot(
+    tmp_path: Path,
+) -> None:
+    """После `down` без `-v`: том есть, контейнера нет, head другой.
+
+    Порядок: `up db`, снимок, потом `up`.
+    """
+    done, calls = _install(tmp_path, **_snapshot_scene(db="", volume="casefile_pgdata\n"))
+
+    assert done.returncode == 0, done.stderr
+    up_db = calls.index("compose up -d --wait db")
+    assert up_db < _snapshot_index(calls)
+    store = next(c for c in calls if "--entrypoint sh updater" in c)
+    up_all = calls.index("compose up -d --remove-orphans")
+    assert _snapshot_index(calls) < calls.index(store) < up_all
+    assert "rev1 -> rev2" in done.stdout
+
+
+def test_no_database_volume_is_a_first_install_without_a_snapshot(tmp_path: Path) -> None:
+    done, calls = _install(tmp_path, **_snapshot_scene(db="", volume=""))
+
+    assert done.returncode == 0, done.stderr
+    assert not [c for c in calls if "pg_dump" in c or "up -d --wait db" in c]
+    assert "compose up -d --remove-orphans" in calls
+
+
+def test_a_db_that_does_not_start_over_an_existing_volume_stops_before_up(tmp_path: Path) -> None:
+    done, calls = _install(tmp_path, **_snapshot_scene(db="", volume="v\n", up="1"))
+
+    assert done.returncode != 0
+    assert "did not start" in done.stderr
+    assert "compose up -d --remove-orphans" not in calls
+
+
+def test_install_ps1_starts_the_db_over_an_existing_volume() -> None:
+    text = _read(INSTALL_PS1)
+    body = text[text.index("function Invoke-SnapshotBeforeUp") :]
+
+    assert "com.docker.compose.volume=pgdata" in body
+    assert body.index("volume ls") < body.index("up -d --wait db") < body.index("pg_dump")
 
 
 def test_install_ps1_takes_the_same_snapshot_before_up() -> None:

@@ -185,8 +185,18 @@ hold_updater() {
 SNAPSHOT_REVISION_SQL="SELECT CASE WHEN to_regclass('public.alembic_version') IS NULL THEN 'no-table' ELSE (xpath('/row/version_num/text()', query_to_xml('SELECT version_num FROM public.alembic_version', false, true, '')))[1]::text END"
 
 snapshot_before_up() {
-  # Контейнера базы нет — установка первая, снимать нечего.
-  [ -n "$(docker compose ps -aq db </dev/null 2>/dev/null)" ] || return 0
+  # Первая установка — это нет тома базы, а не нет контейнера `db`: после `docker compose
+  # down` без `-v` контейнеров нет, а том `pgdata` цел (TRK-664). Том есть, контейнера нет —
+  # поднять одну `db`, дождаться здоровья и дальше по тем же правилам. Том ищется по меткам
+  # compose: проект — из `docker compose config`, иначе имя каталога установки.
+  if [ -z "$(docker compose ps -aq db </dev/null 2>/dev/null)" ]; then
+    project=$(docker compose config </dev/null 2>/dev/null | awk '/^name: / { print $2; exit }')
+    [ -n "$project" ] || project=$(basename "$PWD" | tr '[:upper:]' '[:lower:]')
+    [ -n "$(docker volume ls -q --filter "label=com.docker.compose.project=$project" \
+      --filter label=com.docker.compose.volume=pgdata </dev/null 2>/dev/null)" ] || return 0
+    docker compose up -d --wait db </dev/null >/dev/null 2>&1 ||
+      fail "the database volume exists but the database did not start, so it could not be snapshotted; nothing was changed. See: docker compose logs db"
+  fi
   revision=$(docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$1"' sh \
     "$SNAPSHOT_REVISION_SQL" </dev/null 2>/dev/null | head -n 1)
   [ "$revision" != no-table ] || return 0
