@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { CircleHelp, Flag, Lock, TriangleAlert } from 'lucide-react';
+import { CalendarClock, CircleHelp, Flag, Lock, TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '@/shared/i18n';
-import { cn, formatNumber } from '@/shared/lib';
+import { cn, formatNumber, momentLabel } from '@/shared/lib';
 import type { TaskFeatures } from '../api/tasks';
 
 /**
@@ -85,11 +85,44 @@ function Mark({
   );
 }
 
+/**
+ * Значок отложенной задачи (TRK-593, TRK#47, п. 6): задачу ещё нельзя взять в работу.
+ * Стоит рядом с блокером и вопросом, но тоном внимания, а не опасности: это не срок и не
+ * «горит», от человека ничего не ждут. Подпись называет момент, когда его знает; значок
+ * рисуется по `features.deferred` с сервера, а не по часам браузера.
+ */
+export function DeferredMark({
+  notBefore,
+  pressable = false,
+}: {
+  notBefore: string | null | undefined;
+  pressable?: boolean;
+}) {
+  const { t } = useTranslation('ui');
+  const { language } = useLanguage();
+  const moment = momentLabel(notBefore, language);
+
+  return (
+    <Mark
+      icon={CalendarClock}
+      label={
+        moment === '' ? t('task.features.deferredBare') : t('task.features.deferred', { moment })
+      }
+      tone="text-attention"
+      count={null}
+      pressable={pressable}
+    />
+  );
+}
+
 export function TaskFeatureMarks({
   features,
+  notBefore,
   pressable = false,
 }: {
   features: TaskFeatures;
+  /** Момент «не раньше» из карточки: им подписан значок отложенной задачи. */
+  notBefore?: string | null;
   /**
    * Знак — кнопка, раскрывающая смысл признака словами (UI-163): на телефоне наведения
    * нет, и подсказка `title` недостижима. Только там, где нажатие ничем не занято, —
@@ -114,6 +147,8 @@ export function TaskFeatureMarks({
           pressable={pressable}
         />
       ) : null}
+
+      {features.deferred ? <DeferredMark notBefore={notBefore} pressable={pressable} /> : null}
 
       {features.open_questions > 0 ? (
         <Mark

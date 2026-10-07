@@ -77,7 +77,15 @@ export const TASK_PRIORITIES = Object.keys(PRIORITY_SET) as TaskPriority[];
  * имени в наборе поля в строке нет вовсе. Прежнее имя `parents` (список) бэкенд теперь
  * отклоняет `422 search_field_unknown`.
  */
-export const TASK_LIST_FIELDS = ['title', 'status', 'assignee', 'priority', 'features', 'parent'];
+export const TASK_LIST_FIELDS = [
+  'title',
+  'status',
+  'assignee',
+  'priority',
+  'features',
+  'parent',
+  'not_before',
+];
 
 /** Сколько строк на странице: столько помещается на экран без прокрутки шапки. */
 export const TASK_PAGE_SIZE = 50;

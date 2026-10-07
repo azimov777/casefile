@@ -259,6 +259,8 @@ export const ui = {
       remarks_one: '{{count, number}} remark not yet resolved',
       remarks_other: '{{count, number}} remarks not yet resolved',
       warning: 'closed not in full: awaits a decision — accept or return',
+      deferred: 'deferred: can be taken into work from {{moment}}',
+      deferredBare: 'deferred: cannot be taken into work yet',
     },
     // Родитель задачи подписью на карточке доски и в строке списка (UI-119).
     parents: {

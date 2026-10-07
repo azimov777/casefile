@@ -195,7 +195,9 @@ export function TaskRow({ task, parentSlot = false }: { task: Task; parentSlot?:
       </td>
       <td className="px-3 @max-list:px-0">
         <span className="flex items-center gap-2">
-          {features === null ? null : <TaskFeatureMarks features={features} />}
+          {features === null ? null : (
+            <TaskFeatureMarks features={features} notBefore={task.not_before} />
+          )}
         </span>
       </td>
       {/* Единственное время в строке: когда в дело последний раз что-то подшивали.

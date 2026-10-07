@@ -90,6 +90,30 @@ export function exactTime(value: string | null | undefined, language: Language):
   return at === null ? '' : exact(language).format(at);
 }
 
+/**
+ * Момент «можно взять с …» для человека: день, месяц и время в часовом поясе браузера,
+ * без секунд. Год называется, только когда он не нынешний: «12 окт., 09:00» читается
+ * сразу, а «12 окт. 2026 г.» в списке — шум. «Сейчас» параметром, как в остальных.
+ *
+ * Пояс местный по той же причине, что у `exactTime`: человек смотрит в своём поясе.
+ */
+export function momentLabel(
+  value: string | null | undefined,
+  language: Language,
+  { month = 'short', now = Date.now() }: { month?: 'short' | 'long'; now?: number } = {},
+): string {
+  const at = parse(value);
+  if (at === null) return '';
+  const sameYear = new Date(at).getFullYear() === new Date(now).getFullYear();
+  return new Intl.DateTimeFormat(language, {
+    day: 'numeric',
+    month,
+    ...(sameYear ? {} : { year: 'numeric' as const }),
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(at);
+}
+
 function parse(value: string | null | undefined): number | null {
   if (value === null || value === undefined || value === '') return null;
   const at = Date.parse(value);

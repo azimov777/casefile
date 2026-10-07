@@ -113,7 +113,7 @@ export function TaskCard({ task }: { task: Task }) {
 
       {features === null || !hasFeatureBadges(features) ? null : (
         <div className="flex flex-wrap items-center gap-2 text-meta text-muted">
-          <TaskFeatureMarks features={features} />
+          <TaskFeatureMarks features={features} notBefore={task.not_before} />
         </div>
       )}
     </article>
