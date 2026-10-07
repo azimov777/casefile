@@ -111,6 +111,7 @@ SDK, состав `tools/list` по наборам токена, `instructions` 
 - `test_project_case.py` — дело проекта: номер внутри проекта и общий `seq`, типы задачи отклоняются, `created` и `field_changed` карточки, ссылка `TRK#7` из обоих дел, лента с отбором `project`, REST `/projects/{key}/entries` и инструменты MCP
 - `test_project_decisions.py` — решения проекта (TRK-554): замена через `supersedes` и статус при чтении, `decision_not_in_force`, поле `decisions` у задачи и его отказы против «слухов» (`task_entry`, `not_a_decision`), отбор `decision:` по заменённому решению, REST и путь агента по MCP
 - `test_project_description.py` — описание проекта до 320 знаков: предел в знаках на кириллице, отказ `project_description_too_long` в сценарии, REST и MCP, описание в карточке задачи и его отсутствие в строке поиска
+- `test_project_knowledge.py` — записи знания дела проекта (TRK-656): замена у заметки (`finding` с `supersedes`), статус и прямой преемник при чтении дела проекта в REST и MCP, отбор `in_force`, отказы `entry_fields_invalid` и `finding_not_in_force`, дело направления и задачи без статуса
 - `test_project_numbering.py` — гонка за номером задачи: пятьдесят одновременных выдач на своих сессиях
 - `test_projects_api.py` — эндпоинты проектов: доступ по набору, неизменяемый ключ, частичное обновление
 - `test_projects_service.py` — сценарии проектов: создание, правка, чтение, выдача номеров

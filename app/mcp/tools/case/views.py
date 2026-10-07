@@ -33,6 +33,7 @@ from app.domain.case import (
 )
 from app.mcp.enums import (
     AnswerOutcomeSchema,
+    DecisionStatusSchema,
     EntryTypeSchema,
     LinkKindSchema,
     RemarkOutcomeSchema,
@@ -41,6 +42,7 @@ from app.mcp.enums import (
     VerdictOutcomeSchema,
 )
 from app.mcp.views import AuthorView, author
+from app.services.decisions import Standing
 
 
 class NoFactsView(BaseModel):
@@ -332,6 +334,21 @@ class EntryView(BaseModel):
             "filed before this field existed"
         ),
     )
+    status: DecisionStatusSchema | None = Field(
+        description=(
+            "Status of a `decision` or `finding` of a project's case, computed by "
+            "`read_project_entries`: `superseded` once a later entry of the same type in "
+            "the case names this one in `supersedes`, `in_force` until then. `null` for "
+            "other types, in a task's or a direction's case and in `wait_journal`"
+        )
+    )
+    superseded_by: int | None = Field(
+        description=(
+            "Number of the entry in the same case that superseded this one, the direct "
+            "successor rather than the end of a chain; `null` while in force and wherever "
+            "`status` is `null`"
+        )
+    )
 
 
 def entry(
@@ -340,11 +357,14 @@ def entry(
     task_key: str | None = None,
     project_key: str | None = None,
     direction: str | None = None,
+    standing: Standing | None = None,
 ) -> EntryView:
     """Запись дела целиком. Ключ владельца приходит извне: у записи только `task_id`,
     `project_id` или `direction_id`. Передаётся ровно один — как и в REST (`entry_read`).
     Нагрузка читается тем же правилом, что и в REST, — `read_payload`: ответ, подшитый до
-    исходов, приходит с `outcome: answered`, а не без ключа."""
+    исходов, приходит с `outcome: answered`, а не без ключа. `standing` — статус решения
+    или заметки, посчитанный чтением дела проекта; без него `status` и `superseded_by` —
+    `null`, как в REST."""
     owners = [key for key in (task_key, project_key, direction) if key is not None]
     assert len(owners) == 1, "entry owner is exactly one key"
     return EntryView(
@@ -362,6 +382,8 @@ def entry(
         refs=list(value.refs),
         created_at=value.created_at,
         action_id=None if value.action_id is None else str(value.action_id),
+        status=None if standing is None else standing.status,
+        superseded_by=None if standing is None else standing.superseded_by,
     )
 
 

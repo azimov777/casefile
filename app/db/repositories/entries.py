@@ -16,7 +16,7 @@ GIN-индекс по нагрузке вопросов (миграция `case 
 """
 
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -43,6 +43,7 @@ from app.domain.case import (
     ATTRIBUTE_ENTRY_TYPES,
     FIRST_ENTRY_NUMBER,
     OUTCOME_WITH_CONTINUATION,
+    REPLACEABLE_ENTRY_TYPES,
     WARNING_REACTIONS,
     AnswerFacts,
     AssigneeChangedFacts,
@@ -245,6 +246,7 @@ class EntryRepository:
         nos: Sequence[int] | None = None,
         types: Sequence[EntryType] | None = None,
         attribute: str | None = None,
+        exclude_nos: Collection[int] = (),
         after_no: int | None = None,
         limit: int | None = None,
         cursor: str | None = None,
@@ -255,12 +257,17 @@ class EntryRepository:
         `attribute_created`, `attribute_changed`, `attribute_removed` с этим именем в
         `payload.name`, без учёта регистра — то же сравнение, что у самих атрибутов
         (`attribute_lookup_name`). Складывается с `types` по «и», как и остальные фильтры.
+
+        `exclude_nos` — номера, которых в выдаче быть не должно: так отбор `in_force`
+        убирает заменённые записи. Какие заменены, выборка не считает — их называет
+        сценарий (`app/services/decisions.py`), где у статуса одно место расчёта.
         """
         return await self._list_page(
             Entry.project_id == project_id,
             nos=nos,
             types=types,
             attribute=attribute,
+            exclude_nos=exclude_nos,
             after_no=after_no,
             limit=limit,
             cursor=cursor,
@@ -298,11 +305,14 @@ class EntryRepository:
         limit: int | None,
         cursor: str | None,
         attribute: str | None = None,
+        exclude_nos: Collection[int] = (),
     ) -> Page[Entry]:
         size = resolve_limit(limit)
         statement = self._filtered(
             select(Entry).where(owned), nos=nos, types=types, attribute=attribute
         )
+        if exclude_nos:
+            statement = statement.where(Entry.no.not_in(list(exclude_nos)))
         boundary = after_no
         if cursor is not None:
             (cursor_no,), _ = decode_sort_cursor(cursor, arity=1)
@@ -381,6 +391,24 @@ class EntryRepository:
             .order_by(Entry.project_id, Entry.no)
         )
         return list(await self._session.scalars(statement))
+
+    async def project_replaceables(
+        self, project_id: uuid.UUID
+    ) -> list[tuple[int, EntryType, dict[str, Any]]]:
+        """Решения и заметки дела проекта — номер, тип и нагрузка, без тел.
+
+        Все сразу, как `project_decisions`: статус записи знания считается из
+        `supersedes` всех более поздних записей её типа (`app/domain/decisions.py`).
+        Тела не выбираются: этот запрос идёт перед каждой страницей чтения дела, где есть
+        решение или заметка, и перед каждой заменой, а заметок в деле — сотни.
+        """
+        statement = (
+            select(Entry.no, Entry.type, Entry.payload)
+            .where(Entry.project_id == project_id, Entry.type.in_(REPLACEABLE_ENTRY_TYPES))
+            .order_by(Entry.no)
+        )
+        rows: list[Any] = list(await self._session.execute(statement))
+        return [(row.no, row.type, row.payload) for row in rows]
 
     async def _headings(self, owned: ColumnElement[bool]) -> list[EntryHeading]:
         statement = (

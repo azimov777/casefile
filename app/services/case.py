@@ -60,8 +60,8 @@
 """
 
 import uuid
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -88,6 +88,7 @@ from app.domain.case import (
     CLOSING_SUMMARY_PART,
     CLOSING_WITHOUT_ANSWER,
     INCOMPLETE_OUTCOMES,
+    REPLACEABLE_ENTRY_TYPES,
     DirectionEntryRef,
     EntryContext,
     EntryDraft,
@@ -163,6 +164,18 @@ class TaskEntry:
 
     entry: Entry
     task_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class CasePage(Page[Entry]):
+    """Страница дела проекта или направления и статусы её записей, посчитанные при чтении.
+
+    `standings` — по номеру записи, только у решений и заметок дела проекта (решение
+    TRK#48, раздел 2): у остальных типов и у всех записей дела направления (`CONCEPT.md`,
+    3.7) статуса нет, и номера в словаре нет.
+    """
+
+    standings: Mapping[int, decisions_service.Standing] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -757,16 +770,15 @@ async def append_project_entry(
     `_check_refs`, что у задачи: ссылка `TRK#7` из дела задачи и `TRK-42#3` из дела
     проекта проверяются одним кодом.
 
-    Решение проекта с `supersedes` заменяет названные решения (`CONCEPT.md`, 3.2). Что
-    они есть и ещё действуют, проверяется под очередью изменений, занятой до проверок:
-    иначе два одновременных решения заменили бы одно и то же, и у него оказалось бы два
-    преемника. Заморозка архива — тем же первым шагом, чтобы архив назвал отказ раньше
-    правил замены.
+    Решение или заметка проекта с `supersedes` заменяет названные записи своего типа
+    (`CONCEPT.md`, 3.2; TRK#48). Что они есть, того же типа и ещё действуют, проверяется
+    под очередью изменений, занятой до проверок: иначе две одновременные записи заменили
+    бы одну и ту же, и у неё оказалось бы два преемника. Заморозка архива — тем же первым
+    шагом, чтобы архив назвал отказ раньше правил замены.
 
     Владелец — проект или направление (`CONCEPT.md`, 3.7): в деле направления те же типы,
-    но механики решений проекта нет, и `supersedes` отвергает домен.
+    но механики замены нет, и `supersedes` отвергает домен.
     """
-    is_direction = isinstance(project, Direction)
     draft = build_project_entry(
         owner_name(project),
         type=type,
@@ -774,7 +786,7 @@ async def append_project_entry(
         body=body,
         refs=refs,
         supersedes=supersedes,
-        decisions_supersede=not is_direction,
+        replaceable=not isinstance(project, Direction),
     )
     if isinstance(project, Direction):
         await freeze.lock_unfrozen(session, direction=project)
@@ -785,7 +797,7 @@ async def append_project_entry(
     problems.raise_as(EntryFieldsInvalidError, key=owner_name(project))
     if isinstance(project, Project):
         await decisions_service.check_superseded(
-            session, project, superseded_numbers(draft.payload)
+            session, project, draft.type, superseded_numbers(draft.payload)
         )
     return await _append(
         session,
@@ -807,27 +819,68 @@ async def list_project_entries(
     nos: Sequence[int] | None = None,
     types: Sequence[EntryType] | None = None,
     attribute: str | None = None,
+    in_force: bool | None = None,
     after_no: int | None = None,
     limit: int | None = None,
     cursor: str | None = None,
-) -> Page[Entry]:
+) -> CasePage:
     """Записи дела проекта или направления страницами в порядке `no` — те же фильтры, что
     у задачи, и `attribute`: история одного атрибута по имени, без учёта регистра
-    (`CONCEPT.md`, 3.2)."""
+    (`CONCEPT.md`, 3.2).
+
+    У решения и заметки дела проекта — статус и прямой преемник (TRK#48, раздел 2).
+    `in_force` отбирает по статусу: `True` — действующие решения и заметки, `False` —
+    заменённые, `None` — без условия; складывается с остальными фильтрами по «и». Записи
+    без статуса — другие типы и всё дело направления — не попадают ни под `True`, ни под
+    `False`. Статусы считаются одним запросом на дело и только тогда, когда они нужны:
+    для отбора или для решения и заметки на странице.
+    """
     repository = EntryRepository(session)
-    listing = (
-        repository.list_direction_page
-        if isinstance(project, Direction)
-        else repository.list_project_page
-    )
-    return await listing(
+    if isinstance(project, Direction):
+        if in_force is not None:
+            return CasePage(items=[], next_cursor=None)
+        page = await repository.list_direction_page(
+            project.id,
+            nos=nos,
+            types=types,
+            attribute=attribute,
+            after_no=after_no,
+            limit=limit,
+            cursor=cursor,
+        )
+        return CasePage(items=page.items, next_cursor=page.next_cursor)
+    standings = None
+    exclude_nos: frozenset[int] = frozenset()
+    if in_force is not None:
+        standings = await decisions_service.case_standings(session, project)
+        if in_force:
+            types = sorted(
+                REPLACEABLE_ENTRY_TYPES
+                if types is None
+                else REPLACEABLE_ENTRY_TYPES.intersection(types)
+            )
+            exclude_nos = standings.superseded
+        else:
+            nos = sorted(standings.superseded if nos is None else standings.superseded & set(nos))
+    page = await repository.list_project_page(
         project.id,
         nos=nos,
         types=types,
         attribute=attribute,
+        exclude_nos=exclude_nos,
         after_no=after_no,
         limit=limit,
         cursor=cursor,
+    )
+    replaceable = [entry for entry in page.items if entry.type in REPLACEABLE_ENTRY_TYPES]
+    if standings is None and replaceable:
+        standings = await decisions_service.case_standings(session, project)
+    return CasePage(
+        items=page.items,
+        next_cursor=page.next_cursor,
+        standings={}
+        if standings is None
+        else {entry.no: standings.of_number(entry.no) for entry in replaceable},
     )
 
 
@@ -835,7 +888,7 @@ async def read_project_entry(
     session: AsyncSession, project: CaseOwner, no: int, *, actor: Actor
 ) -> Entry:
     """Одна запись дела проекта или направления по номеру — адрес из ссылки `TRK#7` или
-    `TRK/promotion#3`."""
+    `TRK/promotion#3`. Статус решения или заметки проекта — `decisions.standing_of`."""
     repository = EntryRepository(session)
     entry = (
         await repository.get_by_direction_no(project.id, no)

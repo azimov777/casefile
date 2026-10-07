@@ -62,8 +62,9 @@ DecisionStatusSchema = Annotated[
     DecisionStatus,
     described(
         DecisionStatus,
-        "Status of a project decision, computed on read: `superseded` once a later decision "
-        "of the project names it in `supersedes`",
+        "Status of a decision or finding of a project's case, computed on read: "
+        "`superseded` once a later entry of the same type in the case names it in "
+        "`supersedes`",
     ),
 ]
 LinkKindSchema = Annotated[

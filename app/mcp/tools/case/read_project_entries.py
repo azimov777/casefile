@@ -1,5 +1,9 @@
 """Инструмент `read_project_entries`: тела записей дела проекта или направления по номерам,
-типам, имени атрибута и «после»."""
+типам, имени атрибута, статусу и «после»."""
+
+from typing import Annotated
+
+from pydantic import Field
 
 from app.db.models.direction import Direction
 from app.mcp.arguments import CaseOwnerKeyArg, CursorArg, LimitArg
@@ -9,6 +13,17 @@ from app.mcp.toolset import READ_ONLY, Toolset
 from app.mcp.views import PageView, page
 from app.services import case as case_service
 from app.services import directions as directions_service
+
+InForceArg = Annotated[
+    bool | None,
+    Field(
+        description=(
+            "`true`: only the decisions and findings in force; `false`: only the superseded "
+            "ones. Entries without a status — other types and every entry of a direction's "
+            "case — match neither"
+        )
+    ),
+]
 
 
 def register(tools: Toolset) -> None:
@@ -22,6 +37,7 @@ def register(tools: Toolset) -> None:
         nos: EntryNosArg = None,
         types: EntryTypesArg = None,
         attribute: AttributeArg = None,
+        in_force: InForceArg = None,
         after_no: AfterNoArg = None,
         limit: LimitArg = None,
         cursor: CursorArg = None,
@@ -34,6 +50,10 @@ def register(tools: Toolset) -> None:
         `and`, as in `read_entries`. `attribute` gives one attribute's history:
         `attribute_created`, `attribute_changed`, `attribute_removed` entries with that
         name. The case index, titles only, comes with `get_project`.
+
+        Decisions and findings of a project's case carry `status` and `superseded_by` on
+        every read, numbers included; `superseded_by` is the direct successor's number.
+        Entries of a direction's case have none.
         """
         async with runtime.call() as (session, actor):
             owner = await directions_service.get_owner(session, key)
@@ -44,6 +64,7 @@ def register(tools: Toolset) -> None:
                 nos=nos,
                 types=types,
                 attribute=attribute,
+                in_force=in_force,
                 after_no=after_no,
                 limit=limit or settings.mcp_page_size,
                 cursor=cursor,
@@ -52,7 +73,7 @@ def register(tools: Toolset) -> None:
                 (
                     entry(item, direction=owner.address)
                     if isinstance(owner, Direction)
-                    else entry(item, project_key=owner.key)
+                    else entry(item, project_key=owner.key, standing=listed.standings.get(item.no))
                     for item in listed.items
                 ),
                 next_cursor=listed.next_cursor,
