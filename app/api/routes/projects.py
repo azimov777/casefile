@@ -16,6 +16,7 @@ from app.api.deps import (
     AttributeQuery,
     CursorQuery,
     EntryNosQuery,
+    EntryTextQuery,
     EntryTypesQuery,
     IncludeArchivedQuery,
     InForceQuery,
@@ -318,6 +319,7 @@ async def list_project_entries(
     nos: EntryNosQuery = None,
     types: EntryTypesQuery = None,
     attribute: AttributeQuery = None,
+    text: EntryTextQuery = None,
     in_force: InForceQuery = None,
     after_no: AfterNoQuery = None,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
@@ -329,7 +331,8 @@ async def list_project_entries(
     `after_no` — «что случилось после названной записи». `after_no` и `cursor` действуют
     оба, побеждает больший. `attribute` отдаёт историю одного атрибута: только
     `attribute_created`, `attribute_changed`, `attribute_removed` с этим именем, без учёта
-    регистра — без него история листается вперемешку с остальным делом проекта.
+    регистра — без него история листается вперемешку с остальным делом проекта. `text` —
+    подстрока заголовка или тела без учёта регистра (TRK#48, раздел 3).
 
     У решения и заметки — `status` и `superseded_by`, посчитанные при чтении (TRK#48):
     запись действует, пока более поздняя запись её типа не назвала её в `supersedes`.
@@ -344,6 +347,7 @@ async def list_project_entries(
         nos=nos,
         types=types,
         attribute=attribute,
+        text=text,
         in_force=in_force,
         after_no=after_no,
         limit=limit,

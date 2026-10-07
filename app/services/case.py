@@ -819,6 +819,7 @@ async def list_project_entries(
     nos: Sequence[int] | None = None,
     types: Sequence[EntryType] | None = None,
     attribute: str | None = None,
+    text: str | None = None,
     in_force: bool | None = None,
     after_no: int | None = None,
     limit: int | None = None,
@@ -826,7 +827,8 @@ async def list_project_entries(
 ) -> CasePage:
     """Записи дела проекта или направления страницами в порядке `no` — те же фильтры, что
     у задачи, и `attribute`: история одного атрибута по имени, без учёта регистра
-    (`CONCEPT.md`, 3.2).
+    (`CONCEPT.md`, 3.2). `text` — подстрока заголовка или тела без учёта регистра (TRK#48,
+    раздел 3): поиск знания по делу, опись которого записей знания не несёт.
 
     У решения и заметки дела проекта — статус и прямой преемник (TRK#48, раздел 2).
     `in_force` отбирает по статусу: `True` — действующие решения и заметки, `False` —
@@ -844,6 +846,7 @@ async def list_project_entries(
             nos=nos,
             types=types,
             attribute=attribute,
+            text=text,
             after_no=after_no,
             limit=limit,
             cursor=cursor,
@@ -867,6 +870,7 @@ async def list_project_entries(
         nos=nos,
         types=types,
         attribute=attribute,
+        text=text,
         exclude_nos=exclude_nos,
         after_no=after_no,
         limit=limit,
@@ -904,7 +908,12 @@ async def project_case_index(
     session: AsyncSession, project: CaseOwner, *, actor: Actor
 ) -> list[EntryHeading]:
     """Опись дела проекта или направления: заголовки без тел. Вердиктов в этих делах нет,
-    и помечать устаревшие незачем — опись отдаётся как есть."""
+    и помечать устаревшие незачем — опись отдаётся как есть.
+
+    У проекта в описи нет решений и заметок: чтение проекта несёт действующие отдельными
+    списками и число всех по типам (`decisions.case_knowledge`, решение TRK#48, раздел 3).
+    У направления статуса и замены нет (`CONCEPT.md`, 3.7), списков тоже, и его опись
+    несёт все записи дела."""
     repository = EntryRepository(session)
     if isinstance(project, Direction):
         return await repository.direction_headings(project.id)

@@ -157,8 +157,9 @@ async def test_a_later_decision_supersedes_and_the_status_is_computed_on_read(
     assert decisions[0].superseded_by is not None
     assert decisions[0].superseded_by.no == second
     assert decisions[1].supersedes == (first,)
-    in_force = await decisions_service.in_force(db_session, project, actor=main_actor)
-    assert [item.ref for item in in_force] == [f"TRK#{second}"]
+    knowledge = await decisions_service.case_knowledge(db_session, project, actor=main_actor)
+    assert [item.ref for item in knowledge.decisions] == [f"TRK#{second}"]
+    assert knowledge.totals == {EntryType.DECISION: 2, EntryType.FINDING: 0}
 
 
 async def test_a_superseded_decision_is_not_superseded_twice(

@@ -20,6 +20,7 @@ from app.api.deps import (
     AttributeQuery,
     CursorQuery,
     EntryNosQuery,
+    EntryTextQuery,
     EntryTypesQuery,
     LimitQuery,
     ProjectKeyPath,
@@ -333,12 +334,14 @@ async def list_direction_entries(
     nos: EntryNosQuery = None,
     types: EntryTypesQuery = None,
     attribute: AttributeQuery = None,
+    text: EntryTextQuery = None,
     after_no: AfterNoQuery = None,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
     cursor: CursorQuery = None,
 ) -> CollectionResponse[EntryRead]:
     """Записи дела направления с телами и нагрузкой, в порядке `no` — те же фильтры, что у
-    дела проекта, включая историю одного атрибута (`attribute`)."""
+    дела проекта, включая историю одного атрибута (`attribute`) и подстроку заголовка или
+    тела (`text`)."""
     direction = await _direction(session, project_key, direction_key)
     page = await case_service.list_project_entries(
         session,
@@ -347,6 +350,7 @@ async def list_direction_entries(
         nos=nos,
         types=types,
         attribute=attribute,
+        text=text,
         after_no=after_no,
         limit=limit,
         cursor=cursor,
