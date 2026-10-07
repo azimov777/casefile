@@ -50,6 +50,7 @@ from typing import Annotated
 
 from pydantic import Field
 
+from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_SIZE
 from app.domain.idempotency import KEY_TTL
 
 # --- Адресация ------------------------------------------------------------------------
@@ -90,7 +91,12 @@ CaseOwnerKeyArg = Annotated[
 
 LimitArg = Annotated[
     int | None,
-    Field(description="Page size. Without a value, the installation's default page size"),
+    Field(
+        description=(
+            f"Page size, from {MIN_PAGE_SIZE} to {MAX_PAGE_SIZE}. "
+            "Without a value, the installation's default page size"
+        )
+    ),
 ]
 CursorArg = Annotated[
     str | None,
