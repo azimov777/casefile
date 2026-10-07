@@ -51,7 +51,7 @@ export function TaskCounters({ project, direction }: TaskCountersProps) {
 
   return (
     <ul
-      className="flex flex-wrap items-baseline gap-x-5 gap-y-1"
+      className="flex list-none flex-wrap items-baseline gap-x-5 gap-y-1 p-0"
       aria-label={t('counters.label')}
       data-counters=""
     >
