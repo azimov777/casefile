@@ -46,7 +46,10 @@ export function ActionMenu({ label, items, ref }: ActionMenuProps) {
           <Ellipsis className="size-(--ui-mark)" aria-hidden="true" />
         </Button>
       </PopoverTrigger>
+      {/* Панель `Popover` — `role="dialog"`, и ей нужно имя (`axe`, `aria-dialog-name`):
+          то же, что у кнопки «⋯». */}
       <PopoverContent
+        aria-label={label}
         align="end"
         className="w-max min-w-40 p-1"
         onCloseAutoFocus={(event) => {
