@@ -4,7 +4,7 @@ import { Callout } from '@/shared/ui';
 /**
  * Сброс прямо в предложении: человек уже читает, почему записи не видно, и второй раз
  * искать то же условие глазами он не должен. Фон и граница названы явно: у `<button>`
- * без объявленного фона браузер рисует свой `ButtonFace` (`docs/notes/ui.md`).
+ * без объявленного фона браузер рисует свой `ButtonFace` (`TRK/ui-shared#16`).
  */
 const INLINE_RESET = 'border-none bg-transparent p-0 text-accent underline';
 

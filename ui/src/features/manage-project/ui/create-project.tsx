@@ -163,7 +163,7 @@ function CreateProjectForm({
       <DescriptionField value={description} onChange={setDescription} />
 
       {/* Кнопки выше всего изменчивого: отказ, выросший над ними, увёл бы их
-          из-под пальца (`docs/notes/ui.md`). */}
+          из-под пальца (`TRK/ui-screens#21`). */}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={create.isPending || tooLong}>
           {create.isPending ? t('create.pending') : t('create.submit')}

@@ -164,7 +164,7 @@ function CopyReference({ reference }: { reference: string }) {
         type="button"
         /*
          * Фон назван явно: у кнопки без `background` браузер рисует свой `ButtonFace`,
-         * и текст на нём не добирает контраста (`docs/notes/ui.md`). Цвет рамки —
+         * и текст на нём не добирает контраста (`TRK/ui-shared#16`). Цвет рамки —
          * тоже: `border-none` снимает только начертание, а цвет оставляет браузеру
          * (`buttontext`), тогда как сокращение `border: none` возвращало его к
          * `currentColor`. Рамки не видно ни там ни там, но замер вычисленных стилей

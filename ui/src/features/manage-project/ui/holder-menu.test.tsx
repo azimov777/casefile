@@ -20,7 +20,7 @@ import { areaMenuActions, projectMenuActions } from '../model/menu-actions';
  * что делают окна, которые они открывают.
  *
  * Окна проверяются открытыми сами по себе, без меню: `Popover` Radix в jsdom раскрывается
- * секундами (замер TRK-618: около 9 с на одно открытие голой панели; `docs/notes/testing.md`,
+ * секундами (замер TRK-618: около 9 с на одно открытие голой панели; `TRK/ui-testing#51`,
  * «Панель `Popover` в jsdom открывается десятки секунд»). Путь «⋯» → пункт → окно → `Esc`
  * → фокус на «⋯» проверяют сквозные `e2e/project-actions.spec.ts` и
  * `e2e/project-archive.spec.ts` в настоящем браузере.

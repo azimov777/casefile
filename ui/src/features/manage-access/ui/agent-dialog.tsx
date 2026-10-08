@@ -148,7 +148,7 @@ function AgentForm({
       </div>
 
       {/* Кнопка выше всего изменчивого: отказ, выросший над ней, увёл бы её
-          из-под пальца (`docs/notes/ui.md`). */}
+          из-под пальца (`TRK/ui-screens#21`). */}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={register.isPending || name.trim() === ''}>
           {register.isPending ? t('agent.pending') : t('agent.submit')}

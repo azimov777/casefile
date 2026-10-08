@@ -48,7 +48,7 @@ export function QueryState({ query, loading, empty, compact = false }: QueryStat
    * `useTranslation` здесь не ради двух подписей кнопки: `errorMessage` берёт язык
    * у экземпляра `i18next` и на смену языка не подписан. Подписка нужна тому, кто
    * показывает текст отказа, иначе после переключения он останется с прежней фразой
-   * до следующей отрисовки (`docs/notes/ui.md`).
+   * до следующей отрисовки (`TRK/ui-shared#38`).
    */
   const { t } = useTranslation('ui');
 

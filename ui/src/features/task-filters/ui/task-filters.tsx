@@ -221,7 +221,7 @@ export function TaskFiltersForm({ filters, onApply, onReset, problem }: TaskFilt
             {conditions.length === 0 ? (
               /*
                * Без условий выдача всё равно отобрана, пока архив скрыт: «показаны все
-               * задачи» было бы выводом обо всём по отобранной выдаче (`docs/notes/ui.md`).
+               * задачи» было бы выводом обо всём по отобранной выдаче (`TRK/ui-api#73`).
                */
               <li className="text-meta text-muted">
                 {filters.showArchive ? t('filters.allShown') : t('filters.allButArchive')}

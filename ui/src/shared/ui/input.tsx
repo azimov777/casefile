@@ -7,7 +7,7 @@ import { cn } from '../lib';
  * фокус, запрет и отказ (`aria-invalid`).
  *
  * Запрет — цветом и атрибутом, не прозрачностью: `opacity` смешивает текст с фоном
- * и роняет контраст ниже AA (`docs/notes/ui.md`).
+ * и роняет контраст ниже AA (`TRK/ui-shared#10`).
  */
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return (

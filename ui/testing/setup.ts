@@ -18,7 +18,7 @@ import { server } from './msw/server';
  * `target.hasPointerCapture is not a function` — падает среда, а не поведение.
  *
  * Заглушки чинят падение, но не дают поведения: открыть список Radix в jsdom всё
- * равно нельзя (проверено — см. `docs/notes/testing.md`). Ходьбу стрелками, `Esc`,
+ * равно нельзя (проверено — см. `TRK/ui-testing#21`). Ходьбу стрелками, `Esc`,
  * возврат фокуса и сам выбор значения проверяет сквозной тест в настоящем браузере.
  */
 Element.prototype.hasPointerCapture ??= () => false;

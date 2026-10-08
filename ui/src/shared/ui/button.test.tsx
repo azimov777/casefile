@@ -65,7 +65,7 @@ describe('кнопка', () => {
 
     const classes = classesOf(label);
     // Прозрачность смешивает текст с фоном и роняет контраст ниже AA
-    // (`docs/notes/ui.md`, «Прозрачность поверх цветной поверхности»).
+    // (`TRK/ui-shared#11`, «Прозрачность поверх цветной поверхности»).
     expect(classes.filter((klass) => /(^|:)opacity-/.test(klass))).toHaveLength(0);
     expect(inState(classes, 'disabled').some((klass) => /(bg|text|border)-/.test(klass))).toBe(
       true,

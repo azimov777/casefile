@@ -37,7 +37,7 @@ export function AccountItem({
       className={cn(
         'flex flex-wrap items-start gap-x-4 gap-y-2 rounded-control border border-line p-3',
         // Отключённая учётная запись остаётся в списке: отличается заливкой и плашкой, а
-        // не прозрачностью — та роняет контраст (`docs/notes/ui.md`).
+        // не прозрачностью — та роняет контраст (`TRK/ui-shared#11`).
         disabled ? 'bg-sunken' : 'bg-surface',
       )}
     >

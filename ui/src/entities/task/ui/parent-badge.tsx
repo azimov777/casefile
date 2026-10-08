@@ -61,7 +61,7 @@ export function ParentBadge({ parent, childKey }: ParentBadgeProps) {
 /**
  * Содержимое панели плашки: чей это родитель и сам родитель ссылкой. Отдельно от `Popover`,
  * чтобы проверять его модульным тестом без слоя: панель Radix в jsdom раскрывается
- * десятки секунд (`docs/notes/testing.md`). Открытие и клик сквозь портал проверяет
+ * десятки секунд (`TRK/ui-testing#51`). Открытие и клик сквозь портал проверяет
  * `e2e/parents.spec.ts`.
  */
 export function ParentPanel({ parent, childKey }: ParentBadgeProps & { parent: TaskParent }) {

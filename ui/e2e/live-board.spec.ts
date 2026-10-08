@@ -315,7 +315,7 @@ test.describe('доска под живым потоком', () => {
       0,
     );
 
-    // Рвём связь так, как она рвётся в жизни: бэкенд ушёл (`docs/notes/live.md`).
+    // Рвём связь так, как она рвётся в жизни: бэкенд ушёл (`TRK/ui-api#53`).
     compose(['stop', 'api']);
     await expect(topbar.getByText('нет связи')).toBeVisible({ timeout: 60_000 });
     compose(['start', 'api']);
