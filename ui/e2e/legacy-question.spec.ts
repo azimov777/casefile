@@ -10,12 +10,15 @@ import { askLegacyOwner } from './contour';
  * закрывается после каждого.
  */
 let asked: Awaited<ReturnType<typeof askLegacyOwner>>;
+// Название своё у каждого сценария: закрытые вопросы прежних сценариев остаются в деле DEMO-3.
+let title = '';
 
-test.beforeEach(async ({ request }) => {
+test.beforeEach(async ({ request }, info) => {
+  title = `Вопрос для замера кромки и ссылки, ${info.title.length}-${Date.now()}`;
   asked = await askLegacyOwner(request, {
     key: 'DEMO-3',
-    title: 'Вопрос для замера кромки и ссылки',
-    body: 'Тело вопроса для замера кромки и ссылки.',
+    title,
+    body: `Тело вопроса: ${title}.`,
     blocking: true,
   });
 });
@@ -103,25 +106,26 @@ test('ссылка вопроса ведёт в саму запись, а не �
   // подпись `KEY#N` обещает запись, и открыться обязана именно она.
   await link.click();
   await expect(page).toHaveURL(new RegExp(`/tasks/DEMO-3\\?entry=${asked.no}$`));
-  const row = page.getByRole('button', { name: /Вопрос для замера кромки и ссылки/ });
+  const row = page.getByRole('button', { name: new RegExp(title) });
   await expect(row).toHaveAttribute('aria-expanded', 'true');
   // Раскрыто — значит видно и тело записи, а не только её строка описи. Ищем внутри
   // описи: тот же вопрос показан выше целиком, в блоке открытых вопросов карточки.
   await expect(
-    page.getByLabel('Дело').getByText(/Тело вопроса для замера кромки и ссылки/),
+    page.getByLabel('Дело').getByText(new RegExp(`Тело вопроса: ${title}`)),
   ).toBeVisible();
 
   await page.reload();
-  await expect(
-    page.getByRole('button', { name: /Вопрос для замера кромки и ссылки/ }),
-  ).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('button', { name: new RegExp(title) })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
 });
 
 test('ответ на вопрос стоит под вопросом: открытый без ответа назван словами', async ({ page }) => {
   await page.goto('/tasks/DEMO-3/case');
 
   // В деле открытый вопрос: ответа под ним ещё нет, и это сказано словами.
-  const question = page.getByRole('article').filter({ hasText: 'question' }).first();
+  const question = page.getByRole('article').filter({ hasText: title });
   await expect(question).toBeVisible();
   await expect(question.getByText('Ответа пока нет.')).toBeVisible();
 });
