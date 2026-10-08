@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
   await installWithoutKey(page);
 });
 
-test('вход с токеном демо показывает участника и счётчик вопросов', async ({ page }) => {
+test('вход с токеном демо показывает участника и счётчик ждущих обсуждений', async ({ page }) => {
   const requests: string[] = [];
   page.on('request', (request) => requests.push(request.url()));
 
@@ -27,7 +27,8 @@ test('вход с токеном демо показывает участник�
 
   await expect(page).toHaveURL(/\/tasks$/);
   await expect(page.getByText('owner')).toBeVisible();
-  await expect(page.getByText(/^\d+ открыт(ый вопрос|ых вопроса|ых вопросов)$/)).toBeVisible();
+  // Демо ждёт владельца вопросом в обсуждении (TRK-684), а не вопросом в деле задачи.
+  await expect(page.getByText('1 обсуждение ждёт вас')).toBeAttached();
 
   // Токен только в заголовке: ни в адресе, ни в параметрах запросов его быть не должно.
   expect(page.url()).not.toContain(token);

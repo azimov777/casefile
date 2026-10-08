@@ -34,8 +34,8 @@ async function attachedTo(request: APIRequestContext, address: string): Promise<
  *
  * Пишет в демо-установку (ответ закрывает вопрос навсегда), поэтому вынесен в проект
  * «запись» и идёт после читающих (`playwright.config.ts`). Три обсуждения демо — закрытое
- * `DEMO~1`, ждущее человека `DEMO~2` и ждущее агента `DEMO~3`, — все без привязок к
- * задачам, которые читают другие сценарии.
+ * `DEMO~1`, ждущее человека `DEMO~2` и ждущее агента `DEMO~3`. К `DEMO~2` привязана DEMO-4:
+ * она ждёт ответа на его вопрос (TRK-684); закрытое и ждущее агента без привязок.
  */
 test('обсуждение: из входящей — ответ на экране — уходит из входящей', async ({
   page,
@@ -90,6 +90,12 @@ test('обсуждение: из входящей — ответ на экран
   const stored = await entriesOf(request, 'DEMO~2');
   expect(stored.filter((entry) => entry.type === 'answer')).toHaveLength(1);
 
+  // Ответ снимает и ожидание: DEMO-4, привязанная к обсуждению, больше не ждёт человека (TRK-684).
+  await page.goto('/tasks/DEMO-4');
+  const dependent = page.getByRole('region', { name: 'Обсуждения', exact: true });
+  await expect(dependent.getByText('ход агента')).toBeVisible();
+  await expect(dependent.getByText('ждёт вас')).toHaveCount(0);
+
   // Обсуждение ушло из входящей, значок погас.
   await page.goto('/questions');
   await expect(page.getByText('Обсуждений, ждущих вас, нет.')).toBeVisible();
@@ -138,7 +144,7 @@ test('задача привязывается и отвязывается, и э
 
   const tasks = page.getByRole('region', { name: 'Задачи, ждущие итога' });
   await expect(tasks.getByRole('link', { name: 'DEMO-9' })).toBeVisible();
-  expect(await attachedTo(request, 'DEMO~2')).toEqual(['DEMO-9']);
+  expect(await attachedTo(request, 'DEMO~2')).toEqual(['DEMO-4', 'DEMO-9']);
 
   // В карточке задачи — блок её обсуждений: адрес, название, чей ход.
   await page.goto('/tasks/DEMO-9');
@@ -152,8 +158,10 @@ test('задача привязывается и отвязывается, и э
 
   await block.getByRole('link', { name: 'DEMO~2' }).click();
   await page.getByRole('button', { name: 'Отвязать задачу DEMO-9' }).click();
-  await expect(tasks.getByText('Задач к обсуждению не привязано.')).toBeVisible();
-  expect(await attachedTo(request, 'DEMO~2')).toEqual([]);
+  await expect(tasks.getByRole('link', { name: 'DEMO-9' })).toHaveCount(0);
+  // DEMO-4 привязана демо-посевом (TRK-684) и отвязка DEMO-9 её не трогает.
+  await expect(tasks.getByRole('link', { name: 'DEMO-4' })).toBeVisible();
+  expect(await attachedTo(request, 'DEMO~2')).toEqual(['DEMO-4']);
 
   await page.goto('/tasks/DEMO-9');
   await expect(page.getByText('Обсуждений нет.')).toBeVisible();
