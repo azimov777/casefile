@@ -50,8 +50,14 @@ function entries(key: string) {
   });
 }
 
+/**
+ * Чтения тел записей. Отдельное чтение решений и находок за черновиками знания
+ * (TRK-661, `types=decision&types=finding` без номеров) — не чтение тела по клику и сюда не
+ * входит: оно идёт вторым запросом после пакета, карточку не задерживает и само проверено
+ * в `task-drafts.test.tsx`.
+ */
 function entriesCalls() {
-  return seen.filter((url) => url.includes('/entries'));
+  return seen.filter((url) => url.includes('/entries') && !new URL(url).searchParams.has('types'));
 }
 
 describe('карточка задачи', () => {
@@ -158,7 +164,9 @@ describe('карточка задачи', () => {
     }
 
     expect(screen.getByText(say.ui('index.count', { count: 7 }))).toBeInTheDocument();
-    expect(seen).toHaveLength(1);
+    // Карточка рисуется пакетом; черновики знания (TRK-661) читаются вторым запросом
+    // после него и экран не задерживают — они учтены отдельно, как не чтение тел.
+    expect(seen.filter((url) => !new URL(url).searchParams.has('types'))).toHaveLength(1);
     expect(entriesCalls()).toEqual([]);
   });
 

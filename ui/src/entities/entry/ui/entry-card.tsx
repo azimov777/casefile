@@ -5,9 +5,11 @@ import { cn } from '@/shared/lib';
 import type { Entry } from '../api/entries';
 import { isServiceEntry } from '../api/entries';
 import { entryHeadline, factsOfEntry } from '../model/headline';
+import { draftOfEntry } from '../model/draft';
 import { entryReference, ownerOfEntry } from '../model/owner';
 import { AuthorName } from './author-name';
 import { CopyEntryLink } from './copy-entry-link';
+import { DraftMark } from './draft-mark';
 import { EntryBody } from './entry-body';
 import { EntryHeadline } from './entry-headline';
 import { EntryKind } from './entry-kind';
@@ -39,6 +41,8 @@ export function EntryCard({ entry, checks, highlighted = false, children }: Entr
   // Служебная запись несёт один факт и получает столько места, сколько в ней смысла:
   // строка вместо карточки. Прятать её нельзя — дело обязано быть полным.
   const service = isServiceEntry(entry.type);
+  // Черновик знания помечен в шапке: поднят ли он, виден до чтения тела (TRK-661).
+  const draft = draftOfEntry(entry);
 
   return (
     <article
@@ -96,6 +100,7 @@ export function EntryCard({ entry, checks, highlighted = false, children }: Entr
             <EntryHeadline headline={headline} />
           </span>
         ) : null}
+        {draft === null ? null : <DraftMark draft={draft} />}
         <AuthorName author={entry.author} />
         <RelativeTime value={entry.created_at} />
         <CopyReference reference={reference} />

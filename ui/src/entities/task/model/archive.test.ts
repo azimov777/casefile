@@ -15,7 +15,7 @@ const NOW = new Date('2026-09-11T12:00:00.000Z');
  * берущий строку оттуда же, откуда её берёт запрос, сверял бы код с самим собой.
  */
 const RULE =
-  'status: not in done, cancelled or last_entry_at: >= "2026-09-08T12:00:00.000Z" or open_warnings: > 0';
+  'status: not in done, cancelled or last_entry_at: >= "2026-09-08T12:00:00.000Z" or open_warnings: > 0 or open_drafts: > 0';
 
 function refusal(code: string, details: Record<string, unknown>): ApiError {
   return new ApiError(code, 'Search query is invalid', 422, details);
@@ -35,6 +35,10 @@ describe('правило архива', () => {
     // Слово владельца TRK-561#9: закрытая не целиком задача остаётся на виду, пока на
     // её предупреждение не отреагировали.
     expect(outsideArchive(NOW)).toContain(' or open_warnings: > 0');
+  });
+
+  it('задача с неподнятым знанием в архив не уходит, пока знание не дошло до проекта (TRK-661)', () => {
+    expect(outsideArchive(NOW)).toContain(' or open_drafts: > 0');
   });
 
   it('без запроса уходит одно правило', () => {

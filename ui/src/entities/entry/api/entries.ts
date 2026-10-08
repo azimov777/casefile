@@ -115,6 +115,8 @@ export const entryKeys = {
    * адрес]`, как тела проекта под его префиксом (TRK-557).
    */
   areaBody: (address: string, no: number) => ['area', address, 'entries', no] as const,
+  /** Решения и находки дела задачи: из них выбираются черновики знания (TRK-661). */
+  drafts: (taskKey: string) => ['task', taskKey, 'drafts'] as const,
   /** Знание области целиком — решения и заметки, с поиском или без (TRK-660). */
   areaKnowledge: (address: string, text: string) => ['area', address, 'knowledge', text] as const,
   /** Дело области страницами, с отбором или без. */
@@ -340,6 +342,49 @@ export function areaKnowledgeQueryOptions(address: string, text: string) {
           address,
           { types: KNOWLEDGE_TYPES, ...(text === '' ? {} : { text }) },
           cursor,
+        );
+        items.push(...read.items);
+        const next = nextCursor(read);
+        if (next === undefined) break;
+        cursor = next;
+      }
+      return items;
+    },
+  });
+}
+
+/** Страниц решений и находок одного дела задачи не больше: потолок, а не ожидаемый размер. */
+const DRAFT_MAX_PAGES = 25;
+
+/**
+ * Решения и находки дела задачи с нагрузкой и `lifted_by` — всё, из чего интерфейс
+ * находит черновики знания (TRK-661). Опись дела заголовками адреса подъёма не несёт, а
+ * «поднят ли» посчитан только в чтении записей, поэтому читаются тела этих двух типов,
+ * страница за страницей. Черновики выбираются на стороне экрана (`draftOfEntry`): сам
+ * признак подъёма бэкенд отдаёт готовым.
+ *
+ * Ключ лежит под префиксом задачи: подъём — запись в деле адресата, и живая лента
+ * перечитывает задачу целиком.
+ */
+export function taskDraftsQueryOptions(taskKey: string, enabled: boolean) {
+  return queryOptions({
+    queryKey: entryKeys.drafts(taskKey),
+    enabled,
+    queryFn: async (): Promise<Entry[]> => {
+      const items: Entry[] = [];
+      let cursor = '';
+      for (let page = 0; page < DRAFT_MAX_PAGES; page += 1) {
+        const read = await unwrapPage(
+          apiClient.GET('/api/v1/tasks/{task_key}/entries', {
+            params: {
+              path: { task_key: taskKey },
+              query: {
+                limit: PROJECT_ENTRY_PAGE_SIZE,
+                types: ['decision', 'finding'],
+                cursor: cursor === '' ? undefined : cursor,
+              },
+            },
+          }),
         );
         items.push(...read.items);
         const next = nextCursor(read);

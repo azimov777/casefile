@@ -91,7 +91,7 @@ function queryNoneYetLink(): HTMLElement | null {
  * сверял бы код с самим собой. Дата порога — любая: её точность проверяет
  * `src/entities/task/model/archive.test.ts`, а здесь — что правило стоит и где.
  */
-const OUTSIDE_ARCHIVE = String.raw`status: not in done, cancelled or last_entry_at: >= "\d{4}-\d{2}-\d{2}T[\d:.]+Z" or open_warnings: > 0`;
+const OUTSIDE_ARCHIVE = String.raw`status: not in done, cancelled or last_entry_at: >= "\d{4}-\d{2}-\d{2}T[\d:.]+Z" or open_warnings: > 0 or open_drafts: > 0`;
 
 /** Что уходит в `query` при скрытом архиве: запрос (если есть) по «и» с правилом. */
 function hidingArchive(query?: string): RegExp {

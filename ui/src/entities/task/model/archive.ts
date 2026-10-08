@@ -20,6 +20,14 @@ export const ARCHIVE_AFTER_DAYS = 3;
  */
 export const OPEN_WARNINGS_CONDITION = 'open_warnings: > 0';
 
+/**
+ * «В деле задачи есть неподнятое знание» на языке запросов (TRK-661, TRK#57, §8): черновик
+ * решения или находки, на который не сослалась ни одна запись дела адресата. Правило
+ * архива и отбор списка берут его отсюда: закрытая задача с неподнятым знанием не
+ * уходит из виду, пока знание не дошло до проекта или области.
+ */
+export const OPEN_DRAFTS_CONDITION = 'open_drafts: > 0';
+
 /** Статусы, в которых задача закрыта: в архив уходят из них и только из них. */
 export const CLOSED_STATUSES = ['done', 'cancelled'] as const satisfies readonly TaskStatus[];
 
@@ -41,7 +49,8 @@ export function archiveThreshold(now: Date): string {
  * «Не в архиве» на языке запросов бэкенда: задача не закрыта — или в её деле писали
  * после порога, — или у неё открытое предупреждение (TRK-561). Последнее — слово
  * владельца (TRK-561#9): задача, закрытая не целиком, не уходит из виду, пока на неё не
- * отреагировали, сколько бы дней ни прошло.
+ * отреагировали, сколько бы дней ни прошло. Так же держится на виду задача с неподнятым
+ * знанием (TRK-661): ради отбора «есть неподнятое знание» закрытые задачи и ищут.
  *
  * Мгновение в кавычках: двоеточие не входит в слово языка, и без кавычек время
  * разобралось бы на слово и лишнее двоеточие.
@@ -53,7 +62,7 @@ export function archiveThreshold(now: Date): string {
  */
 export function outsideArchive(now: Date): string {
   const closed = CLOSED_STATUSES.join(', ');
-  return `status: not in ${closed} or last_entry_at: >= "${archiveThreshold(now)}" or ${OPEN_WARNINGS_CONDITION}`;
+  return `status: not in ${closed} or last_entry_at: >= "${archiveThreshold(now)}" or ${OPEN_WARNINGS_CONDITION} or ${OPEN_DRAFTS_CONDITION}`;
 }
 
 /** Запрос, сложенный с правилом архива, и обратный путь его отказа. */

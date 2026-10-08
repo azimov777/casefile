@@ -1,7 +1,7 @@
 import { useId, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { CircleHelp, Flag, Lock, TriangleAlert, Hourglass } from 'lucide-react';
+import { ArrowUpFromLine, CircleHelp, Flag, Lock, TriangleAlert, Hourglass } from 'lucide-react';
 import { NO_AREA, areasQueryOptions } from '@/entities/area';
 import { PriorityMark, StatusMark, TASK_PRIORITIES, TASK_STATUSES } from '@/entities/task';
 import { cn } from '@/shared/lib';
@@ -11,7 +11,14 @@ import { FIELD, FIELD_PENDING } from './field';
 import { PendingMark } from './query-problem-hint';
 
 /** Признаки задачи, которыми отбирают: значение группы → поле отбора. */
-const FLAGS = ['blocked', 'withQuestions', 'withRemarks', 'withWarnings', 'withWaiting'] as const;
+const FLAGS = [
+  'blocked',
+  'withQuestions',
+  'withRemarks',
+  'withWarnings',
+  'withDrafts',
+  'withWaiting',
+] as const;
 type FlagName = (typeof FLAGS)[number];
 
 /**
@@ -23,6 +30,7 @@ const FLAG_ICON = {
   withQuestions: CircleHelp,
   withRemarks: Flag,
   withWarnings: TriangleAlert,
+  withDrafts: ArrowUpFromLine,
   withWaiting: Hourglass,
 } satisfies Record<FlagName, typeof Lock>;
 

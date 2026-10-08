@@ -1,11 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
 import { MessageSquarePlus } from 'lucide-react';
 import { DiscussionRow, taskDiscussionsQueryOptions } from '@/entities/discussion';
-import { EntryBody, EntryIndex, type EntryIndexHandle, type Question } from '@/entities/entry';
+import {
+  EntryBody,
+  EntryIndex,
+  draftOfEntry,
+  taskDraftsQueryOptions,
+  type DraftState,
+  type EntryIndexHandle,
+  type Question,
+} from '@/entities/entry';
 import { CLOSED_STATUSES, TaskNav, taskPackageQueryOptions } from '@/entities/task';
 import {
   AnswerForm,
@@ -133,6 +141,19 @@ export function TaskPage() {
   // `task`. Ошибка этого запроса карточку не ломает — блок скажет об отказе сам.
   const discussions = useInfiniteQuery(taskDiscussionsQueryOptions(key));
   const rights = useProjectRights();
+  // Черновики знания (TRK-661): тела решений и находок читаются, только если они есть в описи.
+  const hasKnowledge = pkg.data?.index.some(
+    (heading) => heading.type === 'decision' || heading.type === 'finding',
+  );
+  const draftEntries = useQuery(taskDraftsQueryOptions(key, hasKnowledge === true));
+  const drafts = useMemo(() => {
+    const found = new Map<number, DraftState>();
+    for (const entry of draftEntries.data ?? []) {
+      const draft = draftOfEntry(entry);
+      if (draft !== null) found.set(entry.no, draft);
+    }
+    return found;
+  }, [draftEntries.data]);
 
   /**
    * Адрес с прежним ключом переносится на текущий (`CONCEPT.md`, «Карточка задачи»;
@@ -544,6 +565,7 @@ export function TaskPage() {
               ref={indexRef}
               owner={{ kind: 'task', key: task.key }}
               index={index}
+              drafts={drafts}
               checks={task.checks}
               openAt={openAt}
               onOpenChange={rememberOpen}
