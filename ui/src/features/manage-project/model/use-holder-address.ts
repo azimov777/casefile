@@ -1,7 +1,14 @@
 import { useCallback } from 'react';
 import { useLocation, useSearchParams, type To } from 'react-router';
 import { readEntryNo } from '@/shared/lib';
-import { holderTab, rememberOnTab, tabSearch, type HolderKind, type HolderTab } from './holder-tab';
+import {
+  SEARCH_PARAM,
+  holderTab,
+  rememberOnTab,
+  tabSearch,
+  type HolderKind,
+  type HolderTab,
+} from './holder-tab';
 
 /** Адрес этого же экрана с другими параметрами; пустой хвост не пишется вовсе. */
 function sameScreen(pathname: string, search: URLSearchParams): To {
@@ -40,6 +47,22 @@ export function useHolderAddress(kind: HolderKind) {
     [remember],
   );
 
+  /** Поиск по знанию области (`?q=`) — `replace`: набор слова не засоряет историю. */
+  const rememberSearch = useCallback(
+    (text: string) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          if (text === '') next.delete(SEARCH_PARAM);
+          else next.set(SEARCH_PARAM, text);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   /** Адрес вкладки `tab` из нынешнего адреса. */
   const tabHref = useCallback(
     (tab: HolderTab): To => sameScreen(pathname, tabSearch(searchParams, kind, tab)),
@@ -63,6 +86,8 @@ export function useHolderAddress(kind: HolderKind) {
     tab: holderTab(searchParams, kind),
     openAt: readEntryNo(searchParams.get('entry')),
     attribute: searchParams.get('attribute'),
+    search: (searchParams.get(SEARCH_PARAM) ?? '').trim(),
+    rememberSearch,
     rememberEntry,
     rememberAttribute,
     tabHref,

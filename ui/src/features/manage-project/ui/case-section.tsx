@@ -11,6 +11,8 @@ import {
   headingOfEntry,
   holderCaseQueryOptions,
   readEntryTypes,
+  stateOfEntry,
+  type EntryState,
 } from '@/entities/entry';
 import { Button, QueryState } from '@/shared/ui';
 import type { Holder } from '../api/projects';
@@ -78,6 +80,12 @@ export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSect
 
   const entries = feed.data?.pages.flatMap((page) => page.items) ?? [];
   const index = entries.map(headingOfEntry);
+  // Заменённое решение и заменённая заметка помечены в описи (TRK-660): состояние — из записи.
+  const states = new Map<number, EntryState>();
+  for (const entry of entries) {
+    const state = stateOfEntry(entry);
+    if (state !== null) states.set(entry.no, state);
+  }
 
   function changeTypes(next: string[]) {
     setSearchParams(
@@ -158,7 +166,13 @@ export function CaseSection({ holder, canWrite, openAt, onOpenChange }: CaseSect
               <EmptyByTypesNotice />
             </div>
           ) : (
-            <EntryIndex owner={holder} index={index} openAt={openAt} onOpenChange={onOpenChange} />
+            <EntryIndex
+              owner={holder}
+              index={index}
+              states={states}
+              openAt={openAt}
+              onOpenChange={onOpenChange}
+            />
           )}
           {feed.hasNextPage ? (
             <div className="px-3 py-2">

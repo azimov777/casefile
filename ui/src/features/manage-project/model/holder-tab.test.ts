@@ -12,6 +12,8 @@ describe('вкладка из адреса (TRK-618, шаг 3)', () => {
     expect(holderTab(at('tab=case'), 'project')).toBe('case');
     expect(holderTab(at('tab=decisions&entry=7&attribute=repo'), 'project')).toBe('decisions');
     expect(holderTab(at('tab=attributes'), 'area')).toBe('attributes');
+    expect(holderTab(at('tab=decisions'), 'area')).toBe('decisions');
+    expect(holderTab(at('tab=notes'), 'area')).toBe('notes');
     expect(holderTab(at('tab=case&attribute=channel'), 'area')).toBe('case');
   });
 
@@ -27,9 +29,9 @@ describe('вкладка из адреса (TRK-618, шаг 3)', () => {
     expect(holderTab(at('attribute=channel'), 'area')).toBe('attributes');
   });
 
-  it('ничего нет — «Обзор» у проекта и «Дело» у области', () => {
+  it('ничего нет — «Обзор» у проекта и «Решения» у области', () => {
     expect(holderTab(at(''), 'project')).toBe('overview');
-    expect(holderTab(at(''), 'area')).toBe('case');
+    expect(holderTab(at(''), 'area')).toBe('decisions');
     // Чужие параметры (проход по пояснениям) вкладку не выбирают.
     expect(holderTab(at('walk=3'), 'project')).toBe('overview');
     // Негодный номер записи — не запись: вкладку он не перебивает.
@@ -41,15 +43,15 @@ describe('вкладка из адреса (TRK-618, шаг 3)', () => {
     expect(holderTab(at('tab=history'), 'project')).toBe('overview');
     expect(holderTab(at('tab='), 'project')).toBe('overview');
     // `overview` — не значение параметра: «Обзор» живёт без него.
-    expect(holderTab(at('tab=overview'), 'area')).toBe('case');
-    expect(holderTab(at('tab=history'), 'area')).toBe('case');
+    expect(holderTab(at('tab=overview'), 'area')).toBe('decisions');
+    expect(holderTab(at('tab=history'), 'area')).toBe('decisions');
     // Явный, но неизвестный `tab` не уступает и записи: правило — «по умолчанию».
     expect(holderTab(at('tab=history&entry=7'), 'project')).toBe('overview');
   });
 
-  it('область с `tab=decisions` или `tab=areas` — «Дело»: этих вкладок у неё нет', () => {
-    expect(holderTab(at('tab=decisions'), 'area')).toBe('case');
-    expect(holderTab(at('tab=areas'), 'area')).toBe('case');
+  it('область с `tab=areas` — «Решения»: такой вкладки у неё нет; `notes` нет у проекта', () => {
+    expect(holderTab(at('tab=areas'), 'area')).toBe('decisions');
+    expect(holderTab(at('tab=notes'), 'project')).toBe('overview');
   });
 });
 
@@ -58,7 +60,17 @@ describe('адрес вкладки', () => {
     expect(tabSearch(at(''), 'project', 'decisions').toString()).toBe('tab=decisions');
     expect(tabSearch(at('tab=case'), 'project', 'overview').toString()).toBe('');
     expect(tabSearch(at(''), 'area', 'attributes').toString()).toBe('tab=attributes');
-    expect(tabSearch(at('tab=attributes'), 'area', 'case').toString()).toBe('');
+    expect(tabSearch(at('tab=attributes'), 'area', 'decisions').toString()).toBe('');
+    expect(tabSearch(at(''), 'area', 'case').toString()).toBe('tab=case');
+  });
+
+  it('поиск `q` переезжает между «Решениями» и «Заметками» и снимается с остальных вкладок', () => {
+    expect(tabSearch(at('q=шлюз'), 'area', 'notes').toString()).toBe(
+      'q=%D1%88%D0%BB%D1%8E%D0%B7&tab=notes',
+    );
+    expect(tabSearch(at('tab=notes&q=a'), 'area', 'decisions').toString()).toBe('q=a');
+    expect(tabSearch(at('q=a'), 'area', 'attributes').toString()).toBe('tab=attributes');
+    expect(tabSearch(at('tab=notes&q=a'), 'area', 'case').toString()).toBe('tab=case');
   });
 
   it('снимает запись и атрибут чужой вкладки, свои оставляет', () => {
@@ -102,8 +114,8 @@ describe('раскрытие записи и атрибута не меняет 
     expect(rememberOnTab(at('tab=case'), 'project', 'entry', '5').toString()).toBe(
       'tab=case&entry=5',
     );
-    expect(rememberOnTab(at(''), 'area', 'entry', '3').toString()).toBe('entry=3');
-    expect(rememberOnTab(at('entry=3'), 'area', 'entry', null).toString()).toBe('');
+    expect(rememberOnTab(at('tab=case'), 'area', 'entry', '3').toString()).toBe('tab=case&entry=3');
+    expect(rememberOnTab(at('entry=3'), 'area', 'entry', null).toString()).toBe('tab=case');
     expect(rememberOnTab(at('tab=attributes'), 'area', 'attribute', 'channel').toString()).toBe(
       'tab=attributes&attribute=channel',
     );
@@ -115,7 +127,7 @@ describe('правка отбора по типу не уводит с «Дел�
     expect(keepCaseTab(at(''), 'project').toString()).toBe('tab=case');
     expect(keepCaseTab(at('tab=case'), 'project').toString()).toBe('tab=case');
     expect(keepCaseTab(at('entry=5'), 'project').toString()).toBe('entry=5');
-    // У области «Дело» — вкладка по умолчанию: закреплять нечего.
-    expect(keepCaseTab(at(''), 'area').toString()).toBe('');
+    // У области «Дело» не по умолчанию — так же закрепляется.
+    expect(keepCaseTab(at(''), 'area').toString()).toBe('tab=case');
   });
 });

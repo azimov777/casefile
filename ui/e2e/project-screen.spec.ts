@@ -253,8 +253,13 @@ function screens(page: Page, decisionNo: number): { name: string; path: string; 
       ready: page.getByText('расходится с'),
     },
     {
-      name: 'область: Дело',
+      name: 'область: Решения',
       path: '/projects/TRK/areas/screen',
+      ready: page.getByRole('region', { name: 'Решения области' }),
+    },
+    {
+      name: 'область: Дело',
+      path: '/projects/TRK/areas/screen?tab=case',
       ready: page.getByRole('region', { name: 'Дело области' }).getByRole('table'),
     },
     {
