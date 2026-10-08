@@ -20,7 +20,7 @@ from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, case, distinct, func, or_, select, text
+from sqlalchemy import Select, and_, case, distinct, func, or_, select, text, true, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
@@ -40,12 +40,14 @@ from app.db.pagination import (
 from app.db.repositories.discussions import discussion_ids_of_tasks, unanswered_in_discussion
 from app.db.repositories.projects import in_active_project
 from app.db.sql import ilike_contains
-from app.domain.areas import format_area_address
+from app.domain.areas import ADDRESS_SEPARATOR, format_area_address
 from app.domain.authors import Author, AuthorKind
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
     ATTACHMENT_ENTRY_TYPES,
     ATTRIBUTE_ENTRY_TYPES,
+    DRAFT_ENTRY_TYPES,
+    DRAFT_FIELD,
     FIRST_ENTRY_NUMBER,
     OUTCOME_WITH_CONTINUATION,
     REPLACEABLE_ENTRY_TYPES,
@@ -79,7 +81,7 @@ from app.domain.discussions import (
     format_discussion_entry_ref,
 )
 from app.domain.links import LinkKind
-from app.domain.tasks import CLOSED_STATUSES, TaskField, TaskStatus
+from app.domain.tasks import CLOSED_STATUSES, ENTRY_REF_SEPARATOR, TaskField, TaskStatus
 
 
 def _in_project_or_active(project_id: uuid.UUID | None) -> ColumnElement[bool]:
@@ -865,6 +867,39 @@ class EntryRepository:
         )
         return await self._session.scalar(statement) or 0
 
+    # --- Черновики знания -----------------------------------------------------------
+
+    async def count_open_drafts(self, task_id: uuid.UUID) -> int:
+        """Признак `open_drafts` одной задачи — тем же запросом, что колонка и отбор поиска."""
+        return await self._session.scalar(open_draft_count(task_id)) or 0
+
+    async def draft_lifts(
+        self, task_id: uuid.UUID, nos: Collection[int]
+    ) -> list[tuple[int, str, int | None]]:
+        """Подъёмы названных черновиков задачи: тройки «номер черновика, адрес подъёма,
+        номер поднявшей записи в деле адресата», по возрастанию обоих номеров.
+
+        Черновик без подъёма приезжает одной тройкой с `None` на третьем месте — внешнее
+        соединение, а не второй запрос: чтение дела отличает «не поднят» от «не черновик».
+        Номера, которые черновиками не являются, в выдачу не попадают. Подъёмы — те же
+        `_lifting_entries`, что у признака `open_drafts`: число в карточке и пустые
+        списки в чтении записей не разойдутся.
+        """
+        if not nos:
+            return []
+        draft, drafted = aliased(Entry), aliased(Task)
+        lifts = union_all(*_lifting_entries(draft, drafted)).subquery().lateral()
+        statement = (
+            select(draft.no, draft_address_of(draft), lifts.c.no)
+            .select_from(draft)
+            .join(drafted, drafted.id == draft.task_id)
+            .outerjoin(lifts, true())
+            .where(draft.task_id == task_id, draft.no.in_(sorted(nos)), _is_draft(draft))
+            .order_by(draft.no, lifts.c.no)
+        )
+        rows = await self._session.execute(statement)
+        return [(no, address, lifted) for no, address, lifted in rows]
+
     # --- Вопросы поперёк задач -------------------------------------------------------
 
     async def questions_page(
@@ -1203,6 +1238,96 @@ def open_warning_count(task_id: Any) -> Select[tuple[int]]:
     """
     return _without_reaction(
         select(func.count()).select_from(Entry).where(Entry.task_id == task_id, _IS_WARNING)
+    )
+
+
+def draft_address_of(entry: Any) -> ColumnElement[str]:
+    """Адрес подъёма из нагрузки записи — SQL-двойник `app/domain/case.py`,
+    `draft_address`: тот же ключ `draft_for`, `NULL` у записи без него."""
+    return entry.payload[DRAFT_FIELD].astext
+
+
+def _is_draft(entry: Any) -> ColumnElement[bool]:
+    """Запись — черновик: решение или находка с адресом подъёма (`DRAFT_ENTRY_TYPES`)."""
+    return and_(entry.type.in_(DRAFT_ENTRY_TYPES), draft_address_of(entry).is_not(None))
+
+
+def _lifting_entries(draft: Any, drafted: Any) -> tuple[Select[tuple[int]], Select[tuple[int]]]:
+    """Номера записей, которые поднимают черновик `draft` задачи `drafted` (решение TRK#57,
+    раздел 8): в деле проекта и в деле области — два запроса, один из них всегда пуст.
+
+    Подъём — это два условия, оба правило признака, а не догадка:
+
+    - запись лежит в деле адресата: адрес подъёма — ключ проекта (`TRK`) или адрес
+      области (`TRK/mcp`), и он сравнивается с ключом проекта или адресом области целиком,
+      поэтому `TRK/mcp` проекта `TRK` не находит. Адресат ищется по адресу, а не по проекту
+      задачи: задача могла переехать, а черновик остаётся черновиком для того дела,
+      которое назвал;
+    - запись называет черновик в `refs` текущим ключом задачи **или прежним**: ссылка на
+      запись хранится как написана (`CONCEPT.md`, 3.4), и подъём, подшитый до переноса
+      задачи, должен остаться подъёмом после него.
+
+    Тип и автор записи не важны: поднимает любая запись адресата со ссылкой. Владелец
+    находится соединением по адресу, а записи — по его индексу (`uq` на владельца и
+    номер): сравнение с подзапросом в условии индексом не пользовалось бы, и отбор
+    `open_drafts:` перебирал бы всю таблицу записей на каждый черновик. Проекты и области
+    — свои псевдонимы: отбор задач соединяет проект во внешнем запросе. Черновик и его
+    задача связаны с внешним запросом явно (`correlate`): сама собой связь находит только
+    ближний уровень, а у признака черновик стоит двумя уровнями выше.
+    """
+    address = draft_address_of(draft)
+    keys = func.jsonb_array_elements_text(
+        drafted.previous_keys.op("||")(func.jsonb_build_array(drafted.key))
+    ).table_valued("value")
+    draft_refs = (
+        select(func.array_agg(func.concat(keys.c.value, ENTRY_REF_SEPARATOR, draft.no)))
+        .select_from(keys)
+        .correlate(draft, drafted)
+        .scalar_subquery()
+    )
+
+    project, in_project = aliased(Project), aliased(Entry)
+    project_case = (
+        select(in_project.no)
+        .select_from(project)
+        .join(in_project, in_project.project_id == project.id)
+        .where(project.key == address, in_project.refs.op("?|", is_comparison=True)(draft_refs))
+        .correlate(draft, drafted)
+    )
+    area, area_project, in_area = aliased(Area), aliased(Project), aliased(Entry)
+    area_case = (
+        select(in_area.no)
+        .select_from(area)
+        .join(area_project, area_project.id == area.project_id)
+        .join(in_area, in_area.area_id == area.id)
+        .where(
+            func.concat(area_project.key, ADDRESS_SEPARATOR, area.key) == address,
+            in_area.refs.op("?|", is_comparison=True)(draft_refs),
+        )
+        .correlate(draft, drafted)
+    )
+    return project_case, area_case
+
+
+def open_draft_count(task_id: Any) -> Select[tuple[int]]:
+    """Запрос «сколько у задачи неподнятых черновиков» — признак `open_drafts`.
+
+    Черновик — решение или находка с адресом подъёма (`_is_draft`); неподнятый — ни одна
+    запись дела адресата не называет его в `refs` (`_lifting_entries`). Одно определение
+    на карточку (`count_open_drafts`), строку и отбор поиска и на `lifted_by` в чтении дела
+    (`draft_lifts`): питоновского двойника нет, потому что карточке всё равно нужен
+    запрос — дело адресата пакет задачи не читает. `task_id` принимает и идентификатор, и
+    колонку внешнего запроса (`Task.id`), как у `open_remark_count`. Черновики ищутся
+    среди решений и находок задачи (`ix_entries_task_id_type`), и подъём проверяется
+    только у них.
+    """
+    draft, drafted = aliased(Entry), aliased(Task)
+    lifted = or_(*(lifting.exists() for lifting in _lifting_entries(draft, drafted)))
+    return (
+        select(func.count())
+        .select_from(draft)
+        .join(drafted, drafted.id == draft.task_id)
+        .where(draft.task_id == task_id, _is_draft(draft), ~lifted)
     )
 
 

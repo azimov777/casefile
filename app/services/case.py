@@ -96,10 +96,12 @@ from app.db.repositories import (
     TaskRepository,
 )
 from app.db.wakeup import journal_wakeup
+from app.domain.areas import is_area_address, parse_area_address
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
     CLOSING_SUMMARY_PART,
     CLOSING_WITHOUT_ANSWER,
+    DRAFT_FIELD,
     INCOMPLETE_OUTCOMES,
     REPLACEABLE_ENTRY_TYPES,
     SUPERSEDES_FIELD,
@@ -121,6 +123,7 @@ from app.domain.case import (
     build_entry,
     build_project_entry,
     continuation_key,
+    draft_address,
     format_entry_ref,
     is_blocking_question,
     mark_outdated_verdicts,
@@ -192,6 +195,18 @@ class CasePage(Page[Entry]):
 
 
 @dataclass(frozen=True, slots=True)
+class TaskCasePage(Page[Entry]):
+    """Страница дела задачи и подъёмы её черновиков, посчитанные при чтении.
+
+    `lifts` — по номеру записи, только у черновиков (решение TRK#57, раздел 8): адреса
+    записей дела адресата, которые называют черновик в `refs`; пустой список — черновик не
+    поднят. У остальных записей номера в словаре нет.
+    """
+
+    lifts: Mapping[int, list[str]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
 class AnsweredQuestion:
     """Вопрос из выдачи поперёк задач вместе с ответами на него.
 
@@ -215,14 +230,21 @@ async def list_entries(
     after_no: int | None = None,
     limit: int | None = None,
     cursor: str | None = None,
-) -> Page[Entry]:
+) -> TaskCasePage:
     """Записи задачи страницами в порядке `no`, с телами и нагрузкой.
 
     Фильтры сужают выборку вместе: `types` без `after_no` даёт все сводки дела,
-    `after_no` без `types` — всё, что случилось после названной записи.
+    `after_no` без `types` — всё, что случилось после названной записи. У черновиков
+    страницы — их подъёмы (`draft_lifts`); запрос за ними делается, только если черновики
+    на странице есть.
     """
-    return await EntryRepository(session).list_page(
+    page = await EntryRepository(session).list_page(
         task.id, nos=nos, types=types, after_no=after_no, limit=limit, cursor=cursor
+    )
+    return TaskCasePage(
+        items=page.items,
+        next_cursor=page.next_cursor,
+        lifts=await draft_lifts(session, task, page.items),
     )
 
 
@@ -232,6 +254,33 @@ async def read_entry(session: AsyncSession, task: Task, no: int, *, actor: Actor
     if entry is None:
         raise EntryNotFoundError(details={"key": task.key, "no": no})
     return entry
+
+
+async def draft_lifts(
+    session: AsyncSession, task: Task, entries: Sequence[Entry]
+) -> dict[int, list[str]]:
+    """Подъёмы черновиков среди записей задачи: номер черновика → адреса записей дела
+    адресата, которые называют его в `refs` (`TRK/mcp#5`); пустой список — не поднят.
+
+    Считаются при чтении и нигде не хранятся (решение TRK#57, раздел 8): подъём — запись
+    в чужом деле, и дело задачи о нём ничего не пишет. Записи, которые не черновики, в
+    словарь не попадают; без черновиков запроса нет вовсе.
+    """
+    drafts = {entry.no for entry in entries if draft_address(entry.type, entry.payload) is not None}
+    if not drafts:
+        return {}
+    lifts: dict[int, list[str]] = {}
+    for no, address, lifted in await EntryRepository(session).draft_lifts(task.id, drafts):
+        named = lifts.setdefault(no, [])
+        if lifted is not None:
+            named.append(format_entry_ref(address, lifted))
+    return lifts
+
+
+async def count_open_drafts(session: AsyncSession, task: Task) -> int:
+    """Признак `open_drafts`: сколько черновиков задачи не поднято ни одной записью дела
+    адресата. Запрос тот же, что у строки и отбора поиска (`open_draft_count`)."""
+    return await EntryRepository(session).count_open_drafts(task.id)
 
 
 async def case_index(session: AsyncSession, task: Task, *, actor: Actor) -> list[EntryHeading]:
@@ -334,6 +383,7 @@ def features(
     blocked: bool,
     deferred: bool,
     discussion_questions: Sequence[Entry],
+    open_drafts: int,
     remarks: Sequence[Entry] = (),
 ) -> TaskFeatures:
     """Вычисляемые признаки из уже прочитанного, без новых запросов.
@@ -356,6 +406,10 @@ def features(
     (`open_discussion_questions`), тоже **без умолчания**: они входят в оба счётчика —
     признака `blocking` у вопроса обсуждения нет, держит любой (решение `TRK#51`, п. 4).
     Двойник в поиске — `app/db/repositories/search.py`, `open_question_total`.
+
+    `open_drafts` — тоже готовым и без умолчания: подъём черновика — запись в деле
+    адресата, которого пакет задачи не читает, и считает его запрос `count_open_drafts`,
+    тот же, что у поиска.
     """
     return TaskFeatures(
         blocked=blocked,
@@ -367,6 +421,7 @@ def features(
         + len(discussion_questions),
         open_remarks=len(remarks),
         open_warnings=0 if open_warning(index) is None else 1,
+        open_drafts=open_drafts,
         last_summary_at=summary.created_at if summary is not None else None,
         last_entry_at=_last_entry_at(index),
     )
@@ -522,12 +577,14 @@ async def count_open_questions(session: AsyncSession, *, participant: Participan
 
 @dataclass(frozen=True, slots=True)
 class EntryFiling:
-    """Запись без нагрузки: тип, заголовок, тело и ссылки."""
+    """Запись без нагрузки: тип, заголовок, тело, ссылки и у решения или находки —
+    адрес подъёма черновика (`draft_for`, решение TRK#57, раздел 8)."""
 
     type: Any
     title: Any
     body: Any = ""
     refs: Sequence[Any] = ()
+    draft_for: Any = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -790,9 +847,16 @@ async def add_entry(
     title: Any,
     body: Any = "",
     refs: Any = (),
+    draft_for: Any = None,
     action_id: uuid.UUID | None = None,
 ) -> Entry:
-    """Запись без нагрузки: `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`."""
+    """Запись без нагрузки: `decision`, `attempt`, `finding`, `artifact`, `remark`, `note`.
+
+    `draft_for` делает решение или находку черновиком с адресом подъёма (решение TRK#57,
+    раздел 8). Не передан — нагрузки нет вовсе, как у записи до черновиков: ключ уезжает в
+    домен только присланным, и его отказ у других типов (`not_allowed`) не срабатывает на
+    пустом месте.
+    """
     return await append_entry(
         session,
         task,
@@ -801,6 +865,7 @@ async def add_entry(
         title=title,
         body=body,
         refs=refs,
+        payload=None if draft_for is None else {DRAFT_FIELD: draft_for},
         action_id=action_id,
     )
 
@@ -1643,7 +1708,41 @@ async def _ensure_targets_exist(session: AsyncSession, task: Task, draft: EntryD
     await _check_remark_no(session, task, draft, problems)
     await _check_continuation(session, draft, problems)
     await _check_refs(session, task, draft, problems)
+    await _check_draft_address(session, task, draft, problems)
     problems.raise_as(EntryFieldsInvalidError, key=task.key)
+
+
+async def _check_draft_address(
+    session: AsyncSession, task: Task, draft: EntryDraft, problems: FieldProblems
+) -> None:
+    """Адрес подъёма называет проект задачи или его неархивную область (решение TRK#57,
+    раздел 8).
+
+    Причины отказа: `not_the_task_project` — проект не тот (в том числе область чужого
+    проекта), `unknown_area` — такой области у проекта нет, `area_archived` — область в
+    архиве и подъёма в её замороженное дело не примет. Каждая несёт `allowed`: ключ
+    проекта задачи и адреса его неархивных областей, — агент исправляет адрес за одну
+    попытку. Форму адреса домен уже проверил.
+    """
+    address = draft_address(draft.type, draft.payload)
+    if address is None:
+        return
+    project = task.project
+    if address == project.key:
+        return
+    areas = AreaRepository(session)
+    allowed = [project.key, *(area.address for area in await areas.list_for_project(project.id))]
+    found = parse_area_address(address) if is_area_address(address) else None
+    if found is None or found.project_key != project.key:
+        problems.add(
+            DRAFT_FIELD, "not_the_task_project", project=project.key, allowed=allowed, got=address
+        )
+        return
+    area = await areas.get(project.id, found.key)
+    if area is None:
+        problems.add(DRAFT_FIELD, "unknown_area", allowed=allowed, got=address)
+    elif area.archived_at is not None:
+        problems.add(DRAFT_FIELD, "area_archived", allowed=allowed, got=address)
 
 
 async def _check_addressees(

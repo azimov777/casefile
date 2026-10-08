@@ -309,6 +309,7 @@ async def test_the_package_shows_the_summary_and_questions_in_full_and_the_rest_
         "open_blocking_questions": 0,
         "open_remarks": 0,
         "open_warnings": 0,
+        "open_drafts": 0,
         "last_summary_at": data["summary"]["created_at"],
         "last_entry_at": last_agent["created_at"],
     }

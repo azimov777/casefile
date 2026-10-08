@@ -161,8 +161,9 @@ async def list_tasks(
     глубине, без самой X: дети, внуки и так далее.
 
     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
-    `open_blocking_questions`, `open_remarks`, `open_warnings`): колонок под них нет, они
-    считаются из связей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:
+    `open_blocking_questions`, `open_remarks`, `open_warnings`, `open_drafts`): колонок
+    под них нет, они считаются из связей и дела прямо в запросе. Запрос кандидатов
+    назначателя — одна строка:
     `project: TRK and status: open and blocked: false and open_blocking_questions: 0`.
     Есть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а
     названная задача ещё не закрыта».
@@ -585,7 +586,8 @@ async def list_task_entries(
     — всё, что случилось после названной записи, и вместе они отвечают на вопрос «что
     произошло после последней сводки». `after_no` и `cursor` не спорят: первый задаёт
     клиент, второй продолжает страницу, действуют оба. Записи неизменяемы: маршрутов
-    правки и удаления нет.
+    правки и удаления нет. У черновика — решения или находки с `payload.draft_for` —
+    `lifted_by` перечисляет записи дела адресата, которые его подняли.
     """
     task = await service.get_task(session, task_key)
     page = await case_service.list_entries(
@@ -599,7 +601,10 @@ async def list_task_entries(
         cursor=cursor,
     )
     return CollectionResponse[EntryRead].of(
-        [entry_read(entry, task_key=task.key) for entry in page.items],
+        [
+            entry_read(entry, task_key=task.key, lifted_by=page.lifts.get(entry.no))
+            for entry in page.items
+        ],
         next_cursor=page.next_cursor,
     )
 
@@ -618,4 +623,7 @@ async def read_task_entry(
     """
     task = await service.get_task(session, task_key)
     entry = await case_service.read_entry(session, task, entry_no, actor=actor)
-    return DataResponse[EntryRead](data=entry_read(entry, task_key=task.key))
+    lifts = await case_service.draft_lifts(session, task, [entry])
+    return DataResponse[EntryRead](
+        data=entry_read(entry, task_key=task.key, lifted_by=lifts.get(entry.no))
+    )

@@ -31,6 +31,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -350,11 +351,13 @@ class EmptyPayload(BaseModel):
 
 class SupersedesPayload(BaseModel):
     """Нагрузка решения и заметки: какие записи того же типа и того же дела проекта или
-    области эта заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2; TRK#57, раздел 5).
+    области эта заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2; TRK#57, раздел 5), и у
+    черновика дела задачи — адрес его подъёма (TRK#57, раздел 8).
 
-    Список со значением по умолчанию: записи задач, решения проекта, подшитые до замены
-    (`TRK-554`), заметки проекта до TRK-656 и записи областей до TRK-658 ключа не несут,
-    а ответ несёт его всегда — форма записи одна.
+    Оба поля со значением по умолчанию: записи задач, решения проекта, подшитые до замены
+    (`TRK-554`), заметки проекта до TRK-656 и записи областей до TRK-658 `supersedes` не
+    несут, а запись, которая не черновик, — `draft_for`; ответ несёт оба всегда — форма
+    записи одна.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -365,6 +368,16 @@ class SupersedesPayload(BaseModel):
         description=(
             "Numbers of the earlier entries of the same type in the same project's or "
             "area's case that this decision or finding superseded; empty in a task's case"
+        ),
+    )
+    draft_for: str | None = Field(
+        default=None,
+        examples=["TRK/mcp"],
+        description=(
+            "For a draft in a task's case: the project key or area address whose case "
+            "the entry is to be lifted into once the task's code is merged. The draft is "
+            "lifted by an entry of that case naming it in `refs` (`lifted_by`); `null` "
+            "for an entry that is not a draft and in a project's or an area's case"
         ),
     )
 
@@ -886,6 +899,13 @@ class _EntryReadBase(BaseModel):
             "are superseded"
         ),
     )
+    # Подъём есть только у черновика — решения и находки дела задачи с `draft_for`
+    # (`_ReplaceableEntryRead`); здесь поле стоит ради одной формы записи, как `status`.
+    lifted_by: None = Field(
+        default=None,
+        examples=[None],
+        description="Always `null`: only a draft decision or finding of a task's case is lifted",
+    )
 
 
 _AREA_OWNER_DESCRIPTION = (
@@ -998,7 +1018,8 @@ class _ReplaceableEntryRead(_ProjectOwnableEntryRead):
     `.../areas/{area_key}/entries` и их `.../{no}` (`CONCEPT.md`, 4.3; TRK#57, раздел 5).
     Везде ещё они `null`: в деле задачи замены нет, а лента и ответ подшивки статус не
     считают — он меняется без записи в этом деле, и кадр ленты или сохранённый ответ с
-    ним устаревали бы.
+    ним устаревали бы. По той же причине `lifted_by` — подъёмы черновика дела задачи
+    (TRK#57, раздел 8) — считается только чтением дела задачи.
     """
 
     payload: SupersedesPayload = Field(default_factory=SupersedesPayload)
@@ -1019,6 +1040,16 @@ class _ReplaceableEntryRead(_ProjectOwnableEntryRead):
             "Number of the entry in the same case that superseded this one, the direct "
             "successor rather than the end of a chain; `null` while in force and wherever "
             "`status` is `null`"
+        ),
+    )
+    lifted_by: list[str] | None = Field(  # type: ignore[assignment]
+        default=None,
+        examples=[["TRK/mcp#5"]],
+        description=(
+            "Computed on read of a task's case for a draft (`payload.draft_for` set): the "
+            "entries of the named project's or area's case that reference this draft in "
+            "`refs`, as `TRK/mcp#5`; empty while the draft is not lifted. `null` for an "
+            "entry that is not a draft, in the journal and in the answer that files the entry"
         ),
     )
 
@@ -1352,6 +1383,7 @@ def entry_read(
     area: str | None = None,
     discussion: str | None = None,
     standing: Standing | None = None,
+    lifted_by: Sequence[str] | None = None,
 ) -> EntryRead:
     """Собирает вариант ответа по типу записи.
 
@@ -1363,6 +1395,8 @@ def entry_read(
 
     `standing` — статус решения или заметки, посчитанный чтением дела проекта
     (`app/services/decisions.py`); без него `status` и `superseded_by` — `null`.
+    `lifted_by` — подъёмы черновика, посчитанные чтением дела задачи
+    (`app/services/case.py`, `draft_lifts`); без него поле — `null`.
 
     Тип, которого нет в таблице, — это запись без формы нагрузки, то есть дефект
     объединения, а не рабочее состояние: `KeyError` здесь честнее молчаливого
@@ -1388,6 +1422,7 @@ def entry_read(
         action_id=entry.action_id,
         status=None if standing is None else standing.status,
         superseded_by=None if standing is None else standing.superseded_by,
+        lifted_by=None if lifted_by is None else list(lifted_by),
     )
 
 

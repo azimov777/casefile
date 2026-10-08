@@ -5867,7 +5867,7 @@
           "tasks"
         ],
         "summary": "List and search tasks",
-        "description": "Задачи по строке запроса, по структурному фильтру или по обоим сразу.\n\nОба входа сводятся к одному отбору и на одинаковых условиях дают одинаковый\nрезультат в одинаковом порядке: `?query=project: TRK and status: open` и\n`?project=TRK&status=open` — это буквально один путь исполнения. Условия из разных\nисточников складываются по `and`.\n\nЗапрос без условий — законный: это «все задачи» по ключу, и отдельного способа\nсказать то же самое заводить незачем. Ошибка разбора приходит `422\ninvalid_search_query` с позицией символа; незнакомое имя поля — `422\nsearch_field_unknown` со списком допустимых в `details.allowed`.\n\nЗадачи архивного проекта в выдачу не попадают, пока отбор не назовёт их равенством\nили вхождением: проект условием `project`, саму задачу — `key`, её родителя —\n`parent`, корень её поддерева — `under` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в\nязыке нет.\n\n`parent: X` — прямые дети X на одно колено, `under: X` — всё поддерево X на любой\nглубине, без самой X: дети, внуки и так далее.\n\nОтбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,\n`open_blocking_questions`, `open_remarks`, `open_warnings`): колонок под них нет, они\nсчитаются из связей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:\n`project: TRK and status: open and blocked: false and open_blocking_questions: 0`.\nЕсть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а\nназванная задача ещё не закрыта».\n\nТе же признаки приходят **в каждой строке** объектом `features` — тем самым, что\nв пакете преемника: значок «заблокирована» и счётчик вопросов рисуются из списка,\nбез запроса на каждую строку.\n\n`fields` оставляет в ответе только перечисленные поля плюс `key`: полная задача с\nпятью разделами съедает контекст агента, которому нужен столбец ключей. Признаки\nвыбираются целиком именем `features`; отдельный признак именем поля выдачи не\nвыбирается — `blocked` остаётся именем условия отбора.\n\n**Страницами.** `meta.total` — сколько задач нашлось по отбору, а не сколько их на\nстранице: из него и `limit` собирается «страница 3 из 7, всего 98». Это\nединственная коллекция API, которая его считает, и считает всегда — вторым запросом\nпо тому же отбору.\n\nСтраницу адресует либо `cursor` из `meta.next_cursor` предыдущей страницы, либо\n`offset` — номер первой строки от начала выдачи: страница N размера L начинается с\n`(N - 1) * L`. Вместе они не принимаются (`422 cursor_with_offset`): это два разных\nадреса одной страницы, и выбрать за клиента значило бы отдать не ту.\n\nЦена смещения названа честно: база читает и выбрасывает пропускаемые строки, а\nстраница сдвигается, если между двумя запросами задачу завели или подняли наверх\n(`sort=-updated_at`) — строка на границе покажется дважды или пропадёт. Курсор от\nэтого свободен, поэтому обход **всей** выдачи (и агенты через MCP) идёт им.\nСмещение за концом выдачи — законный запрос: пустая страница, `has_more: false` и\nпрежний `total`.",
+        "description": "Задачи по строке запроса, по структурному фильтру или по обоим сразу.\n\nОба входа сводятся к одному отбору и на одинаковых условиях дают одинаковый\nрезультат в одинаковом порядке: `?query=project: TRK and status: open` и\n`?project=TRK&status=open` — это буквально один путь исполнения. Условия из разных\nисточников складываются по `and`.\n\nЗапрос без условий — законный: это «все задачи» по ключу, и отдельного способа\nсказать то же самое заводить незачем. Ошибка разбора приходит `422\ninvalid_search_query` с позицией символа; незнакомое имя поля — `422\nsearch_field_unknown` со списком допустимых в `details.allowed`.\n\nЗадачи архивного проекта в выдачу не попадают, пока отбор не назовёт их равенством\nили вхождением: проект условием `project`, саму задачу — `key`, её родителя —\n`parent`, корень её поддерева — `under` (`docs/CONCEPT.md`, 4.4). Поля «архивный» в\nязыке нет.\n\n`parent: X` — прямые дети X на одно колено, `under: X` — всё поддерево X на любой\nглубине, без самой X: дети, внуки и так далее.\n\nОтбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,\n`open_blocking_questions`, `open_remarks`, `open_warnings`, `open_drafts`): колонок\nпод них нет, они считаются из связей и дела прямо в запросе. Запрос кандидатов\nназначателя — одна строка:\n`project: TRK and status: open and blocked: false and open_blocking_questions: 0`.\nЕсть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а\nназванная задача ещё не закрыта».\n\nТе же признаки приходят **в каждой строке** объектом `features` — тем самым, что\nв пакете преемника: значок «заблокирована» и счётчик вопросов рисуются из списка,\nбез запроса на каждую строку.\n\n`fields` оставляет в ответе только перечисленные поля плюс `key`: полная задача с\nпятью разделами съедает контекст агента, которому нужен столбец ключей. Признаки\nвыбираются целиком именем `features`; отдельный признак именем поля выдачи не\nвыбирается — `blocked` остаётся именем условия отбора.\n\n**Страницами.** `meta.total` — сколько задач нашлось по отбору, а не сколько их на\nстранице: из него и `limit` собирается «страница 3 из 7, всего 98». Это\nединственная коллекция API, которая его считает, и считает всегда — вторым запросом\nпо тому же отбору.\n\nСтраницу адресует либо `cursor` из `meta.next_cursor` предыдущей страницы, либо\n`offset` — номер первой строки от начала выдачи: страница N размера L начинается с\n`(N - 1) * L`. Вместе они не принимаются (`422 cursor_with_offset`): это два разных\nадреса одной страницы, и выбрать за клиента значило бы отдать не ту.\n\nЦена смещения названа честно: база читает и выбрасывает пропускаемые строки, а\nстраница сдвигается, если между двумя запросами задачу завели или подняли наверх\n(`sort=-updated_at`) — строка на границе покажется дважды или пропадёт. Курсор от\nэтого свободен, поэтому обход **всей** выдачи (и агенты через MCP) идёт им.\nСмещение за концом выдачи — законный запрос: пустая страница, `has_more: false` и\nпрежний `total`.",
         "operationId": "list_tasks",
         "security": [
           {
@@ -5889,13 +5889,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `area`, `assignee`, `blocked`, `decision`, `deferred`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
+              "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `area`, `assignee`, `blocked`, `decision`, `deferred`, `key`, `last_entry_at`, `open_blocking_questions`, `open_drafts`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`",
               "examples": [
                 "project: TRK and status: open and blocked: false"
               ],
               "title": "Query"
             },
-            "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `area`, `assignee`, `blocked`, `decision`, `deferred`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
+            "description": "Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `area`, `assignee`, `blocked`, `decision`, `deferred`, `key`, `last_entry_at`, `open_blocking_questions`, `open_drafts`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint`"
           },
           {
             "name": "sort",
@@ -5940,7 +5940,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Fields to return, to keep the answer small: `area`, `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `area` brings the area of the task, address and title, or `null`",
+              "description": "Fields to return, to keep the answer small: `area`, `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `open_drafts`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `area` brings the area of the task, address and title, or `null`",
               "examples": [
                 [
                   "title",
@@ -5949,7 +5949,7 @@
               ],
               "title": "Fields"
             },
-            "description": "Fields to return, to keep the answer small: `area`, `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `area` brings the area of the task, address and title, or `null`"
+            "description": "Fields to return, to keep the answer small: `area`, `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `open_drafts`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `area` brings the area of the task, address and title, or `null`"
           },
           {
             "name": "limit",
@@ -6358,6 +6358,25 @@
               "title": "Open Warnings"
             },
             "description": "1 for tasks closed with checks `partial` or `unverifiable` whose warning has no `acceptance` or `remark` after it yet, 0 for the rest"
+          },
+          {
+            "name": "open_drafts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact number of drafts not lifted yet: decisions and findings filed with `draft_for` that no entry of the named case references. Use the query language for ranges: `open_drafts: > 0`",
+              "title": "Open Drafts"
+            },
+            "description": "Exact number of drafts not lifted yet: decisions and findings filed with `draft_for` that no entry of the named case references. Use the query language for ranges: `open_drafts: > 0`"
           },
           {
             "name": "remarks_in_work",
@@ -7389,7 +7408,7 @@
           "tasks"
         ],
         "summary": "Read case entries",
-        "description": "Записи дела с телами и нагрузкой, в порядке `no`.\n\nФильтры сужают выборку вместе: `types=summary` даёт все сводки дела, `after_no`\n— всё, что случилось после названной записи, и вместе они отвечают на вопрос «что\nпроизошло после последней сводки». `after_no` и `cursor` не спорят: первый задаёт\nклиент, второй продолжает страницу, действуют оба. Записи неизменяемы: маршрутов\nправки и удаления нет.",
+        "description": "Записи дела с телами и нагрузкой, в порядке `no`.\n\nФильтры сужают выборку вместе: `types=summary` даёт все сводки дела, `after_no`\n— всё, что случилось после названной записи, и вместе они отвечают на вопрос «что\nпроизошло после последней сводки». `after_no` и `cursor` не спорят: первый задаёт\nклиент, второй продолжает страницу, действуют оба. Записи неизменяемы: маршрутов\nправки и удаления нет. У черновика — решения или находки с `payload.draft_for` —\n`lifted_by` перечисляет записи дела адресата, которые его подняли.",
         "operationId": "list_task_entries",
         "security": [
           {
@@ -10528,6 +10547,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "acceptance",
@@ -10993,6 +11020,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "answer",
@@ -11303,6 +11338,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]
@@ -11954,6 +11997,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "assignee_changed",
@@ -12190,6 +12241,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]
@@ -12438,6 +12497,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "attribute_changed",
@@ -12639,6 +12706,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]
@@ -12940,6 +13015,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]
@@ -13650,6 +13733,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "conclusion",
@@ -14172,6 +14263,26 @@
               null
             ]
           },
+          "lifted_by": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifted By",
+            "description": "Computed on read of a task's case for a draft (`payload.draft_for` set): the entries of the named project's or area's case that reference this draft in `refs`, as `TRK/mcp#5`; empty while the draft is not lifted. `null` for an entry that is not a draft, in the journal and in the answer that files the entry",
+            "examples": [
+              [
+                "TRK/mcp#5"
+              ]
+            ]
+          },
           "payload": {
             "$ref": "#/components/schemas/SupersedesPayload"
           },
@@ -14409,6 +14520,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]
@@ -15391,6 +15510,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "field_changed",
@@ -15657,6 +15784,26 @@
             "description": "Number of the entry in the same case that superseded this one, the direct successor rather than the end of a chain; `null` while in force and wherever `status` is `null`",
             "examples": [
               null
+            ]
+          },
+          "lifted_by": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifted By",
+            "description": "Computed on read of a task's case for a draft (`payload.draft_for` set): the entries of the named project's or area's case that reference this draft in `refs`, as `TRK/mcp#5`; empty while the draft is not lifted. `null` for an entry that is not a draft, in the journal and in the answer that files the entry",
+            "examples": [
+              [
+                "TRK/mcp#5"
+              ]
             ]
           },
           "payload": {
@@ -15982,6 +16129,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -16247,6 +16402,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]
@@ -16967,6 +17130,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -17132,6 +17303,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]
@@ -17762,6 +17941,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "answer",
@@ -17973,6 +18160,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]
@@ -18315,6 +18510,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "remark",
@@ -18543,6 +18746,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]
@@ -18792,6 +19003,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]
@@ -19302,6 +19521,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "status_changed",
@@ -19581,6 +19808,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "summary",
@@ -19746,12 +19981,27 @@
                 12
               ]
             ]
+          },
+          "draft_for": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft For",
+            "description": "For a draft in a task's case: the project key or area address whose case the entry is to be lifted into once the task's code is merged. The draft is lifted by an entry of that case naming it in `refs` (`lifted_by`); `null` for an entry that is not a draft and in a project's or an area's case",
+            "examples": [
+              "TRK/mcp"
+            ]
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "SupersedesPayload",
-        "description": "Нагрузка решения и заметки: какие записи того же типа и того же дела проекта или\nобласти эта заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2; TRK#57, раздел 5).\n\nСписок со значением по умолчанию: записи задач, решения проекта, подшитые до замены\n(`TRK-554`), заметки проекта до TRK-656 и записи областей до TRK-658 ключа не несут,\nа ответ несёт его всегда — форма записи одна."
+        "description": "Нагрузка решения и заметки: какие записи того же типа и того же дела проекта или\nобласти эта заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2; TRK#57, раздел 5), и у\nчерновика дела задачи — адрес его подъёма (TRK#57, раздел 8).\n\nОба поля со значением по умолчанию: записи задач, решения проекта, подшитые до замены\n(`TRK-554`), заметки проекта до TRK-656 и записи областей до TRK-658 `supersedes` не\nнесут, а запись, которая не черновик, — `draft_for`; ответ несёт оба всегда — форма\nзаписи одна."
       },
       "TaskAreaRead": {
         "properties": {
@@ -20292,6 +20542,14 @@
               0
             ]
           },
+          "open_drafts": {
+            "type": "integer",
+            "title": "Open Drafts",
+            "description": "Drafts in the case not lifted yet: decisions and findings filed with `draft_for` that no entry of the named project's or area's case references in `refs`. Computed on read; the tracker neither lifts nor reminds, and closing does not wait for it",
+            "examples": [
+              0
+            ]
+          },
           "last_summary_at": {
             "anyOf": [
               {
@@ -20326,7 +20584,8 @@
           "open_questions",
           "open_blocking_questions",
           "open_remarks",
-          "open_warnings"
+          "open_warnings",
+          "open_drafts"
         ],
         "title": "TaskFeaturesRead",
         "description": "Вычисляемые признаки задачи (`CONCEPT.md`, 4.3).\n\nНе хранятся колонками, а считаются из дела и связей: колонка была бы вторым местом,\nгде живёт правда, и разошлась бы с делом при первом же откате."
@@ -20772,6 +21031,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]
@@ -22029,6 +22296,14 @@
               null
             ]
           },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
           "type": {
             "type": "string",
             "const": "verdict",
@@ -22297,6 +22572,14 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
             "examples": [
               null
             ]

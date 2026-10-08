@@ -5,6 +5,7 @@
 `app/mcp/views.py`.
 """
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -371,21 +372,35 @@ class EntryView(BaseModel):
             "`null` while in force"
         ),
     )
+    lifted_by: list[str] | None = Field(
+        default=None,
+        description=(
+            "Present only on a draft (a `decision` or `finding` of a task's case filed "
+            "with `draft_for`) returned by `read_entries`: the entries of the named project's "
+            "or area's case that reference the draft in `refs`, as `TRK/mcp#5`; empty "
+            "while it is not lifted. Absent on other entries and in `wait_journal`"
+        ),
+    )
 
     # Статус записи есть только у решений и заметок дела проекта или области; у остальных
     # записей два ключа были бы `null` в каждой строке `read_entries`, `get_task`,
     # `wait_journal`, то есть шумом в контексте агента (TRK-665). Ключи уходят вместе, по
-    # `status`: у действующей записи `superseded_by: null` значим. Схему сериализатор не
-    # портит (см. `FoundTaskView`): оба поля необязательны, и `outputSchema` это показывает.
+    # `status`: у действующей записи `superseded_by: null` значим. Подъём — по тому же
+    # правилу: только у черновика, где пустой список значим («не поднят»). Схему
+    # сериализатор не портит (см. `FoundTaskView`): поля необязательны, и `outputSchema`
+    # это показывает.
     @model_serializer(mode="wrap")
     def _standing_only_where_it_has_meaning(
         self, handler: SerializerFunctionWrapHandler
     ) -> dict[str, Any]:
-        """Убирает `status` и `superseded_by` из ответа, когда статуса у записи нет."""
+        """Убирает `status` и `superseded_by`, когда статуса у записи нет, и `lifted_by`,
+        когда запись не черновик."""
         dumped: dict[str, Any] = handler(self)
         if self.status is None:
             dumped.pop("status", None)
             dumped.pop("superseded_by", None)
+        if self.lifted_by is None:
+            dumped.pop("lifted_by", None)
         return dumped
 
 
@@ -397,6 +412,7 @@ def entry(
     area: str | None = None,
     discussion: str | None = None,
     standing: Standing | None = None,
+    lifted_by: Sequence[str] | None = None,
 ) -> EntryView:
     """Запись дела целиком. Ключ владельца приходит извне: у записи только `task_id`,
     `project_id`, `area_id` или `discussion_id`. Передаётся ровно один — как и в REST
@@ -404,7 +420,8 @@ def entry(
     Нагрузка читается тем же правилом, что и в REST, — `read_payload`: ответ, подшитый до
     исходов, приходит с `outcome: answered`, а не без ключа. `standing` — статус решения
     или заметки, посчитанный чтением дела проекта или области; без него `status` и
-    `superseded_by` в ответе MCP нет вовсе (в REST — `null`)."""
+    `superseded_by` в ответе MCP нет вовсе (в REST — `null`). `lifted_by` — подъёмы
+    черновика, посчитанные чтением дела задачи; без него поля в ответе MCP нет."""
     owners = [key for key in (task_key, project_key, area, discussion) if key is not None]
     assert len(owners) == 1, "entry owner is exactly one key"
     return EntryView(
@@ -425,6 +442,7 @@ def entry(
         action_id=None if value.action_id is None else str(value.action_id),
         status=None if standing is None else standing.status,
         superseded_by=None if standing is None else standing.superseded_by,
+        lifted_by=None if lifted_by is None else list(lifted_by),
     )
 
 

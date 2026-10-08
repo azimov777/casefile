@@ -140,6 +140,7 @@ async def test_creation_answers_with_backlog_and_a_created_entry(
         "open_blocking_questions": 0,
         "open_remarks": 0,
         "open_warnings": 0,
+        "open_drafts": 0,
         "last_summary_at": None,
         # В деле только служебная `created`: записей агента ещё нет, признак пуст.
         "last_entry_at": None,

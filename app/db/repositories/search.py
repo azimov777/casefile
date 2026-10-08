@@ -61,6 +61,7 @@ from app.db.repositories.discussions import open_discussion_question_count
 from app.db.repositories.entries import (
     last_entry_at,
     last_summary_at,
+    open_draft_count,
     open_question_count,
     open_remark_count,
     open_warning_count,
@@ -243,6 +244,7 @@ def feature_columns() -> tuple[ColumnElement[Any], ...]:
         open_question_total(blocking=True).label("open_blocking_questions"),
         open_remark_count(Task.id).correlate(Task).scalar_subquery().label("open_remarks"),
         open_warning_count(Task.id).correlate(Task).scalar_subquery().label("open_warnings"),
+        open_draft_count(Task.id).correlate(Task).scalar_subquery().label("open_drafts"),
         last_summary_at(Task.id).correlate(Task).scalar_subquery().label("last_summary_at"),
         last_entry_at(Task.id).correlate(Task).scalar_subquery().label("last_entry_at"),
     )
@@ -274,6 +276,7 @@ def _features_of(row: Any) -> TaskFeatures:
         open_blocking_questions=row.open_blocking_questions,
         open_remarks=row.open_remarks,
         open_warnings=row.open_warnings,
+        open_drafts=row.open_drafts,
         last_summary_at=row.last_summary_at,
         last_entry_at=row.last_entry_at,
     )
@@ -529,6 +532,8 @@ def _counted(field: SearchField) -> ColumnElement[Any]:
             counted = open_remark_count(Task.id)
         case SearchField.OPEN_WARNINGS:
             counted = open_warning_count(Task.id)
+        case SearchField.OPEN_DRAFTS:
+            counted = open_draft_count(Task.id)
         case SearchField.REMARKS_IN_WORK:
             counted = remarks_in_work_count(Task.id)
         case _:

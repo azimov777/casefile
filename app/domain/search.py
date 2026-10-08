@@ -282,6 +282,7 @@ class SearchField(StrEnum):
     OPEN_BLOCKING_QUESTIONS = "open_blocking_questions"
     OPEN_REMARKS = "open_remarks"
     OPEN_WARNINGS = "open_warnings"
+    OPEN_DRAFTS = "open_drafts"
     REMARKS_IN_WORK = "remarks_in_work"
     LAST_ENTRY_AT = "last_entry_at"
     TEXT = "text"
@@ -383,6 +384,10 @@ SEARCH_FIELDS: dict[SearchField, SearchFieldSpec] = {
         # реакции — `acceptance` или `remark` — после этого не было. Очередь «требуют
         # внимания» — `open_warnings: > 0` (`CONCEPT.md`, 4.3).
         SearchFieldSpec(SearchField.OPEN_WARNINGS, SearchValueKind.COUNT, ORDERED_OPERATORS),
+        # Неподнятые черновики: решения и находки с адресом подъёма, которые ни одна запись
+        # дела адресата не называет в `refs` (решение TRK#57, раздел 8). Пропущенный подъём
+        # после слияния — `open_drafts: > 0`.
+        SearchFieldSpec(SearchField.OPEN_DRAFTS, SearchValueKind.COUNT, ORDERED_OPERATORS),
         # «Разобрано, но работа не закрыта»: замечания с резолюцией `accepted`, чья
         # задача-продолжение ещё не в `done` и не в `cancelled`. Единственное условие
         # отбора, зависящее от статуса другой задачи.

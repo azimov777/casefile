@@ -110,7 +110,7 @@ async def test_get_project_reads_an_area_with_its_knowledge_in_force_and_an_inde
         (c["no"], "in_force", None),
     ]
     [old] = by_number["items"]
-    assert (old["area"], old["payload"]) == ("TRK/mcp", {"supersedes": []})
+    assert (old["area"], old["payload"]) == ("TRK/mcp", {"supersedes": [], "draft_for": None})
     assert _standing(old) == (a["no"], "superseded", b["no"])
 
 

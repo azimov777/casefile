@@ -34,6 +34,9 @@
 - знание в делах областей (решение `TRK#57`, разделы 5–6): у `DEMO/core` и `DEMO/ui`
   решения и заметки, одна заметка заменена другой; в `DEMO/ui` своя задача (DEMO-3);
   третья область, `DEMO/webhooks`, с решением уходит в архив;
+- черновики знания (решение `TRK#57`, раздел 8): у закрытой DEMO-1 черновик решения для
+  `DEMO/core` поднят решением области, у закрытой DEMO-8 черновик находки для `DEMO/ui` не
+  поднят — признак `open_drafts` и отбор по нему;
 - связи всех трёх видов;
 - три автора: человек, постоянный агент и временный агент, подписанный меткой.
 
@@ -212,6 +215,8 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     )
     await _area_knowledge(session, agent=agent, owner=owner)
 
+    await _knowledge_drafts(session, lifted=done, unlifted=accepted, agent=agent)
+
     return DemoData(
         project=project,
         tasks=[
@@ -309,6 +314,52 @@ async def _area_knowledge(session: AsyncSession, *, agent: Actor, owner: Actor) 
     )
     await areas_service.archive_area(
         session, webhooks, actor=owner, reason="Вебхуки сняты: потребители читают ленту"
+    )
+
+
+async def _knowledge_drafts(
+    session: AsyncSession, *, lifted: Task, unlifted: Task, agent: Actor
+) -> None:
+    """Черновики знания в делах закрытых задач (решение `TRK#57`, раздел 8).
+
+    Черновик решения DEMO-1 для `DEMO/core` поднят решением этой области со ссылкой на
+    него: у DEMO-1 признак `open_drafts` — 0, у черновика `lifted_by` называет запись
+    области. Черновик находки DEMO-8 для `DEMO/ui` не поднят: признак — 1, и отбор
+    `open_drafts: > 0` находит DEMO-8 и не находит DEMO-1. Подшиваются последними, в
+    конец дел, — номера прежних записей обеих задач не сдвигаются.
+    """
+    rule = "Номера задач не переиспользуются: счётчик проекта только растёт"
+    reason = (
+        "Номер, выданный отклонённому запросу, пропадает, но второй раз не выдаётся: "
+        "ссылка на задачу по ключу не должна однажды привести к другой задаче."
+    )
+    draft = await case_service.add_entry(
+        session,
+        lifted,
+        actor=agent,
+        type=EntryType.DECISION,
+        title=rule,
+        body=reason,
+        draft_for=DEMO_AREA,
+    )
+    core = await areas_service.get_area(session, DEMO_AREA)
+    await case_service.append_project_entry(
+        session,
+        core,
+        actor=agent,
+        type=EntryType.DECISION,
+        title=rule,
+        body=reason,
+        refs=[f"{lifted.key}#{draft.no}"],
+    )
+    await case_service.add_entry(
+        session,
+        unlifted,
+        actor=agent,
+        type=EntryType.FINDING,
+        title="Сгоревший номер в списке задач виден только разрывом ключей",
+        body="Сгоревшие номера не хранятся: подсказка в шапке списка опирается на разрыв.",
+        draft_for=_UI_AREA,
     )
 
 

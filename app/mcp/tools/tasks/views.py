@@ -201,6 +201,13 @@ class FeaturesView(BaseModel):
     open_blocking_questions: int
     open_remarks: int
     open_warnings: int
+    open_drafts: int = Field(
+        description=(
+            "Drafts in the case not lifted yet: decisions and findings filed with "
+            "`draft_for` that no entry of the named project's or area's case references "
+            "in `refs`; each draft's lifts are in its `lifted_by` from `read_entries`"
+        )
+    )
     last_summary_at: datetime | None
     last_entry_at: datetime | None
 
@@ -214,6 +221,7 @@ def features(value: TaskFeatures) -> FeaturesView:
         open_blocking_questions=value.open_blocking_questions,
         open_remarks=value.open_remarks,
         open_warnings=value.open_warnings,
+        open_drafts=value.open_drafts,
         last_summary_at=value.last_summary_at,
         last_entry_at=value.last_entry_at,
     )

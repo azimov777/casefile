@@ -170,6 +170,7 @@ describe('входящая: требуют внимания (TRK-561)', () => {
               open_blocking_questions: 0,
               open_remarks: 0,
               open_warnings: 1,
+              open_drafts: 0,
               last_summary_at: '2026-09-01T10:00:00Z',
               last_entry_at: '2026-09-01T10:00:00Z',
             },

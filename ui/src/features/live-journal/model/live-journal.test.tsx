@@ -403,6 +403,7 @@ describe('доска под живым потоком', () => {
               open_blocking_questions: 1,
               open_remarks: 0,
               open_warnings: 0,
+              open_drafts: 0,
               last_summary_at: null,
               last_entry_at: '2026-09-01T10:00:00Z',
             },

@@ -465,6 +465,7 @@ async def test_get_task_carries_the_index_and_the_transitions_of_the_table(
         "open_blocking_questions": 0,
         "open_remarks": 0,
         "open_warnings": 0,
+        "open_drafts": 0,
         "last_summary_at": None,
         # В деле только служебная `created`: записей агента ещё нет, признак пуст.
         "last_entry_at": None,
@@ -686,6 +687,7 @@ async def test_search_tasks_returns_the_same_rows_as_rest(
         "open_blocking_questions": 0,
         "open_remarks": 0,
         "open_warnings": 0,
+        "open_drafts": 0,
         "last_summary_at": None,
         # В деле только служебная `created`: записей агента ещё нет, признак пуст.
         "last_entry_at": None,
@@ -1661,6 +1663,7 @@ async def test_an_answer_filed_before_outcomes_reads_the_same_through_mcp_and_re
 _OLD_SHAPE_PAYLOADS: list[tuple[EntryType, dict[str, Any]]] = [
     (EntryType.DECISION, {}),
     (EntryType.DECISION, {"supersedes": []}),
+    (EntryType.FINDING, {"draft_for": "TRK/mcp"}),
     (EntryType.RESOLUTION, {"remark_no": 1, "outcome": "fixed", "task": None}),
     (EntryType.STATUS_CHANGED, {"from": "backlog", "to": "open", "reason": None}),
     (EntryType.SECTION_CHANGED, {"field": "goal", "before": "a", "after": "b"}),

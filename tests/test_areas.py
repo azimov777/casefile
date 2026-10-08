@@ -700,4 +700,4 @@ async def test_an_area_entry_reads_the_same_through_mcp_and_rest(
     assert response.status_code == 200, response.text
 
     assert from_mcp["items"] == without_empty_standing(response.json()["data"])
-    assert from_mcp["items"][1]["payload"] == {"supersedes": []}
+    assert from_mcp["items"][1]["payload"] == {"supersedes": [], "draft_for": None}

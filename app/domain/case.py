@@ -59,6 +59,14 @@
 устроено так же (`CONCEPT.md`, 3.7) и проверяется той же функцией, только без
 `supersedes`: механика решений проекта на него не распространяется.
 
+## Черновик знания в деле задачи
+
+Задача, чей код ещё в ветке, пишет решение или находку в своё дело с адресом подъёма
+`draft_for` — ключом своего проекта или адресом его области (решение TRK#57, раздел 8).
+Поднимает черновик обычная запись в деле адресата со ссылкой на него в `refs`; пока её
+нет, черновик считается признаком задачи `open_drafts`. Форму адреса проверяет домен
+(`_draft_payload`), принадлежность проекту задачи и архив области — сценарий.
+
 ## Дело обсуждения
 
 Четвёртый владелец записи — обсуждение (решение `TRK#51`, п. 2). Его дело — переписка:
@@ -88,6 +96,7 @@ from typing import Any, Literal
 from app.domain.areas import (
     ADDRESS_SEPARATOR,
     format_area_address,
+    is_area_address,
     is_area_key,
     parse_area_address,
 )
@@ -375,6 +384,18 @@ SUPERSEDES_FIELD = "supersedes"
 #: Сколько записей заменяет одна. Замена пересказывает то, что остаётся в силе, и запись,
 #: сводящая два десятка решений в одно, — уже пересмотр проекта, а не замена.
 MAX_SUPERSEDES = 20
+
+#: Поле нагрузки решения и находки дела задачи — адрес подъёма черновика (решение TRK#57,
+#: раздел 8): ключ проекта задачи или адрес его области, в чьё дело запись поднимут,
+#: когда код ветки сольют. Им же называется аргумент `add_entry`. Ключа нет — запись не
+#: черновик, а решение или находка самой задачи.
+DRAFT_FIELD = "draft_for"
+
+#: Что бывает черновиком: записи знания — те же, что заменяются в деле проекта и области.
+DRAFT_ENTRY_TYPES: frozenset[EntryType] = REPLACEABLE_ENTRY_TYPES
+
+#: Форма адреса подъёма в подробностях отказа.
+DRAFT_ADDRESS_SHAPE = f"<PROJECT> or <PROJECT>{ADDRESS_SEPARATOR}<area key>"
 
 #: Части сводки в порядке чтения: сделано, осталось, что мешает, следующий шаг.
 SUMMARY_PARTS: tuple[str, ...] = ("done", "remaining", "blockers", "next_step")
@@ -1181,7 +1202,8 @@ def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str,
     Так читаются четыре типа. Ответ, подшитый до появления исходов (`question_no` и ничего
     более), читается как `answered` без заменившего вопроса (TRK-563). Решение и заметка
     без `supersedes` — запись задачи, запись области до TRK-658, решение проекта до
-    замены (TRK-554) и заметка проекта до TRK-656 — ничего не заменяют. Правка раздела
+    замены (TRK-554) и заметка проекта до TRK-656 — ничего не заменяют; без `draft_for` —
+    любая, кроме черновика дела задачи (TRK-659), — не черновик. Правка раздела
     без `check_no` — любая, кроме точечной правки проверки — читается с `check_no: null`
     (TRK-565). Нагрузка остальных типов отдаётся как лежит: трекер всегда кладёт в неё
     все ключи, которые есть у модели чтения (сверка TRK-565); новый ключ в чужой нагрузке
@@ -1193,6 +1215,7 @@ def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str,
         data.setdefault("replaced_by", None)
     elif entry_type in REPLACEABLE_ENTRY_TYPES:
         data.setdefault(SUPERSEDES_FIELD, [])
+        data.setdefault(DRAFT_FIELD, None)
     elif entry_type is EntryType.SECTION_CHANGED:
         data.setdefault("check_no", None)
     return data
@@ -1211,6 +1234,20 @@ def is_blocking_question(payload: Mapping[str, Any]) -> bool:
     `bool(None)` совпал бы с ответом «не блокирующий» случайно, а не по правилу.
     """
     return payload.get("blocking") is True
+
+
+def draft_address(entry_type: EntryType, payload: Mapping[str, Any]) -> str | None:
+    """Адрес подъёма черновика — из нагрузки решения или находки дела задачи; `None` —
+    запись не черновик.
+
+    Одно определение черновика на сценарий (подъёмы при чтении дела задачи) и на запрос
+    признака `open_drafts` (`app/db/repositories/entries.py`, `draft_address_of`): тип
+    из `DRAFT_ENTRY_TYPES` и строка под ключом `draft_for`.
+    """
+    if entry_type not in DRAFT_ENTRY_TYPES:
+        return None
+    value = payload.get(DRAFT_FIELD)
+    return value if isinstance(value, str) else None
 
 
 # --- Внутреннее: форма полей --------------------------------------------------------
@@ -1359,10 +1396,58 @@ type _PayloadBuilder = Callable[[dict[str, Any], EntryContext, FieldProblems], d
 def _no_payload(
     raw: dict[str, Any], context: EntryContext, problems: FieldProblems
 ) -> dict[str, Any]:
-    """У `decision`, `attempt`, `finding`, `artifact`, `remark`, `acceptance` и `note`
-    нагрузки нет."""
+    """У `attempt`, `artifact`, `remark`, `acceptance` и `note` нагрузки нет.
+
+    Адрес подъёма у них — отдельный отказ со списком типов, которые его принимают, а не
+    общее «поле не то»: черновиком бывает только запись знания (`DRAFT_ENTRY_TYPES`), и
+    агент, подшивший `note` с адресом, узнаёт, каким типом её подшить.
+    """
+    if DRAFT_FIELD in raw:
+        raw = {name: value for name, value in raw.items() if name != DRAFT_FIELD}
+        problems.add(
+            DRAFT_FIELD,
+            "not_allowed",
+            allowed_for=sorted(item.value for item in DRAFT_ENTRY_TYPES),
+        )
     _reject_extra(raw, (), problems)
     return {}
+
+
+def _draft_payload(
+    raw: dict[str, Any], context: EntryContext, problems: FieldProblems
+) -> dict[str, Any]:
+    """Решение и находка дела задачи: необязательный адрес подъёма (решение TRK#57,
+    раздел 8).
+
+    Без адреса нагрузка пуста, как была: ключ кладётся только у черновика, и «не
+    черновик» — это его отсутствие, а не `null` в базе. Что адрес называет проект задачи
+    или его неархивную область, проверяет сценарий: домен в базу не ходит.
+    """
+    del context
+    _reject_extra(raw, (DRAFT_FIELD,), problems)
+    value = raw.get(DRAFT_FIELD)
+    if value is None:
+        return {}
+    with problems.field(DRAFT_FIELD):
+        return {DRAFT_FIELD: _draft_address(value)}
+    return {}
+
+
+def _draft_address(value: Any) -> str:
+    """Адрес подъёма в каноническом виде: ключ проекта (`TRK`) или адрес области
+    (`TRK/mcp`), обе части по шаблонам.
+
+    Строже мягкой адресации поиска: адрес ложится в нагрузку, и два написания одного
+    адреса развели бы черновик с его подъёмом.
+    """
+    text = _text(value).strip()
+    if is_area_address(text):
+        address = parse_area_address(text)
+        if _PROJECT_KEY_RE.match(address.project_key) and is_area_key(address.key):
+            return str(address)
+    elif _PROJECT_KEY_RE.match(text):
+        return normalize_project_key(text)
+    raise FieldProblem("not_an_address", expected=DRAFT_ADDRESS_SHAPE, got=text)
 
 
 def _summary_payload(
@@ -1649,9 +1734,9 @@ def _reject_extra(raw: dict[str, Any], allowed: Sequence[str], problems: FieldPr
 
 _PAYLOAD_BUILDERS: dict[EntryType, _PayloadBuilder] = {
     EntryType.SUMMARY: _summary_payload,
-    EntryType.DECISION: _no_payload,
+    EntryType.DECISION: _draft_payload,
     EntryType.ATTEMPT: _no_payload,
-    EntryType.FINDING: _no_payload,
+    EntryType.FINDING: _draft_payload,
     EntryType.ARTIFACT: _no_payload,
     EntryType.QUESTION: _question_payload,
     EntryType.ANSWER: _answer_payload,

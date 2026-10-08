@@ -2,7 +2,7 @@
 транзакцией — единственная дверь в `done`.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -11,6 +11,7 @@ from app.mcp.enums import TaskStatusSchema
 from app.mcp.idempotency import Once
 from app.mcp.tools.case.arguments import (
     CheckNoArg,
+    DraftForArg,
     EntryBodyArg,
     EntryRefsArg,
     EntryTitleArg,
@@ -69,6 +70,7 @@ class ClosingEntry(BaseModel):
     title: EntryTitleArg
     body: EntryBodyArg = ""
     refs: EntryRefsArg = None
+    draft_for: DraftForArg = None
 
 
 ClosingSummaryArg = Annotated[
@@ -143,6 +145,18 @@ def closed_task(closure: TaskClosure) -> ClosedTaskView:
     )
 
 
+def _entry_request(entry: ClosingEntry) -> dict[str, Any]:
+    """Запись закрытия в отпечатке вызова: адрес подъёма — только присланным.
+
+    Ключ идемпотентности, сохранённый закрытием до черновиков, отвечает на повтор тем же
+    отпечатком, а не `idempotency_key_reused`, — как у `add_entry`.
+    """
+    dumped = entry.model_dump(mode="json")
+    if entry.draft_for is None:
+        dumped.pop("draft_for")
+    return dumped
+
+
 def register(tools: Toolset) -> None:
     """Объявляет `close_task`."""
     runtime = tools.runtime
@@ -207,6 +221,7 @@ def register(tools: Toolset) -> None:
                             title=item.title,
                             body=item.body,
                             refs=item.refs or (),
+                            draft_for=item.draft_for,
                         )
                         for item in entries or ()
                     ],
@@ -219,7 +234,7 @@ def register(tools: Toolset) -> None:
                     "task": task.key,
                     "summary": summary,
                     "verdicts": verdicts,
-                    "entries": entries,
+                    "entries": None if entries is None else [_entry_request(e) for e in entries],
                 },
                 build=close,
             )
