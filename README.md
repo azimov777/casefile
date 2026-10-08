@@ -248,7 +248,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 |---|---|
 | Update right now | run the install line again |
 | Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env`, then `docker compose up -d --no-deps updater` in `~/casefile` |
-| Stay on one release | `CASEFILE_VERSION=0.14.0` in `~/casefile/.env` |
+| Stay on one release | `CASEFILE_VERSION=0.15.0` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
 | Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |
@@ -466,7 +466,7 @@ What else to know:
 
 ## Under the hood
 
-Python 3.14 · FastAPI · PostgreSQL · MCP over streamable HTTP · React 19 · Vite · Tailwind. The backend sits at the repository root, the web UI in [`ui/`](ui). The web UI speaks English and Russian; the design docs, the [developer guide](docs/DEVELOPMENT.md) and the agent-facing texts are in Russian for now.
+Python 3.14 · FastAPI · PostgreSQL · MCP over streamable HTTP · React 19 · Vite · Tailwind. The backend sits at the repository root, the web UI in [`ui/`](ui). The web UI speaks English and Russian and the agent-facing texts are in Russian for now; design decisions live in the maintainer's tracker, so ask in an issue.
 
 ## Contributing
 

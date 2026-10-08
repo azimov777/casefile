@@ -38,10 +38,10 @@ Read before you act, because the case already holds choices you must not redo:
 - decisions and attempts, failed ones included — `read_entries(key="TRK-42", types=["decision", "attempt"])`;
 - if there is a `parent`: its summary and its decisions bind this task —
   `get_task(key="TRK-40")`, `read_entries(key="TRK-40", types=["decision"])`;
-- the project's decisions in force bind it as well: the ones it relies on come in
-  `decisions` of `get_task` with their status, all of them in `get_project(key="TRK")`;
+- the decisions the task relies on come in `decisions` of `get_task` with their status;
   a superseded one names its successor, and `search_tasks(decision=["TRK#15"])` lists
-  the tasks done under it;
+  the tasks done under it. They are not all that binds the work: read the knowledge of
+  the project, as below;
 - the task's discussions come in `discussions` of `get_task`: address (`TRK~7`), title,
   status, whose turn it is, the open questions and the latest conclusion. The latest
   conclusion and the human's answers and notes set the work together with the sections
@@ -50,9 +50,40 @@ Read before you act, because the case already holds choices you must not redo:
 - a reference like `TRK-7#12` in the text is an entry — `read_entries(key="TRK-7", nos=[12])`;
   `TRK~7#3` is an entry of a discussion — `read_project_entries(key="TRK~7", nos=[3])`.
 
+**Read the knowledge of the project.** What the work must follow is kept in cases of two
+kinds: the case of the project (rules and facts of the whole project) and the case of each
+area (rules and facts of one part of it). The tracker does not make you read them and does
+not warn when you skip: skipping is how an agent redoes a choice already made, or follows
+a rule that was replaced. Read them every time you enter a task, a small one too.
+
+1. The whole project: `get_project(key="TRK")` — its decisions in force, its findings in
+   force and the list of its areas, each with a title and a description.
+2. The area of the task: its address is `area` in `get_task` (`TRK/importer`). Read it
+   with the same call, `get_project(key="TRK/importer")`: decisions in force bind the work
+   in that area, findings in force are what is known about it. A task from before areas
+   were required may have none; then read the area whose description fits the work.
+3. The other parts the work touches. Read the list of areas from step 1 by title and
+   description, not by the name alone. For every part the goal or the output mentions
+   besides the task's own area, read its area the same way. Do not read all of them, and
+   do not stop at the task's own: a task that changes the importer and the schema binds
+   `TRK/importer` and `TRK/schema` alike.
+4. Titles first, bodies only of the entries you need. `get_project` gives titles and
+   addresses, not bodies. Pick the entries whose title is about your work and read just
+   them: `read_project_entries(key="TRK/importer", nos=[3, 7])`. Do not read the whole
+   case.
+5. To find a note by a word, search instead of paging:
+   `read_project_entries(key="TRK/importer", text="retry", in_force=true)` — `text` is a
+   substring of titles and bodies, `in_force=true` drops the replaced ones. Searching is
+   optional; if the first word finds nothing, try another or another area once, then go on.
+6. Only an entry in force counts. Every decision and finding you read carries a `status`;
+   a superseded one names its successor in `superseded_by`. An entry you reached by its
+   number, from a reference or a search without `in_force`, may be superseded: look at its
+   `status` before you rely on it, and take the successor instead.
+
 **Check:** you can say in two sentences what the goal is, where the work stands and what
 your next action is, and you know the open questions, the conclusions of the discussions
-and the remarks. A conclusion that contradicts the sections: if it only changes the course
+and the remarks. You also know which decisions in force bind the work, the whole project's
+and those of every area it touches, and none of them is a superseded one. A conclusion that contradicts the sections: if it only changes the course
 inside the goal, work by it and name the divergence in the summary; if it changes the goal,
 the output or the checks, send the task back (`transition(key="TRK-42", to="backlog",
 reason="Conclusion TRK~7#5 changes the goal")`), fix the sections with `update_task`, and
@@ -85,6 +116,71 @@ add_entry(key="TRK-42", type="decision",
           title="Cache in Redis, not in process memory",
           body="Two workers share it; an in-process cache would diverge. Rejected: sticky sessions.")
 ```
+
+### Knowledge that outlives the task
+
+What you learn or choose may bind other tasks: a rule others must follow, a fact about how
+a part works. Keep it in the case of the project or of an area, not only in your task's
+case, where a later reader does not look. A decision is a choice with its reason, a finding
+is a fact with its source.
+
+**Where.** A rule or fact of the whole project goes to the project:
+`add_project_entry(key="TRK", type="decision", ...)`. A rule or fact of one part goes to the
+area of that part: `add_project_entry(key="TRK/importer", type="finding", ...)`. If it
+concerns two parts, write one entry in each area, each saying what it means for that part,
+and name the other in `refs` (`TRK/schema#4`); one entry in one area is not found by the
+reader of the other. If no area is about that part, make one first —
+`create_project(key="TRK/exports", title="Exports", description="…")` — rather than put
+the entry into an area that does not fit.
+
+**Replace, do not add beside.** Before writing, look whether the case already says
+something about it: `read_project_entries(key="TRK/importer", text="retry", in_force=true)`.
+If an entry in force is now wrong or incomplete, the new entry names it in `supersedes`;
+it must be of the same type, in the same case:
+
+```
+add_project_entry(key="TRK/importer", type="finding",
+                  title="A retry waits 10 seconds, not 2",
+                  body="Found in importer/retry.py:31; the 2 s in the old note was before the backoff change.",
+                  supersedes=[5])
+```
+
+An entry is never edited and a note beside a refuted one leaves two answers; the replaced
+one stays readable and shows its successor. Dropping an entry without a replacement is a
+new entry of the same type that supersedes it and says it no longer holds.
+
+**A task that changes or removes a mechanism replaces what the case says about it** in the
+same pass, before it closes: search the project and the areas the mechanism belongs to by
+its name (`text="retry"`), and replace every entry that describes the old behaviour with
+one that states what holds now, or that the mechanism is gone. The next agent trusts the
+case, not the code.
+
+**Code still in a branch.** While the code of the task is not merged, the knowledge is not
+true of the project yet. Do not write it to the project or an area. File it in the case of
+your task as a draft: the same `decision` or `finding`, plus `draft_for` — the project key
+or the area address it belongs to:
+
+```
+add_entry(key="TRK-42", type="finding", draft_for="TRK/importer",
+          title="A retry waits 10 seconds, not 2",
+          body="importer/retry.py:31 after the backoff change in this branch.")
+```
+
+Without `draft_for` the entry stays a note of the task and never reaches the area. After
+the merge, whoever merged lifts each draft: an entry in the case it names, with the draft
+in `refs`, and `supersedes` if it replaces an entry there:
+
+```
+add_project_entry(key="TRK/importer", type="finding",
+                  title="A retry waits 10 seconds, not 2", body="…",
+                  refs=["TRK-42#15"], supersedes=[5])
+```
+
+Not lifted drafts are counted in `open_drafts` of the task (`get_task`, `features`), and
+the ones to lift are found with `search_tasks(query="open_drafts: > 0")`; the draft itself,
+in `read_entries(key="TRK-42", types=["decision", "finding"])`, shows `lifted_by` — empty
+until lifted. After you merge a branch, lift its drafts before you leave. A task without
+code in a branch writes to the case directly, with no draft.
 
 After every significant step — a decision made, a part finished, a failure that changes
 the plan — file a summary:
@@ -263,11 +359,14 @@ create_task(project="TRK", area="TRK/importer", parent="TRK-42",
 ```
 
 A task is filed with an area, `PROJECT/key`: without `area` the call is refused with
-`area_required`, and `details.areas` lists the project's active areas. Pick the one the work
-belongs to; the tracker never picks it, and a child does not take its parent's. A project
-without areas needs one first: `create_project` with the address `PROJECT/key`. `move_task`
-names an area of the target project in `area` for the same reason, and `update_task` can
-change the area but not take it off.
+`area_required`, and `details.areas` lists the project's active areas. The tracker never
+picks it, and a child does not take its parent's. Pick the area the work of the task is
+done in: read the titles and descriptions in `get_project(key="PROJECT")` and match them to
+the part of the work, not the first area of the list and not the one you used last. If the
+work is in two areas, that is a reason to split it into two tasks, one per area. A project
+without a fitting area needs one first: `create_project` with the address `PROJECT/key`.
+`move_task` names an area of the target project in `area` for the same reason, and
+`update_task` can change the area but not take it off.
 
 Write a task for the agent who will do it without your context: one step per action, the
 environment named exactly in `context` (repository, branch, how to run it), each check
@@ -284,6 +383,10 @@ Before closing, check:
   have its evidence: the command and what it showed;
 - every remark in `get_task` has an outcome through `resolve` — `close_task` does not
   check them for you, e.g. `resolve(key="TRK-42", remark_no=14, outcome="fixed", body="Renamed the column; test added.")`;
+- the knowledge is in the project or area, not only in the case: what the task decided
+  or learned that others follow is written, entries it made wrong are replaced (a task
+  that removed a mechanism replaced what the case said about it), and every draft of a
+  merged branch is lifted (`open_drafts` is 0);
 - you can name honestly what part of the goal no check measured.
 
 ```
