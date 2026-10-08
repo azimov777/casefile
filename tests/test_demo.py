@@ -149,6 +149,32 @@ async def test_every_demo_row_carries_the_features_of_its_own_card(
     assert any(features is not None and features.open_questions for features in rows.values())
     assert any(features is not None and features.last_summary_at for features in rows.values())
     assert any(features is not None and features.deferred for features in rows.values())
+    assert any(features is not None and features.open_drafts for features in rows.values())
+
+
+async def test_demo_closes_one_task_with_an_unlifted_draft_and_one_with_a_lifted(
+    db_session: AsyncSession, seeded: demo_service.DemoData, reader: Actor
+) -> None:
+    """Черновики знания (TRK-659): отбор `open_drafts: > 0` находит закрытую DEMO-8 с
+    неподнятым черновиком и не находит закрытую DEMO-1, чей черновик поднят записью
+    `DEMO/core`; у черновиков в чтении дела — подъёмы."""
+    unlifted = await search_service.search_tasks(
+        db_session, actor=reader, query=f"project: {DEMO_PROJECT_KEY} and open_drafts: > 0"
+    )
+    assert [found.task.key for found in unlifted.page.items] == [f"{DEMO_PROJECT_KEY}-8"]
+    assert {found.task.status for found in unlifted.page.items} == {TaskStatus.DONE}
+
+    lifts = {}
+    for key in (f"{DEMO_PROJECT_KEY}-1", f"{DEMO_PROJECT_KEY}-8"):
+        task = await tasks_service.get_task(db_session, key)
+        assert task.status is TaskStatus.DONE, key
+        page = await case_service.list_entries(
+            db_session, task, actor=reader, types=[EntryType.DECISION, EntryType.FINDING]
+        )
+        lifts[key] = list(page.lifts.values())
+    [[lift]] = lifts[f"{DEMO_PROJECT_KEY}-1"]
+    assert lift.startswith("DEMO/core#")
+    assert lifts[f"{DEMO_PROJECT_KEY}-8"] == [[]]
 
 
 async def test_every_demo_row_names_the_parent_its_card_shows(
