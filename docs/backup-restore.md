@@ -3,7 +3,7 @@
 This is the manual, one-off procedure for two things: taking a backup of a running
 installation, and standing up a separate, clean installation from that backup — on the
 same machine or a different one. Nothing here runs on a schedule; Casefile is a ledger,
-not an orchestrator, and there is no automation in core for this (`docs/CONCEPT.md`).
+not an orchestrator, and there is no automation in core for this.
 Scheduling backups, rotating them, and verifying restores automatically is a job for the
 paid service panel, not the open core.
 

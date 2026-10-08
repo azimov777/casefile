@@ -347,9 +347,8 @@ that release's images are published, so an installed skill never runs ahead of t
 
 Casefile never pushes anything to you. If the owner answers a question or leaves a
 remark while you are not reading the case, that answer just sits in the journal until
-something asks for it — deliberately: delivery is a rejected design (`docs/CONCEPT.md`,
-"Отвергнутые варианты"), because the tracker is a ledger, not an orchestrator. Asking is
-the client's job, always.
+something asks for it — deliberately: delivery is a rejected design, because the tracker is
+a ledger, not an orchestrator. Asking is the client's job, always.
 
 The tracker gives you one long-polling primitive for this: `wait_journal` in MCP,
 `GET /api/v1/journal?after=<seq>&wait=<seconds>` in REST (`wait` up to 60s). A call

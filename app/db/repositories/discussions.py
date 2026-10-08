@@ -236,7 +236,7 @@ class DiscussionRepository:
         другого порядка страница пришла бы не та — `invalid_cursor`, как у вопросов.
 
         Обсуждения архивных проектов не попадают сюда, пока проект не назван
-        (`CONCEPT.md`, 3.6, так же у вопросов и задач).
+        (TRK#99, так же у вопросов и задач).
         """
         size = resolve_limit(limit)
         turn_column = turn_of(Discussion)

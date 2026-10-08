@@ -12,7 +12,7 @@ from app.db.models.project import Project
 def _owned(owner: Project | Area) -> tuple[type[Attribute], ColumnElement[bool]]:
     """Таблица атрибутов владельца и условие «атрибуты этого владельца».
 
-    Механика одна (`CONCEPT.md`, 3.2 и 3.7), таблицы две (`app/db/models/attribute.py`):
+    Механика одна (TRK#84, TRK#57), таблицы две (`app/db/models/attribute.py`):
     выбор делается здесь, один раз, а не ветвлением в каждом методе.
     """
     if isinstance(owner, Area):

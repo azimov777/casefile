@@ -585,7 +585,7 @@ async def test_a_row_names_its_direct_parent_by_key_and_title(
 async def test_a_row_names_the_direct_parent_and_not_the_grandparent(
     db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    """Родство прямое, как у отбора `parent:`: цепочки предков в строке нет (`CONCEPT.md`, 4.4)."""
+    """Родство прямое, как у отбора `parent:`: цепочки предков в строке нет (TRK#165)."""
     program = await make(db_session, task_actor, project, "программа")
     child = await make(db_session, task_actor, project, "ребёнок")
     grandchild = await make(db_session, task_actor, project, "внук")
@@ -883,7 +883,7 @@ async def test_waiting_is_not_a_status_of_the_query_language(
     assert by_term.value.details["allowed"] == allowed
 
 
-#: Запрос назначателя (`CONCEPT.md`, 4.3): кандидат — в `open`, без открытого блокера и
+#: Запрос назначателя (TRK#159): кандидат — в `open`, без открытого блокера и
 #: без открытого вопроса с `blocking`.
 CANDIDATES = "status: open and blocked: false and open_blocking_questions: 0"
 
@@ -894,7 +894,7 @@ async def test_an_answer_returns_a_waiting_task_to_the_candidates_without_a_move
     """Обзорная проверка 3 TRK-573: ожидание держит вопрос, а кончает его ответ — без хода.
 
     Агент упирается в решение человека: вопрос с `blocking`, сводка, `in_progress → open`
-    с причиной (`CONCEPT.md`, 4.6, «Ответа, долго»). Пока вопрос открыт, запрос
+    с причиной (TRK#176). Пока вопрос открыт, запрос
     кандидатов задачу не находит; после `answer` находит, хотя статус никто не трогал:
     между двумя чтениями в деле нет ни одной записи `status_changed`.
     """

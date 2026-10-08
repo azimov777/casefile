@@ -39,7 +39,7 @@ async def make(session: AsyncSession, actor: Actor, project: Project, title: str
         constraints="ограничения",
         output="выход",
         checks=["проверка"],
-        # В работу задачу берёт исполнитель (`CONCEPT.md`, 3.3): им назначен автор.
+        # В работу задачу берёт исполнитель (TRK#109): им назначен автор.
         assignee=actor.author.signature,
     )
 
@@ -689,7 +689,7 @@ async def test_a_waiting_child_keeps_the_parent_from_closing(
     Закрывают только `done` и `cancelled`. Ребёнок, ждущий ответа человека в `open` с
     вопросом `blocking` (статуса ожидания нет с TRK-573), — незаконченная работа, а не
     отменённая, и родитель, ушедший в `done` поверх него, соврал бы про целое
-    (`CONCEPT.md`, 3.3). Отказ обязан назвать ключ ребёнка: иначе родитель большой
+    (TRK#144). Отказ обязан назвать ключ ребёнка: иначе родитель большой
     декомпозиции придётся искать виновника перебором.
     """
     parent = await make(db_session, task_actor, project, "родитель")

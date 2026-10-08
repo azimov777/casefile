@@ -148,7 +148,7 @@ OffsetQuery = Annotated[
 
 
 # Архивные проекты в списке: принимают `GET /projects` и `GET /bootstrap`, и описание у
-# одного по смыслу параметра обязано быть одним (`CONCEPT.md`, 3.2).
+# одного по смыслу параметра обязано быть одним (TRK#99).
 IncludeArchivedQuery = Annotated[
     bool,
     Query(

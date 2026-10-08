@@ -90,7 +90,7 @@ export interface SnippetInput {
   token?: string;
   /**
    * Токен общий агентский — выпущен без участника: каждый запрос с ним обязан нести
-   * `X-Actor-Label` (`../docs/CONCEPT.md`, 3.1), иначе бэкенд отвечает
+   * `X-Actor-Label` (TRK#74), иначе бэкенд отвечает
    * `actor_label_required`.
    */
   labelled: boolean;

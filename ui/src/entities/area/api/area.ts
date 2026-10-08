@@ -4,7 +4,7 @@ import { splitAreaAddress } from '@/shared/lib';
 
 /**
  * Область одним ответом: карточка и нынешние атрибуты (`AreaDetailRead`,
- * `../docs/CONCEPT.md`, 3.7). Атрибуты — та же схема, что у проекта (`AttributeRead`).
+ * TRK#57). Атрибуты — та же схема, что у проекта (`AttributeRead`).
  */
 export type AreaDetail = components['schemas']['AreaDetailRead'];
 
@@ -45,7 +45,7 @@ export function areaQueryOptions(address: string) {
 
 /**
  * Сколько областей читается за раз: предел контракта. Областей у проекта единицы
- * (`../docs/CONCEPT.md`, 3.7: часть работы без конца, а не задача), и страница их
+ * (TRK#57: часть работы без конца, а не задача), и страница их
  * покрывает; если однажды не покроет, раздел скажет об этом словами (`has_more`), а не
  * покажет молча первые двести.
  */

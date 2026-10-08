@@ -4,7 +4,7 @@ Revision ID: 7f4089f291b8
 Revises: 7e3b52a9c1d4
 Create Date: 2026-09-22 22:00:00.000000+00:00
 
-Признак одного действия у записи дела (`CONCEPT.md`, 3.4; TRK-118). Один вызов
+Признак одного действия у записи дела (TRK#131; TRK-118). Один вызов
 (`update_task`, `transition`, `close_task`, `create_task`, `link` и прочие точки
 входа `app/services/case.py` и `app/services/tasks.py`) подшивает от одной до
 нескольких записей и ставит им одно и то же значение `action_id`; разные вызовы

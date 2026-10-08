@@ -137,7 +137,7 @@ async def test_a_task_in_review_moves_into_in_progress_and_the_case_says_why(
     assert version == 2
     assert row.no == 3, "запись подшита следующим номером, не поверх чужого"
     assert row.created_by_kind == "tracker"
-    assert row.created_by_signature is None, "трекер подписи не ставит (`CONCEPT.md`, 3.1)"
+    assert row.created_by_signature is None, "трекер подписи не ставит (TRK#80)"
     assert row.payload["from"] == "review"
     assert row.payload["to"] == "in_progress"
     assert row.payload["reason"], "скачок статуса обязан быть объяснён"
@@ -277,7 +277,7 @@ async def test_the_rollback_refuses_while_such_entries_exist(
     """Откат отказывается, пока такие записи подшиты, — и это верное поведение.
 
     Молча снести их нельзя: дело неизменяемо, и откат схемы историю не отменяет
-    (`CONCEPT.md`, 3.4). Отказ говорит «откатывать уже поздно», а не ломает установку;
+    (TRK#127). Отказ говорит «откатывать уже поздно», а не ломает установку;
     альтернатива — потерять записи — хуже во всех отношениях.
     """
     url = f"{test_database_url}_migrations"
@@ -1206,7 +1206,7 @@ async def test_a_waiting_task_moves_into_open_and_its_case_names_the_task(
     entry = rows[-1]
     assert entry.title == "Status changed: waiting -> open"
     assert entry.created_by_kind == "tracker"
-    assert entry.created_by_signature is None, "трекер подписи не ставит (`CONCEPT.md`, 3.1)"
+    assert entry.created_by_signature is None, "трекер подписи не ставит (TRK#80)"
     assert entry.action_id is not None
     assert entry.payload["from"] == "waiting"
     assert entry.payload["to"] == "open"
