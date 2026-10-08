@@ -10,7 +10,7 @@ import { expect, test, type Page } from '@playwright/test';
  * задач (`APP-1`…`APP-9`: 3 backlog, 2 open, 2 in_progress, 1 «Ждёт ответа», 1 done —
  * столько, чтобы колонки не пустовали под записью, TRK-82) подготовлены заранее
  * отдельным контуром и скриптом `seed-background.py` — команды целиком в
- * `e2e-demo/README.md`. Здесь только то, что должно попасть в кадр: агент своим
+ * трекере (область `TRK/ui-testing`, записи с пометкой «перенос TRK-694»). Здесь только то, что должно попасть в кадр: агент своим
  * токеном (`DEMO_AGENT_TOKEN`) заводит ОДНУ новую задачу вживую, а страница в это
  * время смотрит на доску тем же способом, каким её видит человек. Пауза после
  * каждого перехода статуса длиннее паузы после записи дела намеренно: среди
@@ -43,7 +43,10 @@ async function agentCall(method: string, path: string, body?: unknown): Promise<
 }
 
 test('agent works a task while the board watches', async ({ page }) => {
-  if (!TOKEN) throw new Error('DEMO_AGENT_TOKEN is not set — see e2e-demo/README.md');
+  if (!TOKEN)
+    throw new Error(
+      'DEMO_AGENT_TOKEN is not set — see the tracker, area TRK/ui-testing, entries marked TRK-694',
+    );
   test.setTimeout(90_000);
 
   // Сцена 1: доска уже живёт своей жизнью — фоновые задачи заведены заранее.

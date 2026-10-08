@@ -1,17 +1,15 @@
 /*
  * `scripts/merge-task-branch.sh` под тестом: его запускают редко, в единственный
  * неудобный момент — слияние ветки задачи в `main`, — и там же меньше всего хочется
- * разбираться с самим инструментом. Четыре вещи ломаются молча и обнаруживаются ровно
+ * разбираться с самим инструментом. Три вещи ломаются молча и обнаруживаются ровно
  * тогда:
  *
  * - потерянный бит запуска: файл в репозитории есть, а `scripts/merge-task-branch.sh`
  *   отвечает «Permission denied»;
  * - опечатка в самом скрипте: `bash -n` ловит её здесь, а не на первом слиянии;
- * - разъехавшиеся скрипт и README: строка-доказательство и обе команды прогона
- *   названы в прозе (`README.md`), и переименование в скрипте без правки README
- *   оставляет ревизию непроверенных слияний без единой находки — тихо и навсегда, а
- *   человека — с командой в README, которой в скрипте больше нет. Само правило
- *   слияния — решения проекта TRK#223–TRK#225 (соглашения перенесены в трекер, TRK-613);
+ * (Сверка скрипта с `README.md` снята вместе с файлом, TRK-694: описание слияния — запись
+ * области `TRK/ui-tooling`, файла для сверки нет. Само правило слияния — решения проекта
+ * TRK#223–TRK#225.)
  * - сообщение из `-m` теряется на конфликте (UI-96): скрипт выходит подсказкой про
  *   `--continue` раньше, чем кладёт `MESSAGE` в `MERGE_MSG`, и повторный вызов
  *   `--continue` этого сообщения уже не знает — коммит слияния получает заголовок,
@@ -48,20 +46,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 const ROOT = resolve(__dirname, '..');
 const SCRIPT = resolve(ROOT, 'scripts', 'merge-task-branch.sh');
 
-/** Документы, описывающие слияние. Каждый обязан звать те же строку и команды, что и
- *  скрипт: расхождение здесь — это правило, которое исполняют по памяти. */
-const DOCUMENTS = [resolve(ROOT, 'README.md')];
-
-const scriptText = () => readFileSync(SCRIPT, 'utf8');
-
-/** Значение объявления из шапки скрипта, вида `ИМЯ="значение"` или `ИМЯ=(значение)`. */
-function declaration(name: string): string {
-  const found = scriptText().match(new RegExp(`^${name}=(?:"([^"]+)"|\\(([^)]+)\\))`, 'm'));
-  const value = found?.[1] ?? found?.[2];
-  expect(value, `в скрипте нет объявления ${name}`).toBeDefined();
-  return (value ?? '').trim();
-}
-
 describe('scripts/merge-task-branch.sh', () => {
   it('лежит в репозитории и несёт бит запуска', () => {
     expect(() => accessSync(SCRIPT, constants.X_OK)).not.toThrow();
@@ -69,25 +53,6 @@ describe('scripts/merge-task-branch.sh', () => {
 
   it('разбирается bash без синтаксических ошибок', () => {
     expect(() => execFileSync('bash', ['-n', SCRIPT], { stdio: 'pipe' })).not.toThrow();
-  });
-
-  it('строку-доказательство называют документы слияния', () => {
-    const key = declaration('TRAILER_KEY');
-    const missing = DOCUMENTS.filter((document) => !readFileSync(document, 'utf8').includes(key));
-    expect(
-      missing,
-      `строка ${JSON.stringify(key)} из скрипта не названа в: ${missing.join(', ')}`,
-    ).toEqual([]);
-  });
-
-  it('README называет обе команды слияния как прогон проверок', () => {
-    const readme = readFileSync(resolve(ROOT, 'README.md'), 'utf8');
-    for (const name of ['CHECK_COMMAND', 'E2E_COMMAND']) {
-      const command = declaration(name).split(/\s+/).join(' ');
-      expect(readme, `README не называет ${JSON.stringify(command)} прогоном проверок`).toContain(
-        `\`${command}\``,
-      );
-    }
   });
 });
 
