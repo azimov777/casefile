@@ -320,17 +320,20 @@ class EntryRepository:
         types: Sequence[EntryType] | None = None,
         attribute: str | None = None,
         text: str | None = None,
+        exclude_nos: Collection[int] = (),
         after_no: int | None = None,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> Page[Entry]:
-        """Страница записей дела области — те же фильтры, что у дела проекта."""
+        """Страница записей дела области — те же фильтры, что у дела проекта, включая
+        `exclude_nos` отбора `in_force` (решение TRK#57, раздел 5)."""
         return await self._list_page(
             Entry.area_id == area_id,
             nos=nos,
             types=types,
             attribute=attribute,
             text=text,
+            exclude_nos=exclude_nos,
             after_no=after_no,
             limit=limit,
             cursor=cursor,
@@ -456,8 +459,11 @@ class EntryRepository:
         )
 
     async def area_headings(self, area_id: uuid.UUID) -> list[EntryHeading]:
-        """Опись дела области: те же строки — для чтения области."""
-        return await self._headings(Entry.area_id == area_id)
+        """Опись дела области — та же форма, что у проекта: без решений и заметок, они
+        приходят в чтении области своими списками (решение TRK#57, раздел 6)."""
+        return await self._headings(
+            and_(Entry.area_id == area_id, Entry.type.not_in(REPLACEABLE_ENTRY_TYPES))
+        )
 
     async def project_decisions(self, project_ids: Sequence[uuid.UUID]) -> list[Entry]:
         """Решения проекта — записи `decision` дел этих проектов, по проекту и номеру.
@@ -470,10 +476,18 @@ class EntryRepository:
         """
         if not project_ids:
             return []
+        return await self._decisions(Entry.project_id.in_(list(project_ids)), Entry.project_id)
+
+    async def area_decisions(self, area_ids: Sequence[uuid.UUID]) -> list[Entry]:
+        """Решения областей — записи `decision` дел этих областей, по области и номеру:
+        то же, что `project_decisions`, для ссылок задач на решения области."""
+        if not area_ids:
+            return []
+        return await self._decisions(Entry.area_id.in_(list(area_ids)), Entry.area_id)
+
+    async def _decisions(self, owned: ColumnElement[bool], owner: Any) -> list[Entry]:
         statement = (
-            select(Entry)
-            .where(Entry.project_id.in_(list(project_ids)), Entry.type == EntryType.DECISION)
-            .order_by(Entry.project_id, Entry.no)
+            select(Entry).where(owned, Entry.type == EntryType.DECISION).order_by(owner, Entry.no)
         )
         return list(await self._session.scalars(statement))
 
@@ -489,9 +503,21 @@ class EntryRepository:
         нужен чтению проекта: действующие решения и заметки стоят в нём ссылкой и
         заголовком вместо строк описи (`project_headings`).
         """
+        return await self._replaceables(Entry.project_id == project_id)
+
+    async def area_replaceables(
+        self, area_id: uuid.UUID
+    ) -> list[tuple[int, EntryType, str, dict[str, Any]]]:
+        """Решения и заметки дела области — то же, что `project_replaceables`: статус у
+        них считается тем же правилом (решение TRK#57, раздел 5)."""
+        return await self._replaceables(Entry.area_id == area_id)
+
+    async def _replaceables(
+        self, owned: ColumnElement[bool]
+    ) -> list[tuple[int, EntryType, str, dict[str, Any]]]:
         statement = (
             select(Entry.no, Entry.type, Entry.title, Entry.payload)
-            .where(Entry.project_id == project_id, Entry.type.in_(REPLACEABLE_ENTRY_TYPES))
+            .where(owned, Entry.type.in_(REPLACEABLE_ENTRY_TYPES))
             .order_by(Entry.no)
         )
         rows: list[Any] = list(await self._session.execute(statement))

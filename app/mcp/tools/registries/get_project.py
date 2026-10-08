@@ -3,12 +3,13 @@
 
 Отдельного чтения области нет намеренно (`CONCEPT.md`, 3.7; замер — дело TRK-555):
 опись дела несёт в `outputSchema` всю форму фактов, и второй инструмент с описью повторил
-бы её целиком. Область устроена как проект, и форма ответа у них одна; решения,
-заметки и области у области пусты.
+бы её целиком. Область устроена как проект, и форма ответа у них одна (решение TRK#57,
+раздел 6): свои действующие решения и заметки, `index_omitted` и опись без них; список
+областей у области пуст.
 
-Решений и заметок в описи проекта нет (решение TRK#48, раздел 3; задача TRK-657): опись с
-646 заметками стоила ≈ 87 тыс. токенов на вызов (TRK-598#11). Действующие приходят
-списками «ссылка и заголовок», число всех по типам — в `index_omitted`, тела и заменённые —
+Решений и заметок в описи нет (решение TRK#48, раздел 3; задача TRK-657): опись с 646
+заметками стоила ≈ 87 тыс. токенов на вызов (TRK-598#11). Действующие приходят списками
+«ссылка и заголовок», число всех по типам — в `index_omitted`, тела и заменённые —
 `read_project_entries`. Режима «опись целиком» рядом не оставлено (TRK#12).
 """
 
@@ -55,12 +56,15 @@ class AreaRefView(BaseModel):
 class InForceView(BaseModel):
     """Decision or finding in force: its address and title."""
 
-    ref: str = Field(description="Address of the entry in the project's case", examples=["TRK#15"])
+    ref: str = Field(
+        description="Address of the entry in the case: `TRK#15` or `TRK/mcp#3`",
+        examples=["TRK#15"],
+    )
     title: str
 
 
 class ProjectView(BaseModel):
-    """Project with its description, attributes and the index of its case."""
+    """Project or area with its description, attributes and the index of its case."""
 
     key: str
     title: str
@@ -86,16 +90,17 @@ class ProjectView(BaseModel):
     )
     decisions: list[InForceView] = Field(
         description=(
-            "Project decisions in force, in number order: `decision` entries of the "
-            "project's case that no later decision names in `supersedes`. Bodies come from "
+            "Decisions in force, in number order: `decision` entries of the case that no "
+            "later decision names in `supersedes`. An area's decisions in force set the work "
+            "in it, as the project's set the work in the whole project. Bodies come from "
             "`read_project_entries`; the tasks citing a decision, from `search_tasks` with "
             "`decision`"
         )
     )
     findings: list[InForceView] = Field(
         description=(
-            "Project findings in force, in number order: `finding` entries of the project's "
-            "case that no later finding names in `supersedes`; empty for an area"
+            "Findings in force, in number order: `finding` entries of the case that no "
+            "later finding names in `supersedes`"
         )
     )
     areas: list[AreaRefView] = Field(
@@ -104,9 +109,8 @@ class ProjectView(BaseModel):
     index: list[HeadingView] = Field(
         description=(
             "Index of the case, titles only, in number order: artifacts and notes and the "
-            "tracker's entries about the card. A project's decisions and findings are left "
-            "out, in force or superseded; an area's index holds every entry of its "
-            "case. Entry bodies come from `read_project_entries`"
+            "tracker's entries about the card. Decisions and findings are left out, in "
+            "force or superseded. Entry bodies come from `read_project_entries`"
         )
     )
     # Словарь с ключами-строками, а не модель и не ключи-перечисление: `EntryTypeSchema`
@@ -114,9 +118,8 @@ class ProjectView(BaseModel):
     index_omitted: dict[str, int] = Field(
         description=(
             "Number of entries left out of `index`, by type, `decision` and `finding`: all "
-            "of them in a project's case, the superseded ones included. "
-            "`read_project_entries` returns them by `types`, `in_force` and `text`. Empty "
-            "for an area"
+            "of them in the case, the superseded ones included. `read_project_entries` "
+            "returns them by `types`, `in_force` and `text`"
         )
     )
 
@@ -124,7 +127,7 @@ class ProjectView(BaseModel):
 def project(
     item: CaseOwner,
     attributes: list[Attribute],
-    knowledge: CaseKnowledge | None,
+    knowledge: CaseKnowledge,
     areas: list[Area],
     index: list[EntryHeading],
 ) -> ProjectView:
@@ -133,8 +136,8 @@ def project(
 
     Короче ответа REST: `id`, счётчик номеров и времена правки интерфейсу нужны, а
     агенту — нет, и каждое лишнее поле здесь оплачено его контекстом. Опись — те же
-    строки, что у дела задачи в `get_task`: заголовки без тел. `knowledge` — `None` у
-    области: записей знания со статусом в её деле нет, и списки пусты.
+    строки, что у дела задачи в `get_task`: заголовки без тел. Знание — у проекта и у
+    области одной формой (решение TRK#57, раздел 6).
     """
     return ProjectView(
         key=owner_name(item),
@@ -142,19 +145,13 @@ def project(
         description=item.description,
         archived_at=item.archived_at,
         attributes=[AttributeView(name=a.name, value=a.value) for a in attributes],
-        decisions=[]
-        if knowledge is None
-        else [InForceView(ref=d.ref, title=d.title) for d in knowledge.decisions],
-        findings=[]
-        if knowledge is None
-        else [InForceView(ref=f.ref, title=f.title) for f in knowledge.findings],
+        decisions=[InForceView(ref=d.ref, title=d.title) for d in knowledge.decisions],
+        findings=[InForceView(ref=f.ref, title=f.title) for f in knowledge.findings],
         areas=[
             AreaRefView(address=d.address, title=d.title, archived_at=d.archived_at) for d in areas
         ],
         index=[heading(line) for line in index],
-        index_omitted={}
-        if knowledge is None
-        else {kind.value: count for kind, count in knowledge.totals.items()},
+        index_omitted={kind.value: count for kind, count in knowledge.totals.items()},
     )
 
 
@@ -170,20 +167,21 @@ def register(tools: Toolset) -> None:
         values, the project decisions and findings in force by address and title, its
         areas and the index of the project's case. Decisions and findings stay out
         of that index; `index_omitted` counts them by type. An area address returns
-        the area in the same shape, its index holding every entry of its case.
+        the area in the same shape: its own decisions and findings in force, superseded
+        the way a project's are, and an empty list of areas.
 
         The keys of the installation's projects are listed by `list_projects`.
         """
         async with runtime.call() as (session, actor):
             found = await areas_service.get_owner(session, key)
             attributes = await attributes_service.list_attributes(session, found, actor=actor)
-            if isinstance(found, Area):
-                knowledge: CaseKnowledge | None = None
-                areas: list[Area] = []
-            else:
-                knowledge = await decisions_service.case_knowledge(session, found, actor=actor)
-                areas = await areas_service.list_areas(
+            knowledge = await decisions_service.case_knowledge(session, found, actor=actor)
+            areas = (
+                []
+                if isinstance(found, Area)
+                else await areas_service.list_areas(
                     session, found, actor=actor, include_archived=include_archived_areas
                 )
+            )
             index = await case_service.project_case_index(session, found, actor=actor)
             return project(found, attributes, knowledge, areas, index)

@@ -36,8 +36,11 @@ from enum import StrEnum
 from typing import Any
 
 from app.domain.areas import (
+    ADDRESS_SEPARATOR,
     AREA_ADDRESS_SHAPE,
+    format_area_address,
     is_area_address,
+    is_area_key,
     parse_area_address,
 )
 from app.domain.errors import (
@@ -209,8 +212,13 @@ def is_plain_number(part: str) -> bool:
 #: разбирается поле задачи `decisions` (ниже), а `case.py` сам импортирует этот модуль.
 ENTRY_REF_SEPARATOR = "#"
 
-#: Форма ссылки на решение проекта в подробностях отказа: по ней агент чинит опечатку.
-DECISION_REF_SHAPE = f"<PROJECT>{ENTRY_REF_SEPARATOR}<entry number>"
+#: Форма ссылки на решение в подробностях отказа: по ней агент чинит опечатку. Решение —
+#: запись `decision` дела проекта (`TRK#15`) или дела области (`TRK/mcp#3`, решение TRK#57,
+#: раздел 5).
+DECISION_REF_SHAPE = (
+    f"<PROJECT>{ENTRY_REF_SEPARATOR}<entry number> or "
+    f"<PROJECT>{ADDRESS_SEPARATOR}<area>{ENTRY_REF_SEPARATOR}<entry number>"
+)
 
 #: Номер первой записи дела — у задачи и у проекта (`CONCEPT.md`, 3.4). Сквозной `seq`
 #: выдаёт база, а `no` считается внутри владельца.
@@ -223,19 +231,22 @@ MAX_DECISIONS = 20
 
 
 def normalize_decision_ref(value: Any) -> str:
-    """Ссылка на решение проекта в каноническом виде: `trk#15` → `TRK#15`.
+    """Ссылка на решение в каноническом виде: `trk#15` → `TRK#15`, `trk/MCP#3` → `TRK/mcp#3`.
 
-    Решение проекта — только запись дела проекта (`CONCEPT.md`, 3.2, «Слухи»), поэтому
-    форма одна — ключ проекта и номер. Запись задачи (`TRK-42#7`) отвергается своей
-    причиной `task_entry`, а не общей «не та форма»: это ровно та ссылка, которой практику
-    одной задачи выдают за решение, и отказ называет её прямо. Существует ли запись и
-    решение ли это, проверяет сценарий — домен в базу не ходит.
+    Решение — только запись дела проекта или дела области (`CONCEPT.md`, 3.2, «Слухи»;
+    решение TRK#57, раздел 5), поэтому форм две: ключ проекта и номер, адрес области и
+    номер. Запись задачи (`TRK-42#7`) отвергается своей причиной `task_entry`, а не общей
+    «не та форма»: это ровно та ссылка, которой практику одной задачи выдают за решение, и
+    отказ называет её прямо. Существует ли запись и решение ли это, проверяет сценарий —
+    домен в базу не ходит.
     """
     text = _text(value).strip()
     if not text:
         raise FieldProblem("empty_item")
     head, separator, tail = text.partition(ENTRY_REF_SEPARATOR)
     if separator and is_plain_number(tail) and int(tail) >= FIRST_ENTRY_NUMBER:
+        if is_area_address(head):
+            return f"{_area_of_decision(head, text)}{ENTRY_REF_SEPARATOR}{int(tail)}"
         try:
             parse_task_key(head)
         except InvalidTaskKeyError:
@@ -249,8 +260,26 @@ def normalize_decision_ref(value: Any) -> str:
     raise FieldProblem("not_a_decision_ref", ref=text, expected=DECISION_REF_SHAPE)
 
 
+def _area_of_decision(head: str, text: str) -> str:
+    """Адрес области из ссылки на её решение — канонический, обе части по шаблонам.
+
+    Строже адресации области (`parse_area_address` ищет и ключ не по шаблону): ссылка
+    ложится в поле задачи как есть, и две записи одного адреса в поле разошлись бы.
+    """
+    address = parse_area_address(head)
+    try:
+        project_key = validate_project_key(address.project_key)
+    except InvalidProjectKeyError:
+        raise FieldProblem("not_a_decision_ref", ref=text, expected=DECISION_REF_SHAPE) from None
+    if not is_area_key(address.key):
+        raise FieldProblem("not_a_decision_ref", ref=text, expected=DECISION_REF_SHAPE)
+    return format_area_address(project_key, address.key)
+
+
 def split_decision_ref(ref: str) -> tuple[str, int]:
-    """Канонический `TRK#15` → `("TRK", 15)`. Ссылка уже прошла `normalize_decision_ref`."""
+    """Каноническая ссылка → владелец решения и номер: `TRK#15` → `("TRK", 15)`,
+    `TRK/mcp#3` → `("TRK/mcp", 3)`. Ссылка уже прошла `normalize_decision_ref`; проект
+    или область — различает косая черта (`is_area_address`)."""
     key, _, no = ref.partition(ENTRY_REF_SEPARATOR)
     return key, int(no)
 

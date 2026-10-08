@@ -8,15 +8,16 @@
   B действующей, отбор `in_force` убирает A; то же в REST;
 - 3: `supersedes` у заметки на решение и у решения на заметку — `entry_fields_invalid`,
   повторная замена заменённой заметки — `finding_not_in_force` с преемником;
-- 4: `supersedes` в деле области — по-прежнему `entry_fields_invalid`.
+- 4: у записи дела задачи статуса нет.
 
 TRK-657 (решение TRK#48, раздел 3), в конце файла:
 
 - 2: опись `get_project` проекта без решений и заметок, действующие — списками ссылкой и
-  заголовком, число всех по типам — `index_omitted`; у области опись прежняя;
+  заголовком, число всех по типам — `index_omitted`;
 - 3: отбор `text` у `read_project_entries` и REST чтения дела проекта и области.
 
-Решения проекта, их ссылки из задач и чтение проекта — `tests/test_project_decisions.py`.
+Решения проекта, их ссылки из задач и чтение проекта — `tests/test_project_decisions.py`;
+та же механика у дела области (TRK-658) — `tests/test_area_knowledge.py`.
 """
 
 from typing import Any
@@ -30,7 +31,6 @@ from app.db.models.task import Task
 from app.domain.case import EntryType, build_project_entry, read_payload
 from app.domain.decisions import successors
 from app.domain.errors import EntryFieldsInvalidError, FindingNotInForceError
-from app.services import areas as areas_service
 from app.services import case as case_service
 from app.services.auth import Actor
 from conftest import Connect, call, refuse, without_empty_standing
@@ -295,45 +295,7 @@ async def test_supersedes_on_an_artifact_names_both_replaceable_types(
     assert (problem["reason"], problem["allowed_for"]) == ("not_allowed", ["decision", "finding"])
 
 
-# --- Проверка 4: дело области и дело задачи без статуса -------------------------------
-
-
-async def test_an_area_case_keeps_refusing_supersedes_and_has_no_status(
-    mcp_session: Connect,
-    auth_client: AsyncClient,
-    db_session: AsyncSession,
-    task_secret: str,
-    project: Project,
-    main_actor: Actor,
-) -> None:
-    """Проверка 4: `supersedes` у заметки области — `entry_fields_invalid`; записи
-    области читаются без статуса, и отбор `in_force` их не отдаёт."""
-    await areas_service.create_area(db_session, actor=main_actor, address="TRK/x", title="X")
-    async with mcp_session(task_secret) as session:
-        fact = await call(session, "add_project_entry", key="TRK/x", type="finding", title="Ф")
-        refused = await refuse(
-            session,
-            "add_project_entry",
-            key="TRK/x",
-            type="finding",
-            title="Ф2",
-            supersedes=[fact["no"]],
-        )
-        listed = await call(session, "read_project_entries", key="TRK/x")
-        in_force = await call(session, "read_project_entries", key="TRK/x", in_force=True)
-
-    assert "entry_fields_invalid" in refused
-    assert "supersedes" in refused
-    assert {(item.get("status"), item.get("superseded_by")) for item in listed["items"]} == {
-        (None, None)
-    }
-    assert in_force["items"] == []
-    rest = await auth_client.get(f"/api/v1/projects/TRK/areas/x/entries/{fact['no']}")
-    assert rest.status_code == 200, rest.text
-    assert (rest.json()["data"]["status"], rest.json()["data"]["payload"]) == (
-        None,
-        {"supersedes": []},
-    )
+# --- Проверка 4: дело задачи без статуса ----------------------------------------------
 
 
 async def test_a_task_finding_reads_without_a_status(
@@ -414,27 +376,6 @@ async def test_get_project_lists_knowledge_in_force_and_leaves_it_out_of_the_ind
     assert card["findings"] == [{"ref": f"TRK#{b['no']}", "title": "B"}]
     assert card["decisions"] == [{"ref": f"TRK#{decision['no']}", "title": "Решение"}]
     assert card["index_omitted"] == {"decision": 1, "finding": 2}
-
-
-async def test_an_area_index_keeps_its_decisions_and_findings(
-    mcp_session: Connect, task_secret: str, project: Project
-) -> None:
-    """У дела области статуса нет (`CONCEPT.md`, 3.7), списков действующих тоже: её
-    решения и заметки остаются в описи, `index_omitted` пуст."""
-    async with mcp_session(task_secret) as session:
-        await call(session, "create_project", key="TRK/x", title="X")
-        decision = await call(
-            session, "add_project_entry", key="TRK/x", type="decision", title="Решение"
-        )
-        fact = await call(session, "add_project_entry", key="TRK/x", type="finding", title="Ф")
-        card = await call(session, "get_project", key="TRK/x")
-
-    assert [(line["no"], line["type"]) for line in card["index"]] == [
-        (1, "created"),
-        (decision["no"], "decision"),
-        (fact["no"], "finding"),
-    ]
-    assert (card["decisions"], card["findings"], card["index_omitted"]) == ([], [], {})
 
 
 async def _numbers(client: AsyncClient, path: str, **params: Any) -> list[int]:

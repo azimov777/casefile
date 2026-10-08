@@ -45,6 +45,7 @@ from app.domain.projects import normalize_project_key
 from app.services import areas as service
 from app.services import attributes as attributes_service
 from app.services import case as case_service
+from app.services import decisions as decisions_service
 from app.services import projects as projects_service
 from app.services.auth import Actor
 
@@ -297,9 +298,10 @@ async def create_area_entry(
     """Подшивает запись в дело области: заметку, решение, находку или артефакт.
 
     Номер `no` считается внутри области, ссылка на запись — `TRK/promotion#3`.
-    `supersedes` здесь нет: механика решений проекта на дело области не
-    распространяется. Замечания к форме и ссылкам — разом в `422 entry_fields_invalid`.
-    Архивная область — `409 area_archived`.
+    `supersedes` в теле нет: замену у дела области ведёт агент через MCP, а интерфейс
+    записей не заменяет, и поле без вызова в REST не держат (решение TRK#53). Замечания к
+    форме и ссылкам — разом в `422 entry_fields_invalid`. Архивная область — `409
+    area_archived`.
     """
     area = await _area(session, project_key, area_key)
     given = entry.model_dump(mode="json")
@@ -339,7 +341,12 @@ async def list_area_entries(
 ) -> CollectionResponse[EntryRead]:
     """Записи дела области с телами и нагрузкой, в порядке `no` — те же фильтры, что у
     дела проекта, включая историю одного атрибута (`attribute`) и подстроку заголовка или
-    тела (`text`)."""
+    тела (`text`).
+
+    У решения и заметки — `status` и `superseded_by`, посчитанные при чтении, как в деле
+    проекта (решение TRK#57, раздел 5). Отбора `in_force` здесь нет: интерфейс его не
+    зовёт (решение TRK#53); у агента он есть в `read_project_entries`.
+    """
     area = await _area(session, project_key, area_key)
     page = await case_service.list_project_entries(
         session,
@@ -354,7 +361,10 @@ async def list_area_entries(
         cursor=cursor,
     )
     return CollectionResponse[EntryRead].of(
-        [entry_read(item, area=area.address) for item in page.items],
+        [
+            entry_read(item, area=area.address, standing=page.standings.get(item.no))
+            for item in page.items
+        ],
         next_cursor=page.next_cursor,
     )
 
@@ -367,13 +377,15 @@ async def read_area_entry(
     session: SessionDep,
     actor: ActorDep,
 ) -> DataResponse[EntryRead]:
-    """Одна запись дела области по номеру — адрес из ссылки `TRK/promotion#3`.
+    """Одна запись дела области по номеру — адрес из ссылки `TRK/promotion#3`; у решения
+    и заметки — со статусом и преемником, как в списке.
 
     Номера, которого в деле нет, — `404 entry_not_found`.
     """
     area = await _area(session, project_key, area_key)
     entry = await case_service.read_project_entry(session, area, entry_no, actor=actor)
-    return DataResponse[EntryRead](data=entry_read(entry, area=area.address))
+    standing = await decisions_service.standing_of(session, area, entry)
+    return DataResponse[EntryRead](data=entry_read(entry, area=area.address, standing=standing))
 
 
 async def _detail(

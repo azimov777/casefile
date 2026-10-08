@@ -299,25 +299,40 @@ async def test_a_note_is_filed_and_a_task_entry_cites_it_by_the_area_address(
     ]
 
 
-async def test_the_area_case_takes_no_supersedes(
+async def test_the_area_case_supersedes_a_decision_like_the_project_case(
     db_session: AsyncSession, project: Project, main_actor: Actor
 ) -> None:
-    """Механики решений проекта у дела области нет: `supersedes` — отказ формы, а
-    решение подшивается с пустой нагрузкой, как решение задачи."""
+    """Замена у дела области та же, что у дела проекта (решение TRK#57, раздел 5; прежний
+    отказ TRK-555 снят): решение несёт `supersedes` всегда, в том числе пустым, а
+    `supersedes` на служебную запись области — отказ «не решение»."""
     area = await _promotion(db_session, main_actor, project)
 
+    first = await case_service.append_project_entry(
+        db_session, area, actor=main_actor, type="decision", title="Каналы — Reddit и X"
+    )
+    second = await case_service.append_project_entry(
+        db_session,
+        area,
+        actor=main_actor,
+        type="decision",
+        title="Каналы — Reddit, X и HN",
+        supersedes=[first.no],
+    )
     with pytest.raises(EntryFieldsInvalidError) as refused:
         await case_service.append_project_entry(
             db_session, area, actor=main_actor, type="decision", title="Тезис", supersedes=[1]
         )
-    decision = await case_service.append_project_entry(
-        db_session, area, actor=main_actor, type="decision", title="Каналы — Reddit и X"
-    )
 
+    assert (first.payload, second.payload) == ({"supersedes": []}, {"supersedes": [first.no]})
     assert _reasons(refused) == [
-        {"field": "supersedes", "reason": "not_allowed", "allowed_in": "project_case"}
+        {
+            "field": "supersedes",
+            "reason": "not_a_decision",
+            "ref": "TRK/x#1",
+            "got": "created",
+            "expected": "decision",
+        }
     ]
-    assert decision.payload == {}
 
 
 def test_the_area_entry_reference_is_parsed_apart_from_project_and_url() -> None:
@@ -530,12 +545,17 @@ async def test_rest_keeps_attributes_entries_and_the_archive_of_an_area(
         None,
         "TRK/x",
     )
+    # Поля `supersedes` в теле REST области нет (решение TRK#53: интерфейс записей не
+    # заменяет); замена у дела области — путь агента через MCP, `test_area_knowledge.py`.
     superseding = await auth_client.post(
         f"{base}/entries",
         json={"type": "decision", "title": "Решение", "supersedes": [1]},
         headers={"Idempotency-Key": "d1ec7000-0000-4000-8000-000000000009"},
     )
-    assert superseding.status_code == 422
+    assert (superseding.status_code, superseding.json()["error"]["code"]) == (
+        422,
+        "validation_error",
+    )
 
     archived = await auth_client.post(f"{base}/archive", json={"reason": "Пауза"})
     assert archived.json()["data"]["archived_at"] is not None
@@ -656,14 +676,6 @@ async def test_mcp_archives_and_restores_an_area_by_its_address(
         restored = await call(session, "restore_project", key="TRK/x", reason="Назад")
         again = await refuse(session, "restore_project", key="TRK/x", reason="Ещё")
         taken = await refuse(session, "create_project", key="TRK/x", title="Y")
-        superseding = await refuse(
-            session,
-            "add_project_entry",
-            key="TRK/x",
-            type="decision",
-            title="Решение",
-            supersedes=[1],
-        )
 
     assert (archived["key"], archived["no"]) == ("TRK/x", 2)
     assert archived["archived_at"] is not None
@@ -673,7 +685,6 @@ async def test_mcp_archives_and_restores_an_area_by_its_address(
     assert (restored["key"], restored["archived_at"]) == ("TRK/x", None)
     assert "area_not_archived" in again
     assert "area_key_taken" in taken
-    assert "supersedes" in superseding
 
 
 async def test_an_area_entry_reads_the_same_through_mcp_and_rest(

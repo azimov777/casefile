@@ -31,6 +31,9 @@
   отвязка задачи; открытое с вопросом к человеку, к которому привязана DEMO-4, — входящая
   по обсуждениям; заведённое
   человеком запиской — ход за агентом;
+- знание в делах областей (решение `TRK#57`, разделы 5–6): у `DEMO/core` и `DEMO/ui`
+  решения и заметки, одна заметка заменена другой; в `DEMO/ui` своя задача (DEMO-3);
+  третья область, `DEMO/webhooks`, с решением уходит в архив;
 - связи всех трёх видов;
 - три автора: человек, постоянный агент и временный агент, подписанный меткой.
 
@@ -71,8 +74,15 @@ from app.services.tasks import TaskChanges
 #: Ключ демонстрационного проекта. Он же признак «демо уже наполнено».
 DEMO_PROJECT_KEY = "DEMO"
 
-#: Область демо-проекта: все его задачи, кроме одной «старой», заведены с ней (`area_required`).
+#: Область демо-проекта: все его задачи, кроме одной «старой» и задачи интерфейса, заведены
+#: с ней (`area_required`).
 DEMO_AREA = "DEMO/core"
+
+#: Вторая область демо-проекта со знанием и своей задачей (решение `TRK#57`).
+_UI_AREA = "DEMO/ui"
+
+#: Архивная область демо-проекта: её знание читается, а записи и новые задачи — нет.
+_ARCHIVED_AREA = "DEMO/webhooks"
 
 #: Область соседнего проекта: задача, переехавшая туда, обязана назвать область целевого проекта.
 _NEIGHBOUR_AREA = "LEGACY/past"
@@ -141,7 +151,14 @@ async def seed_demo(session: AsyncSession) -> DemoData:
         actor=owner,
         address=DEMO_AREA,
         title="Ядро",
-        description="Основные механики демо-проекта: все его задачи лежат здесь.",
+        description="Основные механики демо-проекта: почти все его задачи лежат здесь.",
+    )
+    await areas_service.create_area(
+        session,
+        actor=owner,
+        address=_UI_AREA,
+        title="Интерфейс",
+        description="Экраны человека: доска, карточка задачи, лента, страница проекта.",
     )
 
     done = await _done_task(session, project, agent=agent, temporary=temporary, human=human)
@@ -193,6 +210,7 @@ async def seed_demo(session: AsyncSession) -> DemoData:
         deferred=deferred,
         awaiting=awaiting,
     )
+    await _area_knowledge(session, agent=agent, owner=owner)
 
     return DemoData(
         project=project,
@@ -207,6 +225,90 @@ async def seed_demo(session: AsyncSession) -> DemoData:
             accepted,
             deferred,
         ],
+    )
+
+
+async def _area_knowledge(session: AsyncSession, *, agent: Actor, owner: Actor) -> None:
+    """Знание в делах областей (решение `TRK#57`, разделы 5–6).
+
+    `DEMO/core` получает решение и две заметки, где вторая заменяет первую: на странице
+    области видно «действует / заменена → преемник». В `DEMO/ui` — решение человека и
+    заметка агента; задача этой области — кандидат DEMO-3, заведённый с ней. Новой задачи
+    здесь нет: десятая задача демо дала бы ключ `DEMO-10`, и поиск строки `DEMO-1` в
+    сквозных сценариях находил бы две. `DEMO/webhooks` с решением уходит в архив: знание
+    архивной области читается, а писать в неё нельзя. Задачи на решения областей не
+    ссылаются: ссылку из карточки задачи интерфейс покажет своей задачей.
+    """
+    core = await areas_service.get_area(session, DEMO_AREA)
+    await case_service.append_project_entry(
+        session,
+        core,
+        actor=agent,
+        type=EntryType.DECISION,
+        title="Номер задачи выдаётся после проверки полей",
+        body=(
+            "Отклонённый запрос не должен сжигать номер. Выбрано: проверка полей до выдачи "
+            "номера. Отвергнуто: возвращать номер в пул — номера в проекте идут подряд."
+        ),
+        refs=["DEMO-1"],
+    )
+    burnt = await case_service.append_project_entry(
+        session,
+        core,
+        actor=agent,
+        type=EntryType.FINDING,
+        title="Отклонённый запрос сжигает номер задачи",
+        body="Воспроизведено на DEMO-1: номер выдаётся раньше проверки полей.",
+    )
+    await case_service.append_project_entry(
+        session,
+        core,
+        actor=agent,
+        type=EntryType.FINDING,
+        title="Отклонённый запрос номер задачи больше не сжигает",
+        body=(
+            "После DEMO-1 номер выдаётся последним шагом; прежняя заметка описывала "
+            "поведение до исправления."
+        ),
+        refs=["DEMO-1"],
+        supersedes=[burnt.no],
+    )
+
+    ui = await areas_service.get_area(session, _UI_AREA)
+    await case_service.append_project_entry(
+        session,
+        ui,
+        actor=owner,
+        type=EntryType.DECISION,
+        title="Тексты интерфейса — только в словарях, сразу на двух языках",
+        body="Строка в коде экрана не переводится и расходится со вторым языком.",
+    )
+    await case_service.append_project_entry(
+        session,
+        ui,
+        actor=agent,
+        type=EntryType.FINDING,
+        title="Safari прячет полосу прокрутки, пока по списку не провели",
+        body="Длинный список на доске в Safari выглядит обрезанным; в Chromium полоса видна.",
+    )
+
+    webhooks = await areas_service.create_area(
+        session,
+        actor=owner,
+        address=_ARCHIVED_AREA,
+        title="Вебхуки",
+        description="Доставка событий трекера наружу.",
+    )
+    await case_service.append_project_entry(
+        session,
+        webhooks,
+        actor=agent,
+        type=EntryType.DECISION,
+        title="Вебхуков нет: потребители читают ленту",
+        body="Лента отдаёт те же записи по сквозному номеру и не теряет их при сбое потребителя.",
+    )
+    await areas_service.archive_area(
+        session, webhooks, actor=owner, reason="Вебхуки сняты: потребители читают ленту"
     )
 
 
@@ -691,12 +793,13 @@ async def _in_progress_task(
 
 
 async def _candidate_task(session: AsyncSession, project: Project, *, agent: Actor) -> Task:
-    """Свободная задача без блокеров и открытых вопросов — кандидат назначателя."""
+    """Свободная задача без блокеров и открытых вопросов — кандидат назначателя. Экран
+    ленты — область `DEMO/ui`: задача второй области демо (решение `TRK#57`)."""
     task = await tasks_service.create_task(
         session,
         actor=agent,
         project=project,
-        area=DEMO_AREA,
+        area=_UI_AREA,
         title="Ссылка на запись дела в ленте не открывает запись",
         description="В ленте ссылка `DEMO-1#3` показана текстом, перейти к записи нельзя.",
         goal="Из ленты можно перейти к записи, на которую сослались",

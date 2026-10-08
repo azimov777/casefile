@@ -73,9 +73,10 @@ _NOT_BEFORE_DESCRIPTION = (
     "every change files `field_changed`"
 )
 _DECISIONS_DESCRIPTION = (
-    "Project decisions the task relies on: references `PROJECT#N` to `decision` entries of "
-    f"a project's case, up to {MAX_DECISIONS}, in the order set. A task entry (`TRK-42#7`) "
-    "answers `task_fields_invalid` with reason `task_entry`, a project entry of another "
+    "Decisions the task relies on: references `PROJECT#N` or `PROJECT/area#N` to "
+    "`decision` entries of a project's or an area's case, up to "
+    f"{MAX_DECISIONS}, in the order set. A task entry (`TRK-42#7`) answers "
+    "`task_fields_invalid` with reason `task_entry`, a project or area entry of another "
     "type `not_a_decision`. A reference not yet in the field must lead to a decision in "
     "force, otherwise `decision_not_in_force` names its successor"
 )
@@ -459,8 +460,9 @@ class TaskPackageRead(BaseModel):
     )
     decisions: list[CitedDecisionRead] = Field(
         description=(
-            "Project decisions the task relies on, in the order of its `decisions` field, "
-            "each with its status computed on read and, once superseded, its successor. "
+            "Project and area decisions the task relies on, in the order of its "
+            "`decisions` field, each with its status computed on read and, once "
+            "superseded, its successor. "
             "The project's other decisions are part of the project read"
         )
     )

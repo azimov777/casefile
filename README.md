@@ -216,7 +216,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 - `resolve` — resolves a remark on a task: its outcome and where the work went
 - `add_verdict` — files the outcome of one review check
 - `read_project_entries` — returns entry bodies of one project's, area's or discussion's case, with payload, in number order; filters by number, type, status and a substring of the title or body
-- `add_project_entry` — files a decision, finding, artifact or note in a project's case, or a note in a discussion's case
+- `add_project_entry` — files a decision, finding, artifact or note in a project's or an area's case, or a note in a discussion's case
 
 **Discussions**
 - `add_conclusion` — files a discussion's conclusion: what is decided, superseded and still open
@@ -227,7 +227,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 - `unlink` — removes a link and files `link_removed` in both cases, or detaches a task from a discussion
 
 **Projects & participants**
-- `get_project` — returns one project by its key: key, title, description, current attribute values, the decisions and findings in force and the index of the rest of its case
+- `get_project` — returns one project by its key, or an area by its address in the same shape: key, title, description, current attribute values, the decisions and findings in force and the index of the rest of its case
 - `list_projects` — lists the installation's projects: key, title and archive time; archived ones only when asked
 - `list_participants` — lists the participant registry: the possible addressees of a question
 - `create_project` — creates a project
