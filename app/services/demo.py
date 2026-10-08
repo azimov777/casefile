@@ -21,14 +21,15 @@
 - перенос туда и обратно: отменённая задача уезжает в соседний проект `LEGACY` и
   возвращается со своим ключом, а прежний ключ `LEGACY-1` остаётся в её карточке;
   опустевший `LEGACY` уходит в архив и в списке проектов не виден;
-- открытый блокирующий вопрос, адресованный человеку, — «входящая» и первый экран
-  без него пусты. Он и отвеченный вопрос задачи в работе лежат в делах задач, как
-  вопросы, подшитые до обсуждений (`case.file_legacy_task_question`): новых вопросов в
-  деле задачи трекер не принимает (`TRK#51`, п. 6), а прежние экраны карточки и входящей
-  читают именно такие. Ожидание по вопросу обсуждения вместо них — после экранов
-  обсуждения (TRK-672);
+- ожидание ответа человека — вопросом в обсуждении (`TRK#51`, п. 4 и 6): DEMO-4 привязана
+  к открытому обсуждению с вопросом к человеку и стоит в `open` с причиной, называющей
+  обсуждение, — «входящая» и первый экран без него пусты. Открытых вопросов в делах
+  демо-задач нет; единственный прежний вопрос — отвеченный, у задачи в работе (DEMO-2): он
+  лежит в деле как вопрос, подшитый до обсуждений (`case.file_legacy_task_question`) — такие
+  законно живут в установках, а новых в деле задачи трекер не принимает;
 - обсуждения (решение `TRK#51`): закрытое с итогом — вопрос, ответ, итог, привязка и
-  отвязка задачи; открытое с вопросом к человеку — входящая по обсуждениям; заведённое
+  отвязка задачи; открытое с вопросом к человеку, к которому привязана DEMO-4, — входящая
+  по обсуждениям; заведённое
   человеком запиской — ход за агентом;
 - знание в делах областей (решение `TRK#57`, разделы 5–6): у `DEMO/core` и `DEMO/ui`
   решения и заметки, одна заметка заменена другой; в `DEMO/ui` своя задача (DEMO-3);
@@ -166,7 +167,7 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     done = await _done_task(session, project, agent=agent, temporary=temporary, human=human)
     in_progress = await _in_progress_task(session, project, agent=agent, owner=owner, human=human)
     candidate = await _candidate_task(session, project, agent=agent)
-    awaiting = await _awaiting_answer_task(session, project, agent=agent, human=human)
+    awaiting = await _awaiting_answer_task(session, project, agent=agent)
     child = await _child_task(session, project, agent=agent, parent=in_progress)
     checking = await _checking_task(
         session, project, agent=agent, temporary=temporary, blocker=in_progress
@@ -203,7 +204,15 @@ async def seed_demo(session: AsyncSession) -> DemoData:
 
     accepted = await _accepted_warning_task(session, project, agent=agent, human=human)
     deferred = await _deferred_task(session, project, agent=agent)
-    await _discussions(session, project, agent=agent, owner=owner, human=human, deferred=deferred)
+    await _discussions(
+        session,
+        project,
+        agent=agent,
+        owner=owner,
+        human=human,
+        deferred=deferred,
+        awaiting=awaiting,
+    )
     await _area_knowledge(session, agent=agent, owner=owner)
 
     await _knowledge_drafts(session, lifted=done, unlifted=accepted, agent=agent)
@@ -855,16 +864,16 @@ async def _candidate_task(session: AsyncSession, project: Project, *, agent: Act
     return task
 
 
-async def _awaiting_answer_task(
-    session: AsyncSession, project: Project, *, agent: Actor, human: Participant
-) -> Task:
-    """Задача ждёт ответа человека: сценарий `CONCEPT.md`, 4.6, строка «Ответа, долго».
+async def _awaiting_answer_task(session: AsyncSession, project: Project, *, agent: Actor) -> Task:
+    """Задача, которая упрётся в вопрос человеку: сценарий `CONCEPT.md`, 4.6, «Ответа, долго».
 
-    Агент упёрся в вопрос, на который сам ответить не может, задал его с признаком
-    `blocking`, написал сводку и ушёл в `open` с причиной, называющей вопрос. Ожидание
-    держит вопрос, а не статус: кандидатом задача не считается, пока он открыт
-    (`open_blocking_questions`), и в работу её не взять (`task_has_open_blocking_questions`).
-    Человек видит вопрос в своей «входящей», а саму задачу — в столбце «Ждёт ответа».
+    Здесь она только доведена до `in_progress`. Вопрос агент задаёт в обсуждении,
+    привязанном к задаче (`TRK#51`, п. 6), а обсуждения демо заводятся после всех задач,
+    чтобы их номера не менялись, — потому сводку и уход в `open` делает `_await_answer`
+    из `_discussions`. Ожидание держит вопрос обсуждения, а не статус: кандидатом задача
+    не считается, пока он открыт (`open_blocking_questions`), и в работу её не взять
+    (`task_has_open_blocking_questions`). Человек видит вопрос в «входящей» по
+    обсуждениям, а саму задачу — в столбце «Ждёт ответа».
     """
     task = await tasks_service.create_task(
         session,
@@ -882,34 +891,6 @@ async def _awaiting_answer_task(
     )
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.OPEN)
     await tasks_service.transition_task(session, task, actor=agent, to=TaskStatus.IN_PROGRESS)
-    question = await case_service.file_legacy_task_question(
-        session,
-        task,
-        actor=agent,
-        addressees=[human.name],
-        title="Срок хранения дел отменённых задач — это решение владельца, а не агента",
-        body=(
-            "Концепция говорит «записи постоянны». Если это менять, менять надо "
-            "концепцию, а такого права у меня нет. Сколько храним?"
-        ),
-        blocking=True,
-    )
-    await case_service.add_summary(
-        session,
-        task,
-        actor=agent,
-        done="Собрал, что говорит концепция о постоянстве записей, и что стоит за этим решением",
-        remaining="Всё остальное: без ответа владельца двигаться некуда",
-        blockers="Открытый блокирующий вопрос о сроке хранения",
-        next_step="Дождаться ответа и подшить решение",
-    )
-    await tasks_service.transition_task(
-        session,
-        task,
-        actor=agent,
-        to=TaskStatus.OPEN,
-        reason=f"Жду ответа владельца на {task.key}#{question.no} о сроке хранения дел",
-    )
     return task
 
 
@@ -1037,15 +1018,15 @@ async def _discussions(
     owner: Actor,
     human: Participant,
     deferred: Task,
+    awaiting: Task,
 ) -> None:
     """Три обсуждения (решение `TRK#51`): закрытое, ждущее человека и ждущее агента.
 
-    Заводятся последними, после всех задач, — ключи задач от этого не сдвигаются. Признаков
-    и дел задач, которые читают сквозные сценарии интерфейса, обсуждения не трогают: вопрос
-    открытого обсуждения считается вопросом привязанной задачи (`TRK#51`, п. 4), а запись
-    привязки ложится в её дело, и у DEMO-4 стало бы два вопроса, у DEMO-6 — на две записи
-    больше. Поэтому открытые обсуждения — без задач, а привязка и отвязка закрытого — у
-    отложенной DEMO-9, чьего дела сценарии не считают; после отвязки её ничто не держит.
+    Заводятся последними, после всех задач, — ключи задач от этого не сдвигаются. Открытое
+    обсуждение с вопросом к человеку привязано к DEMO-4: она ждёт ответа на этот вопрос, и
+    её признаки (`open_blocking_questions` = 1) и строка списка те же, что были, когда вопрос
+    лежал в деле. Привязка и отвязка закрытого — у отложенной DEMO-9, чьего дела сценарии не
+    считают; после отвязки её ничто не держит. Дел демо-задач с открытыми вопросами нет.
     """
     # Закрытое: вопрос, ответ, итог и `closed`; задача привязана и отвязана.
     settled = await discussions_service.create_discussion(
@@ -1080,17 +1061,10 @@ async def _discussions(
         refs=[f"{settled.address}#{answer.no}"],
     )
 
-    # Ждёт человека: вопрос без ответа — входящая по обсуждениям. Без задач: обсуждение
-    # без привязок бывает, и находят его отбором `turn`, а не через задачу.
-    await discussions_service.create_discussion(
-        session,
-        actor=agent,
-        project=project,
-        title="Сколько хранить дела отменённых задач?",
-        opening=EntryType.QUESTION,
-        body="Концепция говорит «записи постоянны»; менять её может только владелец.",
-        addressees=[human.name],
-    )
+    # Ждёт человека: вопрос без ответа в обсуждении, к которому привязана DEMO-4 (`TRK#51`,
+    # п. 6). Агент задаёт его как вопрос по задаче и уходит в `open` с причиной, называющей
+    # обсуждение: ожидание держит сам вопрос.
+    await _await_answer(session, awaiting, agent=agent, human=human)
 
     # Ждёт агента: человек завёл обсуждение запиской, без задач.
     await discussions_service.create_discussion(
@@ -1141,4 +1115,39 @@ async def _moved_there_and_back(
     )
     await projects_service.archive_project(
         session, neighbour, actor=owner, reason="Задачи вернулись в DEMO, проект пуст"
+    )
+
+
+async def _await_answer(
+    session: AsyncSession, task: Task, *, agent: Actor, human: Participant
+) -> None:
+    """Агент упёрся в вопрос, на который сам ответить не может: задал его в обсуждении,
+    написал сводку и ушёл в `open` с причиной, называющей обсуждение."""
+    opening = await discussions_service.ask_about_task(
+        session,
+        task,
+        actor=agent,
+        addressees=[human.name],
+        title="Сколько хранить дела отменённых задач?",
+        body=(
+            "Концепция говорит «записи постоянны». Если это менять, менять надо "
+            "концепцию, а такого права у меня нет. Сколько храним?"
+        ),
+    )
+    address = opening.discussion.address
+    await case_service.add_summary(
+        session,
+        task,
+        actor=agent,
+        done="Собрал, что говорит концепция о постоянстве записей, и что стоит за этим решением",
+        remaining="Всё остальное: без ответа владельца двигаться некуда",
+        blockers=f"Открытый вопрос о сроке хранения в обсуждении {address}",
+        next_step="Дождаться ответа и подшить решение",
+    )
+    await tasks_service.transition_task(
+        session,
+        task,
+        actor=agent,
+        to=TaskStatus.OPEN,
+        reason=f"Жду ответа владельца в обсуждении {address} о сроке хранения дел",
     )

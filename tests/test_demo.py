@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.participant import Participant
 from app.domain.authors import AuthorKind
-from app.domain.case import EntryType, is_blocking_question
+from app.domain.case import EntryType
+from app.domain.discussions import DiscussionStatus, DiscussionTurn
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.tasks import AskedParent, TaskParent, TaskStatus
@@ -230,18 +231,29 @@ async def test_decomposed_test_is_a_child_of_the_task_in_progress(
 async def test_demo_leaves_exactly_one_open_blocking_question(
     db_session: AsyncSession, seeded: demo_service.DemoData, reader: Actor
 ) -> None:
-    """Открытый блокирующий вопрос — то, чем наполняются «входящая» и первый экран.
+    """Ожидание ответа — вопросом в обсуждении (`TRK#51`, п. 4 и 6), а не в деле задачи.
 
-    Он же делает осмысленным запрос кандидатов: задача с таким вопросом в работу не
-    отдаётся, и в демо обязана быть и такая задача, и свободная.
+    Открытых вопросов в делах демо-задач нет; единственный блокирующий вопрос — в открытом
+    обсуждении, к которому привязана DEMO-4. Он наполняет «входящую» и первый экран и
+    делает осмысленным запрос кандидатов: задача с таким вопросом в работу не отдаётся,
+    и в демо обязана быть и такая задача, и свободная.
     """
     blocking: list[str] = []
     for task in seeded.tasks:
-        for question in await case_service.open_questions(db_session, task, actor=reader):
-            if is_blocking_question(question.payload):
-                blocking.append(task.key)
+        assert await case_service.open_questions(db_session, task, actor=reader) == [], task.key
+        refs = await case_service.open_blocking_question_refs(db_session, task)
+        if refs:
+            assert len(refs) == 1 and "~" in refs[0], (task.key, refs)
+            blocking.append(task.key)
 
-    assert len(blocking) == 1, blocking
+    assert blocking == [f"{DEMO_PROJECT_KEY}-4"], blocking
+
+    waiting = await search_service.search_tasks(
+        db_session,
+        actor=reader,
+        query=f"project: {DEMO_PROJECT_KEY} and open_blocking_questions: 1",
+    )
+    assert [found.task.key for found in waiting.page.items] == blocking
 
     outcome = await search_service.search_tasks(
         db_session,
@@ -284,9 +296,18 @@ async def test_the_demo_human_is_the_owner_the_init_command_creates(
 ) -> None:
     """Иначе блокирующий вопрос ушёл бы участнику, чьего токена никому не выдавали.
 
-    Первый экран после `init` и `demo` обязан показать ненулевое число вопросов, а
-    показывает он их владельцу — тому самому, чей токен лежит в фикстуре.
+    Первый экран после `init` и `demo` обязан показать ненулевое число ждущих человека, а
+    показывает он их владельцу — тому самому, чей токен лежит в фикстуре. Ждёт он
+    обсуждения с вопросом (`TRK#51`); открытых вопросов в делах задач у владельца нет.
     """
     owner: Participant = await participants_service.get_participant(db_session, DEFAULT_OWNER_NAME)
 
-    assert await case_service.count_open_questions(db_session, participant=owner) == 1
+    assert await case_service.count_open_questions(db_session, participant=owner) == 0
+    assert await discussions_service.count_waiting_on_humans(db_session) == 1
+    page = await discussions_service.list_discussions(
+        db_session,
+        actor=reader,
+        status=DiscussionStatus.OPEN,
+        turn=DiscussionTurn.HUMAN,
+    )
+    assert [row.discussion.address for row in page.items] == ["DEMO~2"]
