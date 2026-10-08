@@ -41,7 +41,7 @@ your shell has — wrong the moment `.env` sets its own names.
 over an existing database without a separate `DROP SCHEMA` step. The dump holds only the
 logical content of the tables — no write-ahead log, no index bloat, no free page space —
 so it is much smaller than the `pgdata` volume for the same data; a measured example is in
-`docs/notes/docker.md`.
+`TRK/docker#34`.
 
 Store the file off the machine it came from — a copy that lives next to the database it
 backs up is not a backup.

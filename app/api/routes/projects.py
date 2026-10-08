@@ -95,7 +95,7 @@ async def create_project(
     """
 
     # Ответ без атрибутов: у нового проекта их нет, а форма ответа создающего вызова
-    # живёт сутки в ключах идемпотентности, и расширять её нельзя (`docs/notes/mcp.md`).
+    # живёт сутки в ключах идемпотентности, и расширять её нельзя (`TRK/mcp#11`).
     async def create() -> DataResponse[ProjectRead]:
         project = await service.create_project(
             session,

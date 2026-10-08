@@ -76,7 +76,7 @@ def register(tools: Toolset) -> None:
                     session, task, other_task, actor=actor, kind=LinkKind(kind)
                 )
                 # Номера читаются из обоих дел, а не протаскиваются через `add_link`
-                # (`docs/notes/mcp.md`): под общей блокировкой изменений последняя
+                # (`TRK/mcp#28`): под общей блокировкой изменений последняя
                 # запись каждого дела — только что подшитый `link_added`.
                 entry = await case_service.latest_entry_no(session, task, actor=actor)
                 other_entry = await case_service.latest_entry_no(session, other_task, actor=actor)

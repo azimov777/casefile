@@ -24,7 +24,7 @@ DECISIONS_RULE = (
 
 #: Область задачи (TRK#57): адрес области её проекта. Ставит
 #: `create_task`, меняет `update_task`; формулировка короткая намеренно — метадата
-#: инструментов держится в бюджете токенов (`docs/notes/mcp.md`).
+#: инструментов держится в бюджете токенов (`TRK/mcp#68`).
 AREA_RULE = "Area address `PROJECT/key`"
 
 AreaArg = Annotated[str | None, Field(description=AREA_RULE)]

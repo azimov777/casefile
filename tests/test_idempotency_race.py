@@ -106,7 +106,7 @@ async def committed_installation(
     finally:
         async with committing_sessions() as session:
             # Записи дела неизменяемы триггером, и уборка закоммиченных строк — то самое
-            # единственное место, где его законно выключить (`docs/notes/db.md`).
+            # единственное место, где его законно выключить (`TRK/db#30`).
             await session.execute(text("ALTER TABLE entries DISABLE TRIGGER entries_immutable"))
             await session.execute(
                 text(

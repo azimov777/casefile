@@ -302,7 +302,7 @@ async def latest_entry_no(session: AsyncSession, task: Task, *, actor: Actor) ->
     писателей до конца вызова, и «последняя запись» здесь факт, а не гонка. Так `link` и
     `unlink` называют номер `link_added`/`link_removed`, подшитый в дело **другой**
     задачи, не читая его целиком и не протаскивая номер через сигнатуру `links_service`
-    (`docs/notes/mcp.md`).
+    (`TRK/mcp#28`).
     """
     no = await EntryRepository(session).latest_no(task.id)
     assert no is not None  # у любой задачи есть хотя бы `created`
@@ -1621,7 +1621,7 @@ async def record_link_change(
 
     Порядок двух вызовов важен и задаётся вызывающим: `allocate_no` держит строку задачи
     до конца транзакции, и две подшивки в разном порядке взаимно заблокировались бы
-    (`docs/notes/links.md`). Обе стороны одной связи делят один `action_id`, который
+    (`TRK/links#5`). Обе стороны одной связи делят один `action_id`, который
     вызывающий (`_record_on_both_sides`) генерирует один раз и передаёт в оба вызова.
     """
     action = "added" if added else "removed"
