@@ -60,16 +60,13 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 `feat(case): ...`, `fix(tasks): ...`, `docs(mcp): ...`. One commit is one meaningful
 change — a task usually becomes several commits rather than one.
 
-The full setup guide is [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+Design decisions live in the maintainer's tracker, not in the repository. If something is unclear, ask in an issue.
 
 ## A note on language
 
 Everything facing the outside world — this file, the README, the tool descriptions an
-agent reads, error messages — is in English. The internal documents are in Russian: the
-concept (`docs/CONCEPT.md`), the conventions (`docs/CONVENTIONS.md`) and the notes under
-`docs/notes/`. They are the reasoning behind the design, written for the people building
-it, and translating them is not planned. If something in there blocks you, ask in an
-issue and it will be answered in English.
+agent reads, error messages — is in English. If something about the design blocks you,
+ask in an issue and it will be answered in English.
 
 ## Reporting a problem
 
