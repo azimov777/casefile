@@ -46,8 +46,10 @@ test('на демо: проект → «Области» → область → 
   await page.getByRole('checkbox', { name: /Показать заменённые/ }).check();
   const old = page.locator('li[data-knowledge]', { hasText: OLD_NOTE });
   await expect(old).toHaveAttribute('data-status', 'superseded');
-  await expect(old.getByText('заменено', { exact: true })).toBeVisible();
-  const successor = old.getByRole('link', { name: new RegExp(`^${ADDRESS}#\\d+$`) });
+  await expect(old.locator('[data-entry-state]')).toContainText('заменено');
+  const successor = old
+    .locator('[data-entry-state]')
+    .getByRole('link', { name: new RegExp(`^${ADDRESS}#\\d+$`) });
   const href = await successor.getAttribute('href');
   expect(href).toMatch(/\/projects\/DEMO\/areas\/core\?entry=\d+$/);
 
@@ -83,7 +85,7 @@ test('в «Деле» проекта и области заменённая за
 }) => {
   await page.goto('/projects/DEMO/areas/core?tab=case');
   const row = page.getByRole('row', { name: new RegExp(OLD_NOTE) });
-  await expect(row.getByText('заменено', { exact: true })).toBeVisible();
+  await expect(row.locator('[data-entry-state]')).toContainText('заменено');
   await expect(row.getByRole('link', { name: new RegExp(`^${ADDRESS}#\\d+$`) })).toBeVisible();
 });
 
