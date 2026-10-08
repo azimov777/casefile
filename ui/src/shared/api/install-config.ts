@@ -6,7 +6,7 @@ import { getInstallToken, isHeaderSafe, setInstallToken } from './token';
  * Ключ, который вкладке отдаёт сама установка, не спрашивая человека ни о чём, — и как
  * она его отдаёт.
  *
- * Контракт: `GET /config.json` на своём источнике (`../docs/FRONTEND.md`, «Вход учётной
+ * Контракт: `GET /config.json` на своём источнике (`ui/docs/FRONTEND.md`, «Вход учётной
  * записью»). Ответов три:
  *
  * - `200 {"token"}` — своя машина: ключ администратора `owner@localhost`, без входа;
