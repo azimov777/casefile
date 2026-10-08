@@ -1246,12 +1246,12 @@ async def add_discussion_entry(
 
     Из типов дела проекта у обсуждения есть только `note`: остальные домен отвергает
     списком допустимых (`entry_fields_invalid`, `not_allowed`). Непустой `supersedes`
-    отвергается тем же кодом и той же причиной, что у области: механики замены у
-    обсуждения нет.
+    отвергается тем же кодом: механики замены у обсуждения нет, она есть только в делах
+    проекта и области (решение TRK#57, раздел 5), и `allowed_in` называет оба.
     """
     if supersedes:
         problems = FieldProblems()
-        problems.add(SUPERSEDES_FIELD, "not_allowed", allowed_in="project_case")
+        problems.add(SUPERSEDES_FIELD, "not_allowed", allowed_in=["project_case", "area_case"])
         problems.raise_as(EntryFieldsInvalidError, key=discussion.address)
     return await append_discussion_entry(
         session, discussion, actor=actor, type=type, title=title, body=body, refs=refs
