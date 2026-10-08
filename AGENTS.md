@@ -36,7 +36,7 @@ MCP-сервер для агентов; в `ui/` — интерфейс чело
   расширение Claude Desktop `casefile.mcpb` в GitHub Release на его публикацию — `mcpb.yml`), бот
   еженедельных PR с обновлением `uv.lock` (`dependabot.yml`), текст `DCO` и шаблон запроса на слияние `PULL_REQUEST_TEMPLATE.md`
 - `app/` — код приложения: слои api, mcp, domain, services, db, core
-- `docs/` — справочник ошибок, установка для агентов, публичные руководства, черновики заметок к выпускам
+- `docs/` — справочник ошибок, установка для агентов, публичные руководства
 - `docker/` — образы для разработки и продакшена
 - `mcpb/` — расширение чата Claude Desktop `casefile.mcpb` (формат MCPB): манифест с полем адреса MCP, версия равна версии выпуска, `name` равно имени сервера; мост `mcp-remote` закреплён `package.json` и lock-файлом; архив собирает `scripts/build-mcpb.sh`, в выпуск кладёт `.github/workflows/mcpb.yml`
 - `tests/` — тесты, запускаются только в контейнере
