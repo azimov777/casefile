@@ -48,7 +48,7 @@ SCRIPT = PROJECT_ROOT / "scripts" / "merge-task-branch.sh"
 #: проекта TRK#223–TRK#225 и атрибуты проекта `merge_command`, `test_command`, `lint_command`
 #: в трекере (руководство разработчика перенесено в трекер, TRK-615); тест трекера не читает,
 #: поэтому сверяет скрипт с тем, что лежит в репозитории: конвейером GitHub (`ci.yml` — слияние
-#: гоняет тот же набор, что `checks`) и скриптом слияния интерфейса (тот же ключ строки-доказательства).
+#: гоняет тот же набор, что `checks`) и скриптом слияния интерфейса (ключ строки-доказательства).
 CI_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
 SIBLING_SCRIPT = PROJECT_ROOT / "ui" / "scripts" / "merge-task-branch.sh"
 
@@ -97,7 +97,7 @@ def test_the_sibling_script_names_the_same_proof_line_as_the_script() -> None:
     key = _declaration(TRAILER_KEY)
     sibling = SIBLING_SCRIPT.read_text(encoding="utf-8")
 
-    assert f'TRAILER_KEY="{key}"' in sibling, f"строка {key!r} из скрипта не названа в {SIBLING_SCRIPT.name} интерфейса"
+    assert f'TRAILER_KEY="{key}"' in sibling, f"строка {key!r} не названа в скрипте интерфейса"
 
 
 def test_the_merge_runs_the_whole_suite_and_says_so() -> None:
@@ -110,7 +110,7 @@ def test_the_merge_runs_the_whole_suite_and_says_so() -> None:
     command = " ".join(_declaration(TEST_COMMAND).split())
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
-    assert f"run: {command}\n" in workflow, f"{CI_WORKFLOW.name} не прогоняет набор командой {command!r}"
+    assert f"run: {command}\n" in workflow, f"ci.yml не прогоняет набор командой {command!r}"
 
 
 def test_the_ci_names_lint_and_pnpm_check_as_merge_steps() -> None:
