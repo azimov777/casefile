@@ -29,7 +29,7 @@ import { isConnection, isRevoked, isSession, isThisComputer, type Token } from '
  *
  * Ничего не вычисляет: «отозван» — это заполненный `revoked_at`, «общий» — пустой
  * `participant`, а «этот сеанс» приходит снаружи сравнением с `token.id` из
- * `GET /api/v1/bootstrap` (`docs/FRONTEND.md`, «Токен сеанса»).
+ * `GET /api/v1/bootstrap` (TRK/ui-api#8, «Токен сеанса»).
  */
 export function TokenItem({
   token,

@@ -81,7 +81,7 @@ export function splitTaskRefs(text: string): TextPart[] {
  *
  * Тем же параметром `entry`, что и карточка задачи, и по той же причине: ссылка на
  * запись ведёт к её владельцу, а не в ленту (`taskRefHref` ниже). Ленты у проекта нет
- * вовсе (`docs/CONCEPT.md`, 3).
+ * вовсе: дело проекта — вкладка «Дело» его экрана (TRK#59).
  */
 export function projectHref(key: string, entryNo: number | null = null): string {
   const path = `/projects/${key}`;
@@ -151,7 +151,7 @@ export function ownerRefHref(key: string, entryNo: number | null): string {
  * Номер записи едет параметром, а не якорем `#12`, хотя в тексте ссылка выглядит именно
  * так: якорь для браузера — цель прокрутки к элементу с таким `id`, а нам нужно раскрыть
  * запись и дочитать её тело. Это состояние страницы, и живёт оно там же, где остальное
- * состояние адреса (`CONVENTIONS.md`, «Состояние»).
+ * состояние адреса (TRK/ui-api#4).
  */
 export function taskRefHref(ref: TaskRef): string {
   const path = `/tasks/${ref.key}`;

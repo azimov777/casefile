@@ -79,7 +79,7 @@ describe('useExitHold', () => {
       initialProps: { open: true },
     });
     // Страницу просто открыли. Никакого события не было, и приезжать неоткуда:
-    // движение отвечает на событие (`CONCEPT.md`, 6).
+    // движение отвечает на событие (TRK#238).
     expect(result.current.entering).toBe(false);
 
     rerender({ open: false });

@@ -34,7 +34,7 @@ const PART_TITLE = 'text-label font-semibold tracking-caps uppercase';
 const REF = 'font-mono text-meta';
 
 /**
- * Тело записи в том виде, какого требует её тип (`CONCEPT.md`, 4).
+ * Тело записи в том виде, какого требует её тип (TRK/ui-screens#10).
  *
  * Разбор по `type` исчерпывающий: объединение размечено, и забытый тип записи станет
  * ошибкой сборки в `assertNever`, а не пустым местом на экране в тот день, когда
