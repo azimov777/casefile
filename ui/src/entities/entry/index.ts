@@ -6,6 +6,7 @@ export {
   entryKeys,
   entryQueryOptions,
   areaKnowledgeQueryOptions,
+  taskDraftsQueryOptions,
   holderCaseQueryOptions,
   isServiceEntry,
   projectCaseQueryOptions,
@@ -52,6 +53,7 @@ export {
   sectionEditsHeadline,
   type SectionEditsRun,
 } from './model/section-edits';
+export { draftOfEntry, liftedByHref, type DraftState } from './model/draft';
 export { readEntryTypes } from './model/entry-types';
 export { knowledgeEntryHref, stateOfEntry, type EntryState } from './model/state';
 export { entryReference, ownerOfEntry, type EntryOwner } from './model/owner';
@@ -59,6 +61,7 @@ export { AuthorName } from './ui/author-name';
 export { CaseFilters } from './ui/case-filters';
 export { EmptyByTypesNotice, HiddenByTypeNotice } from './ui/case-type-notices';
 export { CopyEntryLink } from './ui/copy-entry-link';
+export { DraftMark } from './ui/draft-mark';
 export { DecisionStatusMark, type DecisionStatus } from './ui/decision-status';
 export { EntryStateMark } from './ui/entry-state-mark';
 export { EntryBody } from './ui/entry-body';

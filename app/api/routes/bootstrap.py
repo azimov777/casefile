@@ -33,10 +33,10 @@ async def read_bootstrap(
 
     У общего агентского токена участника нет: `participant` приходит `null`, а
     `open_questions` — ноль, потому что временного агента нельзя адресовать вопросом
-    (`docs/CONCEPT.md`, 3.6). Проекты в этом случае отдаются те же самые.
+    (TRK#71). Проекты в этом случае отдаются те же самые.
 
     Архивные проекты — только с `include_archived=true`, как в `GET /api/v1/projects`;
-    вопросы в их задачах `open_questions` не считает никогда (`docs/CONCEPT.md`, 3.6), как
+    вопросы в их задачах `open_questions` не считает никогда (TRK#145), как
     и `open_warnings` — их предупреждения.
     """
     state = await service.read_bootstrap(session, actor=actor, include_archived=include_archived)

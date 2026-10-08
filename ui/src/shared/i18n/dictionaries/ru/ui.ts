@@ -33,7 +33,7 @@ export const ui = {
   } satisfies Record<AuthorKind, string>,
   /**
    * Решение проекта (TRK-554): род значения внутри плашки статуса и сам статус —
-   * значение контракта, посчитанное бэкендом при чтении (`../docs/CONCEPT.md`, 3.2).
+   * значение контракта, посчитанное бэкендом при чтении (TRK#90).
    */
   decision: {
     kind: { decision: 'решение', finding: 'заметка' },
@@ -42,6 +42,11 @@ export const ui = {
       in_force: 'действует',
       superseded: 'заменено',
     } satisfies Record<DecisionStatus, string>,
+  },
+  /** Черновик знания в деле задачи (TRK-661): ждёт подъёма в дело проекта или области. */
+  draft: {
+    open: 'Черновик в {{address}} — не поднят',
+    lifted: 'Поднят:',
   },
   error: {
     unknown: 'Неизвестная ошибка.',
@@ -252,6 +257,10 @@ export const ui = {
       remarks_few: '{{count, number}} замечания без разбора',
       remarks_many: '{{count, number}} замечаний без разбора',
       remarks_other: '{{count, number}} замечания без разбора',
+      drafts_one: '{{count, number}} черновик знания не поднят в проект или область',
+      drafts_few: '{{count, number}} черновика знания не поднято в проект или область',
+      drafts_many: '{{count, number}} черновиков знания не поднято в проект или область',
+      drafts_other: '{{count, number}} черновика знания не поднято в проект или область',
       warning: 'закрыта не целиком: ждёт решения — принять или вернуть',
       deferred: 'отложена: можно взять в работу с {{moment}}',
       deferredBare: 'отложена: пока нельзя взять в работу',

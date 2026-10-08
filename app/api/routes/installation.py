@@ -51,7 +51,7 @@ async def read_installation(
     клиент вправе держать его всю жизнь вкладки.
 
     В первый экран (`GET /api/v1/bootstrap`) адрес не входит: он нужен одному экрану, а
-    не первому кадру (`docs/CONCEPT.md`, 5.1).
+    не первому кадру (TRK#178).
     """
     state = service.read_installation(actor=actor, settings=settings)
     return DataResponse[InstallationRead](data=InstallationRead(mcp_url=state.mcp_url))

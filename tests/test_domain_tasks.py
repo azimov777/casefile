@@ -127,7 +127,7 @@ def test_a_malformed_task_key_is_rejected(raw: str) -> None:
 
 
 def test_the_transition_table_matches_the_concept() -> None:
-    """Таблица зашита; тест повторяет её из `CONCEPT.md`, чтобы правка была осознанной."""
+    """Таблица зашита; тест повторяет её из TRK#123, чтобы правка была осознанной."""
     assert TRANSITIONS == {
         TaskStatus.BACKLOG: (TaskStatus.OPEN, TaskStatus.CANCELLED),
         TaskStatus.OPEN: (
@@ -468,7 +468,7 @@ def test_an_open_blocking_question_keeps_the_task_out_of_work() -> None:
 
 def test_blocking_questions_are_checked_only_on_the_way_into_work() -> None:
     """Вопрос держит вход в работу, а не её ход: задача в работе закрывается и уходит в
-    `open` с открытым блокирующим вопросом — так и ждут ответа (`CONCEPT.md`, 4.6)."""
+    `open` с открытым блокирующим вопросом — так и ждут ответа (TRK#176)."""
     ensure_transition_allowed(
         facts(
             TaskStatus.IN_PROGRESS, TaskStatus.OPEN, reason="жду TRK-1#4", blocking_questions=(4,)
@@ -483,7 +483,7 @@ def test_blocking_questions_are_checked_only_on_the_way_into_work() -> None:
 
 
 def test_the_blockers_are_named_before_the_blocking_questions() -> None:
-    """Порядок из таблицы валидаций `CONCEPT.md`, 3.3: блокер — строкой выше вопроса."""
+    """Порядок из таблицы валидаций TRK#126: блокер — строкой выше вопроса."""
     with pytest.raises(TaskBlockedError):
         ensure_transition_allowed(
             facts(

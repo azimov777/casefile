@@ -526,6 +526,6 @@ async def task(db_session: AsyncSession, task_actor: Actor, project: Project) ->
         output="Тест на несгоревший номер",
         checks=["Создание задачи без названия не тратит номер"],
         # Исполнитель — тот, от чьего имени идут запросы тестов: в работу задачу берёт
-        # только он (`CONCEPT.md`, 3.3), и без него любой вход в `in_progress` отказал бы.
+        # только он (TRK#109), и без него любой вход в `in_progress` отказал бы.
         assignee="owner",
     )

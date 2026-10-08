@@ -18,6 +18,7 @@ export type ConditionId =
   | 'questions'
   | 'remarks'
   | 'warnings'
+  | 'drafts'
   | 'waiting'
   | 'query';
 
@@ -44,6 +45,7 @@ export const CONDITION_RESET = {
   questions: { withQuestions: false },
   remarks: { withRemarks: false },
   warnings: { withWarnings: false },
+  drafts: { withDrafts: false },
   waiting: { withWaiting: false },
   query: { query: '' },
 } satisfies Record<ConditionId, Partial<TaskFilters>>;
@@ -135,6 +137,10 @@ export function describeFilters(filters: TaskFilters, t: TFunction<'tasks'>): Fi
 
   if (filters.withWarnings) {
     conditions.push({ id: 'warnings', label: t('filters.condition.warnings') });
+  }
+
+  if (filters.withDrafts) {
+    conditions.push({ id: 'drafts', label: t('filters.condition.drafts') });
   }
 
   if (filters.withWaiting) {

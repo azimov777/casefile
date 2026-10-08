@@ -13,7 +13,7 @@ from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
 class Project(BaseModel, CreatedByMixin):
     """Строка реестра проектов.
 
-    Проект отвечает на вопрос «про что задачи», а не «кто делает» (`CONCEPT.md`, 3.2).
+    Проект отвечает на вопрос «про что задачи», а не «кто делает» (TRK#82).
     Описание — короткое «что это», не длиннее `MAX_PROJECT_DESCRIPTION_LENGTH` знаков: оно
     едет в карточке каждой задачи проекта вместе с ключом и названием. Факты проекта живут
     в атрибутах, решения — в его деле.
@@ -48,7 +48,7 @@ class Project(BaseModel, CreatedByMixin):
         nullable=False,
     )
 
-    # Время архивирования или `NULL` у живого проекта (`CONCEPT.md`, 3.2). Признака архива
+    # Время архивирования или `NULL` у живого проекта (TRK#98). Признака архива
     # у задачи нет: «архивна» задача, лежащая в проекте с непустым полем. Заморозку по нему
     # проверяет одна точка — `app/services/freeze.py`.
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

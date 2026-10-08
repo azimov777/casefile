@@ -20,7 +20,7 @@ function filters(overrides: Partial<TaskFilters> = {}): TaskFilters {
 describe('чтение отбора из адреса', () => {
   it('разбирает повторяющиеся параметры и флажки', () => {
     const params = new URLSearchParams(
-      'project=DEMO&status=open&status=in_progress&priority=high&blocked=true&questions=true&remarks=true&warnings=true&text=поиск&assignee=owner&sort=key&page=3',
+      'project=DEMO&status=open&status=in_progress&priority=high&blocked=true&questions=true&remarks=true&warnings=true&drafts=true&text=поиск&assignee=owner&sort=key&page=3',
     );
 
     expect(readFilters(params)).toEqual({
@@ -35,6 +35,7 @@ describe('чтение отбора из адреса', () => {
       withQuestions: true,
       withRemarks: true,
       withWarnings: true,
+      withDrafts: true,
       withWaiting: false,
       query: '',
       sort: 'key',
@@ -137,6 +138,15 @@ describe('перевод отбора в параметры запроса', () 
     expect(filtersToListParams(filters({ withQuestions: true, withRemarks: true })).query).toBe(
       `${OPEN_QUESTIONS_CONDITION} and ${OPEN_REMARKS_CONDITION}`,
     );
+  });
+
+  it('«есть неподнятое знание» (TRK-661) — условие `open_drafts: > 0`, живёт в адресе и складывается с остальными', () => {
+    expect(filtersToListParams(filters({ withDrafts: true })).query).toBe('open_drafts: > 0');
+    expect(filtersToListParams(filters({ withDrafts: true, withRemarks: true })).query).toBe(
+      `${OPEN_REMARKS_CONDITION} and open_drafts: > 0`,
+    );
+    expect(writeFilters(filters({ withDrafts: true })).get('drafts')).toBe('true');
+    expect(readFilters(new URLSearchParams('drafts=true')).withDrafts).toBe(true);
   });
 
   it('«ждёт ответа» (TRK-577) — условие столбца доски, живёт в адресе и складывается с остальными', () => {

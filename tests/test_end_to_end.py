@@ -44,7 +44,7 @@ FULL_CYCLE_INDEX = [
     EntryType.ATTEMPT,
     # Последние четыре страницы подшивает одно закрытие, и порядок в нём задан формой
     # вызова: присланные записи, вердикты, сводка, переход. Сводка после вердиктов —
-    # дисциплина, которую теперь держит не только скил (`CONCEPT.md`, 5.3).
+    # дисциплина, которую теперь держит не только скил (TRK#189).
     EntryType.ARTIFACT,
     EntryType.VERDICT,
     EntryType.SUMMARY,
@@ -247,7 +247,7 @@ async def test_a_task_goes_the_whole_way_through_mcp(
 
 # --- Ожидание ответа на вопрос в обсуждении --------------------------------------------
 
-#: Запрос кандидатов назначателя — тот самый, что в `CONCEPT.md`, 4.3.
+#: Запрос кандидатов назначателя — тот самый, что в TRK#159.
 CANDIDATES = "status: open and blocked: false and open_blocking_questions: 0"
 
 
@@ -260,7 +260,7 @@ async def test_a_question_in_a_discussion_takes_the_task_out_of_the_candidates(
     owner: Participant,
     project: Project,
 ) -> None:
-    """Обзорная проверка 8: сценарий ожидания из `CONCEPT.md`, 4.6 — с TRK-671 вопрос
+    """Обзорная проверка 8: сценарий ожидания из TRK#176 — с TRK-671 вопрос
     человеку живёт в обсуждении (решение TRK#51, пункты 4 и 6).
 
     Статуса «жду» в трекере нет: агент задаёт вопрос по задаче (`ask` заводит обсуждение и

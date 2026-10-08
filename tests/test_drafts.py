@@ -218,7 +218,7 @@ async def test_a_lift_by_the_previous_key_stays_a_lift_after_a_move(
     main_actor: Actor,
     task: Task,
 ) -> None:
-    """Ссылка хранится как написана (`CONCEPT.md`, 3.4): подъём прежним ключом остаётся
+    """Ссылка хранится как написана (TRK#112): подъём прежним ключом остаётся
     подъёмом, когда задача переехала в другой проект и получила новый ключ."""
     old_key = task.key
     async with mcp_session(task_secret) as session:

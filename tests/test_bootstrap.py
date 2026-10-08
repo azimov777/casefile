@@ -54,7 +54,7 @@ async def test_bootstrap_answers_with_the_participant_projects_and_question_coun
     assert data["participant"]["name"] == owner.name
     assert data["participant"]["kind"] == owner.kind.value
     # Учётная запись владельца — администратор: по флагу интерфейс показывает управление
-    # людьми (`CONCEPT.md`, 5.4).
+    # людьми (TRK#192).
     assert data["account"]["email"] == "owner@localhost"
     assert data["account"]["participant"] == owner.name
     assert data["account"]["is_admin"] is True
@@ -110,7 +110,7 @@ async def test_bootstrap_of_a_shared_token_has_no_participant(
     """У общего агентского токена участника нет, и вопросов ему прийти не может.
 
     Ноль здесь — не умолчание и не пустой список вместо отказа: адресовать временного
-    агента запрещено концепцией (3.6), поэтому число вопросов к нему равно нулю по
+    агента запрещено решением TRK#71, поэтому число вопросов к нему равно нулю по
     определению. Проекты при этом отдаются те же самые: они не зависят от того, кто
     спрашивает.
     """

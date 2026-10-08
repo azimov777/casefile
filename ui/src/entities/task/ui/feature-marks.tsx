@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { CalendarClock, CircleHelp, Flag, Lock, TriangleAlert } from 'lucide-react';
+import {
+  ArrowUpFromLine,
+  CalendarClock,
+  CircleHelp,
+  Flag,
+  Lock,
+  TriangleAlert,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '@/shared/i18n';
 import { cn, formatNumber, momentLabel } from '@/shared/lib';
@@ -191,6 +198,21 @@ export function TaskFeatureMarks({
        * человека. Числа нет — предупреждение у задачи одно; тон внимания, как у
        * вопроса: ход за человеком, но работу оно не держит.
        */}
+      {/*
+       * Неподнятое знание (TRK-661, TRK#57, §8): в деле есть черновик решения или находки,
+       * который не дошёл до дела проекта или области. Число — черновиков, считает бэкенд.
+       * Тон внимания: ход за тем, кто закрыл задачу, но работу признак не держит.
+       */}
+      {features.open_drafts > 0 ? (
+        <Mark
+          icon={ArrowUpFromLine}
+          label={t('task.features.drafts', { count: features.open_drafts })}
+          tone="text-attention"
+          count={formatNumber(features.open_drafts, language)}
+          pressable={pressable}
+        />
+      ) : null}
+
       {features.open_warnings > 0 ? (
         <Mark
           icon={TriangleAlert}

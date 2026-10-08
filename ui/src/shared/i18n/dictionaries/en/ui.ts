@@ -37,7 +37,7 @@ export const ui = {
   } satisfies Record<AuthorKind, string>,
   /**
    * Решение проекта (TRK-554): род значения внутри плашки статуса и сам статус —
-   * значение контракта, посчитанное бэкендом при чтении (`../docs/CONCEPT.md`, 3.2).
+   * значение контракта, посчитанное бэкендом при чтении (TRK#90).
    */
   decision: {
     kind: { decision: 'decision', finding: 'note' },
@@ -46,6 +46,11 @@ export const ui = {
       in_force: 'in force',
       superseded: 'superseded',
     } satisfies Record<DecisionStatus, string>,
+  },
+  /** A knowledge draft in a task's case (TRK-661): waits to be lifted into the project's or area's case. */
+  draft: {
+    open: 'Draft for {{address}} — not lifted',
+    lifted: 'Lifted:',
   },
   error: {
     unknown: 'Unknown error.',
@@ -262,6 +267,8 @@ export const ui = {
       blockingOf_other: '{{count, number}} of them blocking',
       remarks_one: '{{count, number}} remark not yet resolved',
       remarks_other: '{{count, number}} remarks not yet resolved',
+      drafts_one: '{{count, number}} knowledge draft not lifted into the project or area',
+      drafts_other: '{{count, number}} knowledge drafts not lifted into the project or area',
       warning: 'closed not in full: awaits a decision — accept or return',
       deferred: 'deferred: can be taken into work from {{moment}}',
       deferredBare: 'deferred: cannot be taken into work yet',

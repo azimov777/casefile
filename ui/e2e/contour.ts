@@ -417,12 +417,13 @@ const ARCHIVE_AFTER_DAYS = 3;
  */
 export function outsideArchive(now: Date = new Date()): string {
   const threshold = new Date(now.getTime() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000);
-  // Задача с открытым предупреждением в архив не уходит (TRK-561#9).
-  return `status: not in done, cancelled or last_entry_at: >= "${threshold.toISOString()}" or open_warnings: > 0`;
+  // Задача с открытым предупреждением в архив не уходит (TRK-561#9), как и задача с
+  // неподнятым знанием (TRK-661).
+  return `status: not in done, cancelled or last_entry_at: >= "${threshold.toISOString()}" or open_warnings: > 0 or open_drafts: > 0`;
 }
 
 /**
- * В каком столбце доски стоит задача (TRK-571, `docs/CONCEPT.md` 4.6): «Ждёт ответа»
+ * В каком столбце доски стоит задача (TRK-571, TRK#177): «Ждёт ответа»
  * (ключ `waiting`) — задача из работы с открытым вопросом `blocking`; остальные — в
  * столбце своего статуса. Правило выписано здесь заново, а не взято из кода интерфейса.
  */
