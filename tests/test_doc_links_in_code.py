@@ -3,7 +3,7 @@
 Комментарий «см. `docs/notes/api.md`» читает следующий агент и идёт по нему в файл. Файл
 переехал или исчез (документы уходят в трекер: TRK-610, 612–615), а ссылка осталась —
 агент упирается в пустое место. Тест сверяет каждую такую ссылку с деревом и называет
-`файл:строка` и то, на что она указывает. Ссылка с якорем (`docs/CONVENTIONS.md §4`,
+`файл:строка` и то, на что она указывает. Ссылка с якорем (`docs/DEVELOPMENT.md §4`,
 `docs/notes/api.md#…`) считается ссылкой на файл.
 
 Ссылка живая, если файл существует от каталога файла со ссылкой, от `ui/` или от корня
@@ -76,7 +76,7 @@ def test_the_scan_sees_the_code_and_its_links() -> None:
 
 def test_the_links_resolver_catches_a_missing_and_an_existing_file() -> None:
     sample = PROJECT_ROOT / "ui" / "src" / "shared" / "api" / "x.ts"
-    assert _exists(sample, "docs/CONVENTIONS.md")
+    assert _exists(sample, "docs/agent-install.md")
     assert _exists(sample, "ui/docs/FRONTEND.md")
     assert not _exists(sample, "../docs/FRONTEND.md")
     assert not _exists(sample, "docs/no-such-document.md")

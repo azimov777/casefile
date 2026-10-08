@@ -1078,7 +1078,7 @@ Write-Host ''
 
 # Текст двух фраз повторяет `app/domain/agent_phrases.py` (`AGENT_PHRASES`) дословно:
 # это одна из копий, и сверяет их сплошная проверка множеств, а не вычитка
-# (`docs/CONVENTIONS.md`, раздел про документацию; `tests/test_agent_phrases_everywhere.py`,
+# (решение проекта TRK#219; `tests/test_agent_phrases_everywhere.py`,
 # TRK-367). Адрес в последней строке — тот же порт, что и строка `Board:` выше, плюс
 # `/start`: там те же фразы стоят на языке человека, с копированием по кнопке.
 Write-Host 'Tell your agent what to do:' -ForegroundColor White
