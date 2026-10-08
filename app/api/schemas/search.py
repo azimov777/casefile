@@ -164,10 +164,11 @@ class TaskFilters:
             max_length=MAX_VALUES_PER_CONDITION,
             examples=[["TRK#15"]],
             description=(
-                "Project decisions `PROJECT#N`: the tasks whose `decisions` field names one "
-                "of them, in any status, also once the decision is superseded. `empty()` "
-                "finds tasks that name no decision. An address that is not a `decision` "
-                "entry of a project's case answers 422 instead of an empty page"
+                "Project decisions `PROJECT#N` and area decisions `PROJECT/area#N`: the "
+                "tasks whose `decisions` field names one of them, in any status, also once "
+                "the decision is superseded. `empty()` finds tasks that name no decision. An "
+                "address that is not a `decision` entry of a project's or an area's case "
+                "answers 422 instead of an empty page"
             ),
         ),
     ] = None

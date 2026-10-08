@@ -5120,7 +5120,7 @@
           "areas"
         ],
         "summary": "Append an area case entry",
-        "description": "Подшивает запись в дело области: заметку, решение, находку или артефакт.\n\nНомер `no` считается внутри области, ссылка на запись — `TRK/promotion#3`.\n`supersedes` здесь нет: механика решений проекта на дело области не\nраспространяется. Замечания к форме и ссылкам — разом в `422 entry_fields_invalid`.\nАрхивная область — `409 area_archived`.",
+        "description": "Подшивает запись в дело области: заметку, решение, находку или артефакт.\n\nНомер `no` считается внутри области, ссылка на запись — `TRK/promotion#3`.\n`supersedes` в теле нет: замену у дела области ведёт агент через MCP, а интерфейс\nзаписей не заменяет, и поле без вызова в REST не держат (решение TRK#53). Замечания к\nформе и ссылкам — разом в `422 entry_fields_invalid`. Архивная область — `409\narea_archived`.",
         "operationId": "create_area_entry",
         "security": [
           {
@@ -5287,7 +5287,7 @@
           "areas"
         ],
         "summary": "Read area case entries",
-        "description": "Записи дела области с телами и нагрузкой, в порядке `no` — те же фильтры, что у\nдела проекта, включая историю одного атрибута (`attribute`) и подстроку заголовка или\nтела (`text`).",
+        "description": "Записи дела области с телами и нагрузкой, в порядке `no` — те же фильтры, что у\nдела проекта, включая историю одного атрибута (`attribute`) и подстроку заголовка или\nтела (`text`).\n\nУ решения и заметки — `status` и `superseded_by`, посчитанные при чтении, как в деле\nпроекта (решение TRK#57, раздел 5). Отбора `in_force` здесь нет: интерфейс его не\nзовёт (решение TRK#53); у агента он есть в `read_project_entries`.",
         "operationId": "list_area_entries",
         "security": [
           {
@@ -5575,7 +5575,7 @@
           "areas"
         ],
         "summary": "Read one area case entry",
-        "description": "Одна запись дела области по номеру — адрес из ссылки `TRK/promotion#3`.\n\nНомера, которого в деле нет, — `404 entry_not_found`.",
+        "description": "Одна запись дела области по номеру — адрес из ссылки `TRK/promotion#3`; у решения\nи заметки — со статусом и преемником, как в списке.\n\nНомера, которого в деле нет, — `404 entry_not_found`.",
         "operationId": "read_area_entry",
         "security": [
           {
@@ -6104,7 +6104,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Project decisions `PROJECT#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's case answers 422 instead of an empty page",
+              "description": "Project decisions `PROJECT#N` and area decisions `PROJECT/area#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's or an area's case answers 422 instead of an empty page",
               "examples": [
                 [
                   "TRK#15"
@@ -6112,7 +6112,7 @@
               ],
               "title": "Decision"
             },
-            "description": "Project decisions `PROJECT#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's case answers 422 instead of an empty page"
+            "description": "Project decisions `PROJECT#N` and area decisions `PROJECT/area#N`: the tasks whose `decisions` field names one of them, in any status, also once the decision is superseded. `empty()` finds tasks that name no decision. An address that is not a `decision` entry of a project's or an area's case answers 422 instead of an empty page"
           },
           {
             "name": "area",
@@ -10515,7 +10515,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -10523,7 +10523,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -10980,7 +10980,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -10988,7 +10988,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -11294,7 +11294,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -11302,7 +11302,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -11685,7 +11685,7 @@
           "type"
         ],
         "title": "AreaEntryCreate",
-        "description": "Запись агента или человека в деле области: заметка, решение, находка, артефакт.\n\nТе же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: механики\nрешений проекта у дела области нет, и лишнее поле схема отвергает до сценария."
+        "description": "Запись агента или человека в деле области: заметка, решение, находка, артефакт.\n\nТе же типы, что у дела проекта (`CONCEPT.md`, 3.7), но без `supersedes`: замену у\nдела области ведёт агент через MCP, интерфейс записей не заменяет, и поля без вызова\nREST не держит (решение TRK#53). Лишнее поле схема отвергает до сценария."
       },
       "AreaRead": {
         "properties": {
@@ -11941,7 +11941,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -11949,7 +11949,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -12181,7 +12181,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -12189,7 +12189,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -12425,7 +12425,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -12433,7 +12433,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -12630,7 +12630,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -12638,7 +12638,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -12931,7 +12931,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -12939,7 +12939,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -13188,7 +13188,7 @@
           "ref": {
             "type": "string",
             "title": "Ref",
-            "description": "Address of the `decision` entry in the project's case",
+            "description": "Address of the `decision` entry in its project's case (`TRK#15`) or area's case (`TRK/mcp#3`)",
             "examples": [
               "TRK#15"
             ]
@@ -13202,7 +13202,7 @@
           },
           "status": {
             "$ref": "#/components/schemas/DecisionStatus",
-            "description": "Computed on read: `superseded` once a later decision of the project names this one in `supersedes`, `in_force` until then",
+            "description": "Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then",
             "examples": [
               "in_force"
             ]
@@ -13227,7 +13227,7 @@
           "superseded_by"
         ],
         "title": "CitedDecisionRead",
-        "description": "Решение проекта, на которое ссылается задача, и его преемник (`CONCEPT.md`, 4.2).\n\nТа же форма, что у `get_task` в MCP (`CitedDecisionView`): пакет задачи совпадает в\nобоих интерфейсах поле в поле."
+        "description": "Решение проекта или области, на которое ссылается задача, и его преемник\n(`CONCEPT.md`, 4.2).\n\nТа же форма, что у `get_task` в MCP (`CitedDecisionView`): пакет задачи совпадает в\nобоих интерфейсах поле в поле."
       },
       "ClosedPayload": {
         "properties": {
@@ -13637,7 +13637,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -13645,7 +13645,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -14152,7 +14152,7 @@
                 "type": "null"
               }
             ],
-            "description": "Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or an area's case, in the journal and in the answer that files the entry",
+            "description": "Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's case, in the journal and in the answer that files the entry",
             "examples": [
               "in_force"
             ]
@@ -14195,14 +14195,14 @@
           "type"
         ],
         "title": "DecisionEntryRead",
-        "description": "Решение: в деле задачи — решение задачи, в деле проекта — решение проекта.\n\nЧисло задач, которые на решение проекта ссылаются, — в чтении проекта\n(`ProjectDecisionRead`), а не здесь."
+        "description": "Решение: в деле задачи — решение задачи, в деле проекта — решение проекта, в деле\nобласти — решение области.\n\nЧисло задач, которые на решение проекта ссылаются, — в чтении проекта\n(`ProjectDecisionRead`), а не здесь."
       },
       "DecisionRefRead": {
         "properties": {
           "ref": {
             "type": "string",
             "title": "Ref",
-            "description": "Address of the `decision` entry in the project's case",
+            "description": "Address of the `decision` entry in its project's case (`TRK#15`) or area's case (`TRK/mcp#3`)",
             "examples": [
               "TRK#15"
             ]
@@ -14216,7 +14216,7 @@
           },
           "status": {
             "$ref": "#/components/schemas/DecisionStatus",
-            "description": "Computed on read: `superseded` once a later decision of the project names this one in `supersedes`, `in_force` until then",
+            "description": "Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then",
             "examples": [
               "in_force"
             ]
@@ -14229,7 +14229,7 @@
           "status"
         ],
         "title": "DecisionRefRead",
-        "description": "Решение проекта, названное ссылкой: адрес, заголовок и статус."
+        "description": "Решение проекта или области, названное ссылкой: адрес, заголовок и статус."
       },
       "DecisionStatus": {
         "type": "string",
@@ -14238,7 +14238,7 @@
           "superseded"
         ],
         "title": "DecisionStatus",
-        "description": "Действует ли запись знания — решение или заметка дела проекта.\n\nХранимым значением не бывает: только при чтении. Имя осталось от решений, первых\nзаписей с заменой; у заметки те же два значения (TRK#48)."
+        "description": "Действует ли запись знания — решение или заметка дела проекта или области.\n\nХранимым значением не бывает: только при чтении. Имя осталось от решений, первых\nзаписей с заменой; у заметки те же два значения (TRK#48)."
       },
       "DecisionsChangedPayload": {
         "properties": {
@@ -14400,7 +14400,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -14408,7 +14408,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -15378,7 +15378,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -15386,7 +15386,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -15639,7 +15639,7 @@
                 "type": "null"
               }
             ],
-            "description": "Computed on read of a project's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's or an area's case, in the journal and in the answer that files the entry",
+            "description": "Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's case, in the journal and in the answer that files the entry",
             "examples": [
               "in_force"
             ]
@@ -15682,7 +15682,7 @@
           "type"
         ],
         "title": "FindingEntryRead",
-        "description": "Находка: в деле задачи — установленный факт, в деле проекта — заметка проекта."
+        "description": "Находка: в деле задачи — установленный факт, в деле проекта или области — его\nзаметка."
       },
       "HealthResponse": {
         "properties": {
@@ -15969,7 +15969,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -15977,7 +15977,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -16238,7 +16238,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -16246,7 +16246,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -16954,7 +16954,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -16962,7 +16962,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -17123,7 +17123,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -17131,7 +17131,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -17256,7 +17256,7 @@
           "ref": {
             "type": "string",
             "title": "Ref",
-            "description": "Address of the `decision` entry in the project's case",
+            "description": "Address of the `decision` entry in its project's case (`TRK#15`) or area's case (`TRK/mcp#3`)",
             "examples": [
               "TRK#15"
             ]
@@ -17278,7 +17278,7 @@
           },
           "status": {
             "$ref": "#/components/schemas/DecisionStatus",
-            "description": "Computed on read: `superseded` once a later decision of the project names this one in `supersedes`, `in_force` until then",
+            "description": "Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then",
             "examples": [
               "in_force"
             ]
@@ -17749,7 +17749,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -17757,7 +17757,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -17964,7 +17964,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -17972,7 +17972,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -18302,7 +18302,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -18310,7 +18310,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -18534,7 +18534,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -18542,7 +18542,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -18783,7 +18783,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -18791,7 +18791,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -19289,7 +19289,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -19297,7 +19297,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -19568,7 +19568,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -19576,7 +19576,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -19740,7 +19740,7 @@
             },
             "type": "array",
             "title": "Supersedes",
-            "description": "Numbers of the earlier entries of the same type in the same project's case that this decision or finding superseded; empty in a task's or an area's case",
+            "description": "Numbers of the earlier entries of the same type in the same project's or area's case that this decision or finding superseded; empty in a task's case",
             "examples": [
               [
                 12
@@ -19751,7 +19751,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "SupersedesPayload",
-        "description": "Нагрузка решения и заметки: какие записи того же типа и того же дела проекта эта\nзаменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2).\n\nСписок со значением по умолчанию: записи задач и областей, решения проекта,\nподшитые до замены (`TRK-554`), и заметки проекта до TRK-656 ключа не несут, а ответ\nнесёт его всегда — форма записи одна."
+        "description": "Нагрузка решения и заметки: какие записи того же типа и того же дела проекта или\nобласти эта заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2; TRK#57, раздел 5).\n\nСписок со значением по умолчанию: записи задач, решения проекта, подшитые до замены\n(`TRK-554`), заметки проекта до TRK-656 и записи областей до TRK-658 ключа не несут,\nа ответ несёт его всегда — форма записи одна."
       },
       "TaskAreaRead": {
         "properties": {
@@ -20154,7 +20154,7 @@
             "type": "array",
             "maxItems": 20,
             "title": "Decisions",
-            "description": "Project decisions the task relies on: references `PROJECT#N` to `decision` entries of a project's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor",
+            "description": "Decisions the task relies on: references `PROJECT#N` or `PROJECT/area#N` to `decision` entries of a project's or an area's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project or area entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor",
             "examples": [
               [
                 "TRK#15"
@@ -20485,7 +20485,7 @@
             },
             "type": "array",
             "title": "Decisions",
-            "description": "Project decisions the task relies on, in the order of its `decisions` field, each with its status computed on read and, once superseded, its successor. The project's other decisions are part of the project read"
+            "description": "Project and area decisions the task relies on, in the order of its `decisions` field, each with its status computed on read and, once superseded, its successor. The project's other decisions are part of the project read"
           },
           "features": {
             "$ref": "#/components/schemas/TaskFeaturesRead"
@@ -20763,7 +20763,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -20771,7 +20771,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -21591,7 +21591,7 @@
             "type": "array",
             "maxItems": 20,
             "title": "Decisions",
-            "description": "Project decisions the task relies on: references `PROJECT#N` to `decision` entries of a project's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor. Replaces the whole list in any status but `done` and `cancelled`; a reference already in it stays after its decision is superseded",
+            "description": "Decisions the task relies on: references `PROJECT#N` or `PROJECT/area#N` to `decision` entries of a project's or an area's case, up to 20, in the order set. A task entry (`TRK-42#7`) answers `task_fields_invalid` with reason `task_entry`, a project or area entry of another type `not_a_decision`. A reference not yet in the field must lead to a decision in force, otherwise `decision_not_in_force` names its successor. Replaces the whole list in any status but `done` and `cancelled`; a reference already in it stays after its decision is superseded",
             "examples": [
               [
                 "TRK#15"
@@ -22016,7 +22016,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -22024,7 +22024,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]
@@ -22288,7 +22288,7 @@
           "status": {
             "type": "null",
             "title": "Status",
-            "description": "Always `null`: only decisions and findings of a project's case have a status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
             "examples": [
               null
             ]
@@ -22296,7 +22296,7 @@
           "superseded_by": {
             "type": "null",
             "title": "Superseded By",
-            "description": "Always `null`: only decisions and findings of a project's case are superseded",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
             "examples": [
               null
             ]

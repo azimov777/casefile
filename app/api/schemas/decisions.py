@@ -1,9 +1,10 @@
-"""Схемы решений проекта: решение со статусом в пакете задачи и в чтении проекта.
+"""Схемы решений проекта и области: решение со статусом в пакете задачи и в чтении проекта.
 
-Решение проекта — запись `decision` дела проекта (`CONCEPT.md`, 3.2), и её саму отдаёт
-чтение дела (`EntryRead`). Здесь то, чего у записи нет: статус, посчитанный при чтении,
-преемник и число задач, которые на решение ссылаются. В ленту это не едет: статус меняется
-без единой записи в деле решения, и кадр ленты с ним устаревал бы.
+Решение — запись `decision` дела проекта (`CONCEPT.md`, 3.2) или дела области (TRK#57,
+раздел 5), и её саму отдаёт чтение дела (`EntryRead`). Здесь то, чего у записи нет:
+статус, посчитанный при чтении, преемник и число задач, которые на решение ссылаются. В
+ленту это не едет: статус меняется без единой записи в деле решения, и кадр ленты с ним
+устаревал бы.
 """
 
 from datetime import datetime
@@ -13,15 +14,17 @@ from pydantic import BaseModel, Field
 from app.api.schemas.authors import AuthorRead
 from app.domain.decisions import DecisionStatus
 
-_REF_DESCRIPTION = "Address of the `decision` entry in the project's case"
+_REF_DESCRIPTION = (
+    "Address of the `decision` entry in its project's case (`TRK#15`) or area's case (`TRK/mcp#3`)"
+)
 _STATUS_DESCRIPTION = (
-    "Computed on read: `superseded` once a later decision of the project names this one in "
-    "`supersedes`, `in_force` until then"
+    "Computed on read: `superseded` once a later decision of the same case names this one "
+    "in `supersedes`, `in_force` until then"
 )
 
 
 class DecisionRefRead(BaseModel):
-    """Решение проекта, названное ссылкой: адрес, заголовок и статус."""
+    """Решение проекта или области, названное ссылкой: адрес, заголовок и статус."""
 
     ref: str = Field(examples=["TRK#15"], description=_REF_DESCRIPTION)
     title: str = Field(examples=["Сервис не строим до сигнала спроса"])
@@ -31,7 +34,8 @@ class DecisionRefRead(BaseModel):
 
 
 class CitedDecisionRead(DecisionRefRead):
-    """Решение проекта, на которое ссылается задача, и его преемник (`CONCEPT.md`, 4.2).
+    """Решение проекта или области, на которое ссылается задача, и его преемник
+    (`CONCEPT.md`, 4.2).
 
     Та же форма, что у `get_task` в MCP (`CitedDecisionView`): пакет задачи совпадает в
     обоих интерфейсах поле в поле.

@@ -62,7 +62,7 @@ DecisionStatusSchema = Annotated[
     DecisionStatus,
     described(
         DecisionStatus,
-        "Status of a decision or finding of a project's case, computed on read: "
+        "Status of a decision or finding of a project's or an area's case, computed on read: "
         "`superseded` once a later entry of the same type in the case names it in "
         "`supersedes`",
     ),

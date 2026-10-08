@@ -25,9 +25,9 @@ ProjectEntryTypeArg = Annotated[
     Literal[EntryType.DECISION, EntryType.FINDING, EntryType.ARTIFACT, EntryType.NOTE],
     Field(
         description=(
-            "What the entry records about the project:\n"
-            "- `decision` — a project decision: an option chosen among several, with the "
-            "reason, that outlives a task and that other tasks are to follow;\n"
+            "What the entry records about the project or area:\n"
+            "- `decision` — a project or area decision: an option chosen among several, with "
+            "the reason, that outlives a task and that other tasks are to follow;\n"
             "- `finding` — an established fact with its source;\n"
             "- `artifact` — a pointer to a result;\n"
             "- `note` — an entry that fits none of the types above; the only type a "
@@ -42,12 +42,12 @@ SupersedesArg = Annotated[
     list[int] | None,
     Field(
         description=(
-            "Numbers of earlier entries of the same type in this project's case that the new "
-            "entry supersedes: decisions for a `decision`, findings for a `finding`; "
-            "accepted only with these two types in a project's case. A number outside the "
-            "project's case or of another entry type is refused with `entry_fields_invalid`; "
-            "an entry superseded already with `decision_not_in_force` or "
-            "`finding_not_in_force`, its successor in `details`"
+            "Numbers of earlier entries of the same type in this project's or area's case "
+            "that the new entry supersedes: decisions for a `decision`, findings for a "
+            "`finding`; accepted only with these two types. A number outside this case or of "
+            "another entry type is refused with `entry_fields_invalid`; an entry superseded "
+            "already with `decision_not_in_force` or `finding_not_in_force`, its successor "
+            "in `details`"
         )
     ),
 ]
@@ -85,10 +85,11 @@ def register(tools: Toolset) -> None:
         `TRK/promotion#3` or `TRK~7#3` addresses the entry from `refs` of any case. Like a
         task entry filed by `add_entry`, such an entry stays as filed.
 
-        A decision or finding of a project's case is in force until a later entry of the
-        same type names it in `supersedes`; no entry changes, and the status is computed
-        on read. Withdrawing a decision or finding with no replacement is an entry of the
-        same type too, one that supersedes it.
+        A decision or finding, in a project's case and in an area's alike, is in force
+        until a later entry of the same type in that case names it in `supersedes`; no
+        entry changes, and the status is computed on read. Withdrawing a decision or finding with no
+        replacement is an entry of the same type too, one that supersedes it. An area's
+        decisions in force bind the work in that area.
 
         An empty title, or a reference to a missing entry, task or project, returns
         `entry_fields_invalid` naming the offending fields.

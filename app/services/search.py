@@ -565,7 +565,8 @@ async def _area_id(session: AsyncSession, condition: Condition, value: SearchVal
 
 
 async def _decision_ref(session: AsyncSession, condition: Condition, value: SearchValue) -> str:
-    """Решение проекта по ссылке `TRK#15` — каноническая строка, как в поле `decisions`.
+    """Решение проекта или области по ссылке `TRK#15` или `TRK/mcp#3` — каноническая
+    строка, как в поле `decisions`.
 
     Ненайденное решение — неверное значение фильтра, а не пустая выдача: на вопрос «какие
     задачи делались по этому решению» пустая выдача читается как «никакие», и опечатку в

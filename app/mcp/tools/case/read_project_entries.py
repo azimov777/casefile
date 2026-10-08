@@ -21,8 +21,8 @@ InForceArg = Annotated[
     Field(
         description=(
             "`true`: only the decisions and findings in force; `false`: only the superseded "
-            "ones. Entries without a status — other types and every entry of an area's or "
-            "a discussion's case — match neither"
+            "ones. Entries without a status — other types and every entry of a "
+            "discussion's case — match neither"
         )
     ),
 ]
@@ -69,9 +69,9 @@ def register(tools: Toolset) -> None:
         `get_project`: the case index, and for a project its decisions and findings in
         force, which that index leaves out.
 
-        Decisions and findings of a project's case carry `status` and `superseded_by` on
-        every read, numbers included; `superseded_by` is the direct successor's number.
-        Entries of an area's case have none.
+        Decisions and findings of a project's or an area's case carry `status` and
+        `superseded_by` on every read, numbers included; `superseded_by` is the direct
+        successor's number.
         """
         async with runtime.call() as (session, actor):
             if is_discussion_address(key):
@@ -109,7 +109,7 @@ def register(tools: Toolset) -> None:
             )
             return page(
                 (
-                    entry(item, area=owner.address)
+                    entry(item, area=owner.address, standing=listed.standings.get(item.no))
                     if isinstance(owner, Area)
                     else entry(item, project_key=owner.key, standing=listed.standings.get(item.no))
                     for item in listed.items

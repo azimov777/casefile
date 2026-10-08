@@ -357,10 +357,10 @@ class EntryView(BaseModel):
     status: DecisionStatusSchema | None = Field(
         default=None,
         description=(
-            "Present only on a `decision` or `finding` of a project's case read by "
-            "`read_project_entries`: `superseded` once a later entry of the same type in "
+            "Present only on a `decision` or `finding` of a project's or an area's case read "
+            "by `read_project_entries`: `superseded` once a later entry of the same type in "
             "the case names this one in `supersedes`, `in_force` until then. Absent on "
-            "other types, in a task's or an area's case and in `wait_journal`"
+            "other types, in a task's case and in `wait_journal`"
         ),
     )
     superseded_by: int | None = Field(
@@ -372,11 +372,11 @@ class EntryView(BaseModel):
         ),
     )
 
-    # Статус записи есть только у решений и заметок дела проекта; у остальных записей два
-    # ключа были бы `null` в каждой строке `read_entries`, `get_task`, `wait_journal`, то
-    # есть шумом в контексте агента (TRK-665). Ключи уходят вместе, по `status`: у
-    # действующей записи `superseded_by: null` значим. Схему сериализатор не портит
-    # (см. `FoundTaskView`): оба поля необязательны, и `outputSchema` это показывает.
+    # Статус записи есть только у решений и заметок дела проекта или области; у остальных
+    # записей два ключа были бы `null` в каждой строке `read_entries`, `get_task`,
+    # `wait_journal`, то есть шумом в контексте агента (TRK-665). Ключи уходят вместе, по
+    # `status`: у действующей записи `superseded_by: null` значим. Схему сериализатор не
+    # портит (см. `FoundTaskView`): оба поля необязательны, и `outputSchema` это показывает.
     @model_serializer(mode="wrap")
     def _standing_only_where_it_has_meaning(
         self, handler: SerializerFunctionWrapHandler
@@ -403,8 +403,8 @@ def entry(
     (`entry_read`).
     Нагрузка читается тем же правилом, что и в REST, — `read_payload`: ответ, подшитый до
     исходов, приходит с `outcome: answered`, а не без ключа. `standing` — статус решения
-    или заметки, посчитанный чтением дела проекта; без него `status` и `superseded_by`
-    в ответе MCP нет вовсе (в REST — `null`)."""
+    или заметки, посчитанный чтением дела проекта или области; без него `status` и
+    `superseded_by` в ответе MCP нет вовсе (в REST — `null`)."""
     owners = [key for key in (task_key, project_key, area, discussion) if key is not None]
     assert len(owners) == 1, "entry owner is exactly one key"
     return EntryView(

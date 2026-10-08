@@ -48,7 +48,7 @@ from app.services import case as case_service
 from app.services import decisions as decisions_service
 from app.services import projects as service
 from app.services.auth import Actor
-from app.services.decisions import ProjectDecision
+from app.services.decisions import CaseDecision
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -403,7 +403,7 @@ async def _detail(
     )
 
 
-def _decision(item: ProjectDecision, counts: dict[str, int]) -> ProjectDecisionRead:
+def _decision(item: CaseDecision, counts: dict[str, int]) -> ProjectDecisionRead:
     """Решение проекта со статусом, преемником и числом задач, которые на него ссылаются."""
     return ProjectDecisionRead(
         no=item.entry.no,

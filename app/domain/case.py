@@ -325,10 +325,10 @@ PROJECT_ENTRY_TYPES: frozenset[EntryType] = frozenset(
     {EntryType.NOTE, EntryType.DECISION, EntryType.FINDING, EntryType.ARTIFACT}
 )
 
-#: Записи знания дела проекта — решение и заметка (решение TRK#48, раздел 2): только они
-#: заменяются через `supersedes` и только у них есть статус «действует / заменена»,
-#: который считается при чтении (`app/domain/decisions.py`). Запись заменяет прежнюю
-#: своего типа: решение — решение, заметка — заметку.
+#: Записи знания дела проекта и дела области — решение и заметка (решение TRK#57, раздел
+#: 5): только они заменяются через `supersedes` и только у них есть статус «действует /
+#: заменена», который считается при чтении (`app/domain/decisions.py`). Запись заменяет
+#: прежнюю своего типа в своём деле: решение — решение, заметка — заметку.
 REPLACEABLE_ENTRY_TYPES: frozenset[EntryType] = frozenset({EntryType.DECISION, EntryType.FINDING})
 
 #: Типы, у которых заголовок пишет автор. У остальных он выводится из нагрузки — см.
@@ -367,9 +367,9 @@ MAX_REF_LENGTH = 2_000
 #: ответа ни от кого.
 MAX_ADDRESSEES = 20
 
-#: Поле нагрузки решения и заметки дела проекта: номера записей того же типа и того же
-#: дела, которые новая запись заменяет (`CONCEPT.md`, 3.2; TRK#48). Им же называется
-#: аргумент `add_project_entry`.
+#: Поле нагрузки решения и заметки дела проекта или области: номера записей того же типа
+#: и того же дела, которые новая запись заменяет (`CONCEPT.md`, 3.2; TRK#57, раздел 5). Им
+#: же называется аргумент `add_project_entry`.
 SUPERSEDES_FIELD = "supersedes"
 
 #: Сколько записей заменяет одна. Замена пересказывает то, что остаётся в силе, и запись,
@@ -1013,17 +1013,17 @@ def build_entry(
 
 
 def build_project_entry(
-    project_key: str,
+    owner: str,
     *,
     type: Any,
     title: Any,
     body: Any = "",
     refs: Any = (),
     supersedes: Any = None,
-    replaceable: bool = True,
 ) -> EntryDraft:
     """Проверяет запись агента в дело проекта или области и приводит её к
-    каноническому виду.
+    каноническому виду. `owner` — ключ проекта или адрес области: им отказ называет,
+    куда подшивали.
 
     Поля и их правила — те же функции, что у `build_entry`: заголовок, тело и ссылки
     записи проекта не отличаются от записи задачи ничем. Отличается набор типов
@@ -1033,15 +1033,10 @@ def build_project_entry(
 
     Нагрузка есть у записей знания — решения и заметки (`REPLACEABLE_ENTRY_TYPES`):
     `supersedes`, номера записей того же типа, которые новая заменяет (`CONCEPT.md`, 3.2;
-    TRK#48). Ключ кладётся у них всегда, в том числе пустым: форма записи одна на все
-    интерфейсы. У остальных типов `supersedes` отвергается, а не выбрасывается молча.
-    Есть ли такие записи, того ли они типа и действуют ли, проверяет сценарий
-    (`app/services/decisions.py`).
-
-    `replaceable=False` — дело области (`CONCEPT.md`, 3.7): механики замены у него
-    нет, и `supersedes` отвергается у любого типа, а нагрузка решения и заметки остаётся
-    пустой, как у записей задачи. Первым параметром тогда приходит адрес области — им
-    отказ называет, куда подшивали.
+    решение TRK#57, раздел 5). Механика одна у дела проекта и дела области. Ключ кладётся
+    у них всегда, в том числе пустым: форма записи одна на все интерфейсы. У остальных
+    типов `supersedes` отвергается, а не выбрасывается молча. Есть ли такие записи в этом
+    деле, того ли они типа и действуют ли, проверяет сценарий (`app/services/decisions.py`).
     """
     problems = FieldProblems()
     entry_type = _project_entry_type(type, problems)
@@ -1053,20 +1048,18 @@ def build_project_entry(
     replaced: list[int] = []
     with problems.field(SUPERSEDES_FIELD):
         replaced = _superseded_numbers(supersedes)
-    if replaced and not replaceable:
-        problems.add(SUPERSEDES_FIELD, "not_allowed", allowed_in="project_case")
-    elif replaced and entry_type is not None and entry_type not in REPLACEABLE_ENTRY_TYPES:
+    if replaced and entry_type is not None and entry_type not in REPLACEABLE_ENTRY_TYPES:
         problems.add(
             SUPERSEDES_FIELD,
             "not_allowed",
             allowed_for=sorted(item.value for item in REPLACEABLE_ENTRY_TYPES),
             got=entry_type.value,
         )
-    problems.raise_as(EntryFieldsInvalidError, key=project_key)
+    problems.raise_as(EntryFieldsInvalidError, key=owner)
 
     assert entry_type is not None  # иначе замечание о типе уже прервало бы работу
     payload: dict[str, Any] = {}
-    if entry_type in REPLACEABLE_ENTRY_TYPES and replaceable:
+    if entry_type in REPLACEABLE_ENTRY_TYPES:
         payload[SUPERSEDES_FIELD] = replaced
     return EntryDraft(
         type=entry_type,
@@ -1079,11 +1072,12 @@ def build_project_entry(
 
 
 def superseded_numbers(payload: Mapping[str, Any]) -> list[int]:
-    """Номера записей, которые заменяет решение или заметка дела проекта, — из нагрузки.
+    """Номера записей, которые заменяет решение или заметка дела проекта или области, — из
+    нагрузки.
 
-    Решение, подшитое до механизма замены, и заметка, подшитая до TRK-656, ключа не
-    несут и не заменяют ничего. Одно определение на сценарий статуса и на чтение — как
-    `answer_outcome` у ответа.
+    Решение, подшитое до механизма замены, заметка проекта, подшитая до TRK-656, и запись
+    области, подшитая до TRK-658, ключа не несут и не заменяют ничего. Одно определение на
+    сценарий статуса и на чтение — как `answer_outcome` у ответа.
     """
     value = payload.get(SUPERSEDES_FIELD)
     return [item for item in value if isinstance(item, int)] if isinstance(value, list) else []
@@ -1186,7 +1180,7 @@ def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str,
 
     Так читаются четыре типа. Ответ, подшитый до появления исходов (`question_no` и ничего
     более), читается как `answered` без заменившего вопроса (TRK-563). Решение и заметка
-    без `supersedes` — запись задачи, запись области (TRK-555), решение проекта до
+    без `supersedes` — запись задачи, запись области до TRK-658, решение проекта до
     замены (TRK-554) и заметка проекта до TRK-656 — ничего не заменяют. Правка раздела
     без `check_no` — любая, кроме точечной правки проверки — читается с `check_no: null`
     (TRK-565). Нагрузка остальных типов отдаётся как лежит: трекер всегда кладёт в неё
