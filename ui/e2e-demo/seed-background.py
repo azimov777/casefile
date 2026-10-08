@@ -2,8 +2,8 @@
 (TRK-82).
 
 Run on the host with plain python3 (stdlib only, no deps) against the isolated
-backend's REST API — see `README.md` in this folder for how that backend is
-raised. Creates project APP ("Checkout service") and nine background tasks spanning
+backend's REST API — see the tracker (area TRK/ui-testing, entries marked TRK-694) for how that
+backend is raised. Creates project APP ("Checkout service") and nine background tasks spanning
 backlog (3) / open (2) / in_progress (2) / awaiting an answer (1) / done (1), so the busiest
 column already stands close to as tall as the task-page scene (~700px of 800) —
 one card per column left the board mostly empty below the fold, and no amount of
