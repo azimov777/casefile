@@ -13,9 +13,6 @@ export type ProjectAttribute = components['schemas']['AttributeRead'];
  */
 export type ProjectDecision = components['schemas']['ProjectDecisionRead'];
 
-/** Действует ли решение проекта: `in_force` или `superseded`. */
-export type DecisionStatus = components['schemas']['DecisionStatus'];
-
 /**
  * Ключи запросов проекта.
  *

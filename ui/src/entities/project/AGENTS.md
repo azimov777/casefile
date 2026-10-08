@@ -9,8 +9,7 @@
 
 - `api/` — типы карточки, атрибута и решения проекта, ключи запросов и чтение проекта
 - `model/` — предел описания и его длина так, как её меряет бэкенд; адрес решения и отбор задач по нему
-- `ui/` — статус решения проекта плашкой
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `projectQueryOptions`, `projectKeys`, `PROJECT_DESCRIPTION_LIMIT`, `descriptionLength`, `descriptionTooLong`, `decisionHref`, `decisionNo`, `decisionTasksQuery`, `DecisionStatusMark`, типы `ProjectDetail`, `ProjectAttribute`, `ProjectDecision`, `DecisionStatus`
+- `index.ts` — публичный интерфейс среза: `projectQueryOptions`, `projectKeys`, `PROJECT_DESCRIPTION_LIMIT`, `descriptionLength`, `descriptionTooLong`, `decisionHref`, `decisionNo`, `decisionTasksQuery`, типы `ProjectDetail`, `ProjectAttribute`, `ProjectDecision`

@@ -40,7 +40,8 @@ export const ui = {
    * значение контракта, посчитанное бэкендом при чтении (`../docs/CONCEPT.md`, 3.2).
    */
   decision: {
-    kind: 'decision',
+    kind: { decision: 'decision', finding: 'note' },
+    supersededBy: 'superseded by',
     status: {
       in_force: 'in force',
       superseded: 'superseded',

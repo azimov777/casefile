@@ -9,11 +9,11 @@ import { noteDraftKey } from '../model/draft';
 import { useFileEntry } from '../model/use-project-actions';
 
 /**
- * Типы записи, которые человек пишет в дело: в дело проекта — только заметку (`UI-175`),
- * в дело области — заметку и решение (TRK#16, ч. 4; TRK-557).
+ * Типы записи, которые человек пишет в дело: в дело проекта — только заметку `note`
+ * (`UI-175`), в дело области — заметку (`finding`, TRK#59) и решение (TRK#16, ч. 4; TRK-557).
  */
 function entryTypesOf(holder: Holder): HumanEntryType[] {
-  return holder.kind === 'area' ? ['note', 'decision'] : ['note'];
+  return holder.kind === 'area' ? ['finding', 'decision'] : ['note'];
 }
 
 /**
@@ -30,10 +30,22 @@ function entryTypesOf(holder: Holder): HumanEntryType[] {
  * У области над полем стоит выбор типа — «заметка» или «решение»: тип меняет то, как
  * запись читают задачи области, а не форму, поэтому поле и черновик у них общие.
  */
-export function EntryForm({ holder, onCancel }: { holder: Holder; onCancel: () => void }) {
+export function EntryForm({
+  holder,
+  onCancel,
+  fixedType,
+}: {
+  holder: Holder;
+  onCancel: () => void;
+  /**
+   * Тип назван заранее — кнопкой «Решение» или «Заметка» на вкладке знания области
+   * (TRK-660): выбора типа над полем нет. Без него область спрашивает тип, проект пишет заметку.
+   */
+  fixedType?: HumanEntryType;
+}) {
   const entry = useFileEntry();
-  const types = entryTypesOf(holder);
-  const [type, setType] = useState<HumanEntryType>('note');
+  const types = fixedType === undefined ? entryTypesOf(holder) : [fixedType];
+  const [type, setType] = useState<HumanEntryType>(fixedType ?? entryTypesOf(holder)[0] ?? 'note');
   const [filed, setFiled] = useState<{
     entryNo: number;
     body: string;
@@ -45,16 +57,24 @@ export function EntryForm({ holder, onCancel }: { holder: Holder; onCancel: () =
   const { t } = useTranslation('project');
   const { t: tArea } = useTranslation('area');
   const area = holder.kind === 'area';
+  // Ключи словаря области — по двум её типам; у проекта тип всегда `note`.
+  const areaType = type === 'decision' ? 'decision' : 'finding';
 
   if (filed !== null) {
     return (
       <Receipt
         label={
           area
-            ? tArea(`entry.receiptLabel.${filed.type}`, { address: holder.key })
+            ? tArea(`entry.receiptLabel.${filed.type === 'decision' ? 'decision' : 'finding'}`, {
+                address: holder.key,
+              })
             : t('note.receiptLabel', { key: holder.key })
         }
-        headline={area ? tArea(`entry.receipt.${filed.type}`) : t('note.receiptHeadline')}
+        headline={
+          area
+            ? tArea(`entry.receipt.${filed.type === 'decision' ? 'decision' : 'finding'}`)
+            : t('note.receiptHeadline')
+        }
         owner={holder}
         entryNo={filed.entryNo}
         body={filed.body}
@@ -90,7 +110,7 @@ export function EntryForm({ holder, onCancel }: { holder: Holder; onCancel: () =
                   onChange={() => setType(option)}
                   className="size-(--ui-mark) accent-accent"
                 />
-                {tArea(`entry.type.${option}`)}
+                {tArea(`entry.type.${option === 'decision' ? 'decision' : 'finding'}`)}
               </label>
             ))}
           </div>
@@ -103,12 +123,12 @@ export function EntryForm({ holder, onCancel }: { holder: Holder; onCancel: () =
             ? tArea('entry.formLabel', { address: holder.key })
             : t('note.formLabel', { key: holder.key })
         }
-        fieldLabel={area ? tArea(`entry.fieldLabel.${type}`) : t('note.fieldLabel')}
+        fieldLabel={area ? tArea(`entry.fieldLabel.${areaType}`) : t('note.fieldLabel')}
         storageKey={noteDraftKey(holder)}
-        submitLabel={area ? tArea(`entry.submit.${type}`) : t('note.submit')}
+        submitLabel={area ? tArea(`entry.submit.${areaType}`) : t('note.submit')}
         pendingLabel={t('note.pending')}
-        emptyProblem={area ? tArea(`entry.empty.${type}`) : t('note.empty')}
-        placeholder={area ? tArea(`entry.placeholder.${type}`) : t('note.placeholder')}
+        emptyProblem={area ? tArea(`entry.empty.${areaType}`) : t('note.empty')}
+        placeholder={area ? tArea(`entry.placeholder.${areaType}`) : t('note.placeholder')}
         problem={fieldReason === undefined ? undefined : fieldReasonText(fieldReason)}
         isPending={entry.isPending}
         onCancel={onCancel}

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { cn, useExitHold } from '@/shared/lib';
 import { QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
 import { entryQueryOptions, type EntryHeading } from '../api/entries';
+import type { EntryState } from '../model/state';
 import { entryHeadline, type Headline } from '../model/headline';
 import type { EntryOwner } from '../model/owner';
 import {
@@ -17,6 +18,7 @@ import { CopyEntryLink } from './copy-entry-link';
 import { EntryBody } from './entry-body';
 import { EntryHeadline } from './entry-headline';
 import { EntryKind } from './entry-kind';
+import { EntryStateMark } from './entry-state-mark';
 
 /** Императивная ручка `EntryIndex`: прыжок «в начало описи» стоит в шапке блока
  * (`task-page.tsx`, `INDEX_NAV`, UI-127) и дотягивается снаружи ровно до того узла,
@@ -44,6 +46,12 @@ interface EntryIndexProps {
    * в адресе дальше.
    */
   onOpenChange: (no: number | null) => void;
+  /**
+   * Состояние записей знания по номеру (TRK-660): у заменённого решения или заметки в ячейке
+   * рода встаёт плашка «заменено» и ссылка на преемника. Записи без состояния — задачи,
+   * служебные, прочие — пометки не несут.
+   */
+  states?: ReadonlyMap<number, EntryState>;
   /** Ручка на прыжок «в начало описи» — вызывается из шапки блока (`task-page.tsx`). */
   ref?: Ref<EntryIndexHandle>;
 }
@@ -104,6 +112,7 @@ export function EntryIndex({
   owner,
   index,
   checks = NO_CHECKS,
+  states,
   openAt,
   onOpenChange,
   ref,
@@ -251,6 +260,7 @@ export function EntryIndex({
                 owner={owner}
                 heading={run.item}
                 checks={checks}
+                state={states?.get(run.item.no)}
                 open={expanded.has(run.item.no)}
                 scrollTo={scrollTarget === run.item.no}
                 onToggle={toggle}
@@ -261,6 +271,7 @@ export function EntryIndex({
                 owner={owner}
                 run={run}
                 checks={checks}
+                states={states}
                 open={openGroups.has(run.first) || run.items.some((item) => expanded.has(item.no))}
                 expanded={expanded}
                 scrollTarget={scrollTarget}
@@ -277,6 +288,7 @@ export function EntryIndex({
 
 interface GroupRowsProps {
   owner: EntryOwner;
+  states?: ReadonlyMap<number, EntryState>;
   run: Extract<SectionEditsRun<EntryHeading>, { kind: 'sections' }>;
   checks: string[];
   open: boolean;
@@ -297,6 +309,7 @@ interface GroupRowsProps {
  */
 function GroupRows({
   owner,
+  states,
   run,
   checks,
   open,
@@ -362,6 +375,7 @@ function GroupRows({
               owner={owner}
               heading={item}
               checks={checks}
+              state={states?.get(item.no)}
               open={expanded.has(item.no)}
               scrollTo={scrollTarget === item.no}
               onToggle={onToggle}
@@ -376,6 +390,8 @@ function GroupRows({
 interface IndexRowProps {
   owner: EntryOwner;
   heading: EntryHeading;
+  /** Состояние записи знания: заменённая помечается плашкой и ссылкой на преемника. */
+  state?: EntryState;
   checks: string[];
   open: boolean;
   /**
@@ -395,6 +411,7 @@ interface IndexRowProps {
 function IndexRow({
   owner,
   heading,
+  state,
   checks,
   open,
   nested = false,
@@ -439,6 +456,11 @@ function IndexRow({
           {/* Род записи знаком (решение Д10): в описи их по двадцать подряд, и
               `verdict` от `section_changed` иначе отличается только чтением слова. */}
           <EntryKind type={heading.type} />
+          {state !== undefined && (heading.type === 'decision' || heading.type === 'finding') ? (
+            <div className="mt-1">
+              <EntryStateMark owner={owner} state={state} kind={heading.type} />
+            </div>
+          ) : null}
         </td>
         <td className={cell}>
           <AuthorName author={heading.author} />

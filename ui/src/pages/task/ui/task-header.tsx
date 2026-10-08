@@ -1,7 +1,8 @@
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { AreaLink } from '@/entities/area';
-import { DecisionStatusMark, decisionHref } from '@/entities/project';
+import { DecisionStatusMark } from '@/entities/entry';
+import { decisionHref } from '@/entities/project';
 import {
   PriorityMark,
   StatusMark,

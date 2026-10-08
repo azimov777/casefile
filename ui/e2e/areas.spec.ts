@@ -200,6 +200,10 @@ for (const colorScheme of ['light', 'dark'] as const) {
       },
       {
         path: `/projects/${KEY}/areas/measure`,
+        ready: page.getByRole('region', { name: 'Решения области' }),
+      },
+      {
+        path: `/projects/${KEY}/areas/measure?tab=case`,
         ready: page.getByRole('region', { name: 'Дело области' }),
       },
       { path: `/tasks/${measured}`, ready: page.getByText(`${KEY}/measure`, { exact: true }) },

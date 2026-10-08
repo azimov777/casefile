@@ -117,32 +117,33 @@ export const area = {
     formLabel: 'Entry to the case of {{address}}',
     typeLegend: 'Entry type',
     type: {
-      note: 'Note',
+      finding: 'Note',
       decision: 'Decision',
     },
     fieldLabel: {
-      note: 'Note',
+      finding: 'Note',
       decision: 'Decision',
     },
     submit: {
-      note: 'File the note',
+      finding: 'File the note',
       decision: 'File the decision',
     },
     empty: {
-      note: 'An empty note cannot be filed.',
+      finding: 'An empty note cannot be filed.',
       decision: 'An empty decision cannot be filed.',
     },
     placeholder: {
-      note: 'What is worth knowing about the area. Markdown; TRK-2 and TRK/promotion#3 become links.',
+      finding:
+        'What is worth knowing about the area. Markdown; TRK-2 and TRK/promotion#3 become links.',
       decision:
         'The decision in its first line, then why. Tasks of the area follow it. Markdown; TRK-2 and TRK#7 become links.',
     },
     receipt: {
-      note: 'Note filed',
+      finding: 'Note filed',
       decision: 'Decision filed',
     },
     receiptLabel: {
-      note: 'Note to the case of {{address}} filed',
+      finding: 'Note to the case of {{address}} filed',
       decision: 'Decision to the case of {{address}} filed',
     },
   },
@@ -171,10 +172,44 @@ export const area = {
     label: 'Actions with area {{address}}',
   },
 
-  /** Area page tabs (TRK-618): without a parameter the Case tab opens. */
+  /** Area page tabs (TRK-618, TRK-660): without a parameter the Decisions tab opens. */
   tabs: {
     label: 'Area sections',
+    decisions: 'Decisions',
+    notes: 'Notes',
     attributes: 'Attributes',
     case: 'Case',
+  },
+
+  /**
+   * Знание области (TRK-660, TRK#59): вкладки «Решения» и «Заметки» — действующие записи,
+   * заменённые по переключателю, поиск по тексту, «Решение» и «Заметка».
+   */
+  knowledge: {
+    searchLabel: 'Search decisions and notes',
+    searchPlaceholder: 'A word from the title or the text',
+    searchClear: 'Clear the search',
+    loading: 'Reading the knowledge of the area…',
+    showSuperseded: 'Show superseded',
+    supersededCount_one: '{{count, number}} entry superseded',
+    supersededCount_other: '{{count, number}} entries superseded',
+    openDecision: 'Decision',
+    openNote: 'Note',
+    decisions: {
+      title: 'Decisions of the area',
+      hint: 'Rules of this part of the project: tasks of the area follow the ones in force.',
+      none: 'The area has no decisions yet.',
+      noneInForce: 'No decision is in force: all of them were superseded.',
+      noMatch: 'No decision matches the search.',
+      list: 'Decisions of the area',
+    },
+    notes: {
+      title: 'Notes of the area',
+      hint: 'What is worth knowing about this part of the project. A note explains; it does not set the work.',
+      none: 'The area has no notes yet.',
+      noneInForce: 'No note is in force: all of them were superseded.',
+      noMatch: 'No note matches the search.',
+      list: 'Notes of the area',
+    },
   },
 } as const;

@@ -4,6 +4,8 @@ export { useProjectRights, type ProjectRights } from './model/rights';
 export { useHolderAddress } from './model/use-holder-address';
 export { AttributesSection } from './ui/attributes-section';
 export { CaseSection } from './ui/case-section';
+export { KnowledgeSection } from './ui/knowledge-section';
+export { knowledgeLists, type KnowledgeKind } from './model/knowledge';
 export { CreateProject } from './ui/create-project';
 export { CreateArea, AreaArchiving, EditArea } from './ui/area-dialogs';
 export { AreaMenu, ProjectMenu } from './ui/holder-menu';

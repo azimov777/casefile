@@ -16,21 +16,32 @@ import { readEntryNo } from '@/shared/lib';
 export type HolderKind = 'project' | 'area';
 
 /** Вкладка экрана. `overview` — «Обзор» проекта, параметром адреса он не пишется. */
-export type HolderTab = 'overview' | 'decisions' | 'attributes' | 'areas' | 'case';
+export type HolderTab = 'overview' | 'decisions' | 'notes' | 'attributes' | 'areas' | 'case';
 
 /** Имя параметра адреса с вкладкой. */
 export const TAB_PARAM = 'tab';
 
-/** Вкладки экрана по порядку на полосе. У области нет ни «Обзора», ни решений. */
+/** Поиск по знанию области (`?q=`): живёт на вкладках «Решения» и «Заметки» (TRK-660). */
+export const SEARCH_PARAM = 'q';
+
+/** Вкладки знания области: те, где поиск `?q=` что-то значит. */
+export function isKnowledgeTab(kind: HolderKind, tab: HolderTab): boolean {
+  return kind === 'area' && (tab === 'decisions' || tab === 'notes');
+}
+
+/**
+ * Вкладки экрана по порядку на полосе. У области нет «Обзора»; её «Решения» и «Заметки» —
+ * знание области, а не раздел решений проекта (TRK-660, TRK#59).
+ */
 export const HOLDER_TABS: Readonly<Record<HolderKind, readonly HolderTab[]>> = {
   project: ['overview', 'decisions', 'attributes', 'areas', 'case'],
-  area: ['attributes', 'case'],
+  area: ['decisions', 'notes', 'attributes', 'case'],
 };
 
-/** Вкладка без параметра: «Обзор» у проекта, «Дело» у области (TRK-606#10, п. 7). */
+/** Вкладка без параметра: «Обзор» у проекта, «Решения» у области (TRK#59). */
 const DEFAULT_TAB: Readonly<Record<HolderKind, HolderTab>> = {
   project: 'overview',
-  area: 'case',
+  area: 'decisions',
 };
 
 /** Значение `?tab=`, которое вкладка этого вида понимает. `overview` — не значение. */
@@ -76,6 +87,9 @@ export function tabSearch(
     next.delete('type');
   }
   if (tab !== 'attributes') next.delete('attribute');
+  // Поиск — состояние вкладок знания: с «Атрибутов» и «Дела» он снимается, между
+  // «Решениями» и «Заметками» переезжает.
+  if (!isKnowledgeTab(kind, tab)) next.delete(SEARCH_PARAM);
   next.delete(TAB_PARAM);
   if (holderTab(next, kind) !== tab) next.set(TAB_PARAM, tab);
   return next;
