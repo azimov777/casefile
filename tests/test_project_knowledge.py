@@ -72,7 +72,8 @@ def test_supersedes_lives_on_a_finding_too_and_is_kept_even_empty() -> None:
     plain = build_project_entry("TRK", type="finding", title="Факт")
     assert (replacing.payload, plain.payload) == ({"supersedes": [2, 4]}, {"supersedes": []})
     # Заметка задачи и заметка, подшитая до TRK-656, читаются с пустым списком: форма одна.
-    assert read_payload(EntryType.FINDING, {}) == {"supersedes": []}
+    # Адрес подъёма у записи, которая не черновик, — `null` (TRK-659).
+    assert read_payload(EntryType.FINDING, {}) == {"supersedes": [], "draft_for": None}
 
 
 # --- Проверка 2: замена заметки и статус при чтении ---------------------------------------
@@ -102,7 +103,7 @@ async def test_a_finding_superseded_by_a_finding_reads_with_its_successor_throug
     assert _standing(old) == (a["no"], "superseded", b["no"])
     [new] = successor["items"]
     assert _standing(new) == (b["no"], "in_force", None)
-    assert new["payload"] == {"supersedes": [a["no"]]}
+    assert new["payload"] == {"supersedes": [a["no"]], "draft_for": None}
     assert [_standing(item) for item in in_force["items"]] == [
         (b["no"], "in_force", None),
         (decision["no"], "in_force", None),
@@ -133,7 +134,7 @@ async def test_a_finding_superseded_by_a_finding_reads_the_same_through_rest(
     assert (b["status"], b["superseded_by"], b["payload"]) == (
         None,
         None,
-        {"supersedes": [a["no"]]},
+        {"supersedes": [a["no"]], "draft_for": None},
     )
 
     by_number = await auth_client.get(ENTRIES, params={"nos": [a["no"]]})
@@ -310,7 +311,7 @@ async def test_a_task_finding_reads_without_a_status(
     assert (fact.get("status"), fact.get("superseded_by"), fact["payload"]) == (
         None,
         None,
-        {"supersedes": []},
+        {"supersedes": [], "draft_for": None},
     )
 
 

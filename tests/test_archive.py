@@ -402,8 +402,8 @@ async def test_an_area_entry_that_supersedes_comes_in_with_the_same_status(
         (item["no"], item["payload"], item["status"], item["superseded_by"])
         for item in after.json()["data"]
     ] == [
-        (first.no, {"supersedes": []}, "superseded", second.no),
-        (second.no, {"supersedes": [first.no]}, "in_force", None),
+        (first.no, {"supersedes": [], "draft_for": None}, "superseded", second.no),
+        (second.no, {"supersedes": [first.no], "draft_for": None}, "in_force", None),
     ]
 
 

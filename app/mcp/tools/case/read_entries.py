@@ -30,6 +30,10 @@ def register(tools: Toolset) -> None:
         types filed after it. `decision` and `attempt` entries hold the choices already
         made and the attempts already tried, failed ones included.
 
+        A draft — a decision or finding filed with `draft_for` — carries `lifted_by`: the
+        entries of the named case that reference it in `refs`, empty while it is not
+        lifted.
+
         Entries of many cases in one stream, with a wait for new ones, come from
         `wait_journal`.
         """
@@ -46,6 +50,9 @@ def register(tools: Toolset) -> None:
                 cursor=cursor,
             )
             return page(
-                (entry(item, task_key=task.key) for item in listed.items),
+                (
+                    entry(item, task_key=task.key, lifted_by=listed.lifts.get(item.no))
+                    for item in listed.items
+                ),
                 next_cursor=listed.next_cursor,
             )

@@ -24,18 +24,19 @@ EntryBodyArg = Annotated[
     ),
 ]
 
+#: Описание ссылок записи — одно на все инструменты; `add_project_entry` дописывает к нему
+#: подъём черновика, а не пересказывает своими словами.
+ENTRY_REFS_DESCRIPTION = (
+    "References: task entries `TRK-42#12`, project entries `TRK#7`, area entries "
+    "`TRK/promotion#3`, discussion entries `TRK~7#3`, tasks `TRK-7`, or a URL with a "
+    "scheme (`https://…`, `file://…`). Anything else (`7`, `#7`, `docs/x.md`) is refused "
+    "with `entry_fields_invalid`, as is an entry, task or project that does not exist; "
+    "URLs are not checked"
+)
+
 EntryRefsArg = Annotated[
     list[str] | None,
-    Field(
-        description=(
-            "References: task entries `TRK-42#12`, project entries `TRK#7`, area entries "
-            "`TRK/promotion#3`, discussion entries `TRK~7#3`, tasks `TRK-7`, or a URL with a "
-            "scheme (`https://…`, `file://…`). Anything else (`7`, `#7`, `docs/x.md`) is refused "
-            "with `entry_fields_invalid`, as is an entry, task or project that does not exist; "
-            "URLs are not checked"
-        ),
-        examples=[["TRK-42#12"]],
-    ),
+    Field(description=ENTRY_REFS_DESCRIPTION, examples=[["TRK-42#12"]]),
 ]
 
 #: Типы, которые подшивает `add_entry`, — те, у которых нет нагрузки. Структурные записи
@@ -61,8 +62,9 @@ EntryTypeArg = Annotated[
         description=(
             "What the entry records:\n"
             "- `decision` — an option chosen among several, with the reason; a choice "
-            "that outlives the task and that other tasks are to follow is a project "
-            "decision, filed by `add_project_entry`;\n"
+            "that outlives the task and that other tasks are to follow is a project or "
+            "area decision: filed by `add_project_entry` for a task without code in a "
+            "branch, and here with `draft_for` for a task whose code is still in a branch;\n"
             "- `attempt` — something tried and how it ended, failed attempts included;\n"
             "- `finding` — an established fact with its source, including what was "
             "learned from reading;\n"
@@ -76,6 +78,22 @@ EntryTypeArg = Annotated[
             "it; refused with `warning_not_open` without one, and with "
             "`acceptance_by_closer` from the signature that closed the task;\n"
             "- `note` — an entry that fits none of the types above"
+        )
+    ),
+]
+
+DraftForArg = Annotated[
+    str | None,
+    Field(
+        description=(
+            "Makes a `decision` or `finding` a draft: knowledge of a task whose code is "
+            "still in a branch, addressed to the case it belongs to once the code is "
+            "merged — the task's project key (`TRK`) or the address of one of its areas that "
+            "is not archived (`TRK/mcp`). The draft is lifted by an entry of that case "
+            "naming it in `refs` (`add_project_entry`); until then it counts toward the task's "
+            "`open_drafts`. Another project, an unknown or archived area, or another entry "
+            "type is refused with `entry_fields_invalid`, the reason and the allowed "
+            "addresses in `details`"
         )
     ),
 ]

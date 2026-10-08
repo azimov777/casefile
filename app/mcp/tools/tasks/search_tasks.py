@@ -241,6 +241,17 @@ OpenWarningsArg = Annotated[
     Field(description="1 for tasks with an open `warning`, 0 for the rest"),
 ]
 
+OpenDraftsArg = Annotated[
+    int | None,
+    Field(
+        description=(
+            "Exact number of drafts not lifted yet — decisions and findings filed with "
+            "`draft_for` that no entry of the named case references in `refs`; "
+            "`open_drafts: > 0` in `query` selects the tasks with any"
+        )
+    ),
+]
+
 RemarksInWorkArg = Annotated[
     int | None,
     Field(
@@ -421,6 +432,7 @@ def register(tools: Toolset) -> None:
         open_blocking_questions: OpenBlockingQuestionsArg = None,
         open_remarks: OpenRemarksArg = None,
         open_warnings: OpenWarningsArg = None,
+        open_drafts: OpenDraftsArg = None,
         remarks_in_work: RemarksInWorkArg = None,
         text: TextArg = None,
         sort: SortArg = None,
@@ -464,6 +476,7 @@ def register(tools: Toolset) -> None:
                     open_blocking_questions=open_blocking_questions,
                     open_remarks=open_remarks,
                     open_warnings=open_warnings,
+                    open_drafts=open_drafts,
                     remarks_in_work=remarks_in_work,
                     text=text,
                 ),
@@ -502,6 +515,7 @@ def _terms(
     open_blocking_questions: int | None,
     open_remarks: int | None,
     open_warnings: int | None,
+    open_drafts: int | None,
     remarks_in_work: int | None,
     text: str | None,
 ) -> list[StructuredTerm]:
@@ -540,6 +554,7 @@ def _terms(
             ("open_blocking_questions", open_blocking_questions),
             ("open_remarks", open_remarks),
             ("open_warnings", open_warnings),
+            ("open_drafts", open_drafts),
             ("remarks_in_work", remarks_in_work),
         )
         if value is not None

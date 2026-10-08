@@ -244,6 +244,15 @@ class TaskFeaturesRead(BaseModel):
             "after the warning; otherwise 0"
         ),
     )
+    open_drafts: int = Field(
+        examples=[0],
+        description=(
+            "Drafts in the case not lifted yet: decisions and findings filed with "
+            "`draft_for` that no entry of the named project's or area's case references "
+            "in `refs`. Computed on read; the tracker neither lifts nor reminds, and "
+            "closing does not wait for it"
+        ),
+    )
     last_summary_at: datetime | None = Field(
         default=None,
         description="When the latest summary was filed; null if the case has none",

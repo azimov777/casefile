@@ -268,6 +268,17 @@ class TaskFilters:
             ),
         ),
     ] = None
+    open_drafts: Annotated[
+        int | None,
+        Query(
+            ge=0,
+            description=(
+                "Exact number of drafts not lifted yet: decisions and findings filed with "
+                "`draft_for` that no entry of the named case references. Use the query "
+                "language for ranges: `open_drafts: > 0`"
+            ),
+        ),
+    ] = None
     remarks_in_work: Annotated[
         int | None,
         Query(
@@ -320,6 +331,7 @@ class TaskFilters:
                 ("open_blocking_questions", self.open_blocking_questions),
                 ("open_remarks", self.open_remarks),
                 ("open_warnings", self.open_warnings),
+                ("open_drafts", self.open_drafts),
                 ("remarks_in_work", self.remarks_in_work),
             )
             if value is not None
