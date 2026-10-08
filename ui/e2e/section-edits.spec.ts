@@ -5,7 +5,7 @@ import { fontsReady, readE2eToken, silenceJournal } from './contour';
 const token = readE2eToken();
 
 /**
- * Фраза, по которой сценарий узнаёт свою задачу между прогонами (`e2e/AGENTS.md`):
+ * Фраза, по которой сценарий узнаёт свою задачу между прогонами (решение `TRK/ui-testing#6`):
  * отбор `text` ищет её в описании. Уникальна в проекте DEMO.
  */
 const MARKER = 'ради группы правок разделов';
@@ -49,7 +49,7 @@ let ready: Promise<Seeded> | null = null;
 
 /**
  * Задача, как TRK-106: пачка из семи правок, решение, ещё одна пачка из семи.
- * Заводится один раз на файл и узнаётся по фразе (`e2e/AGENTS.md`).
+ * Заводится один раз на файл и узнаётся по фразе (решение `TRK/ui-testing#6`).
  */
 function seed(request: APIRequestContext): Promise<Seeded> {
   ready ??= (async () => {

@@ -1,12 +1,8 @@
 # src/features/manage-installation
 
-Перенос установки: скачать архив всех её данных и принять его в свежую установку
-(`docs/moving.md`, TRK-100, UI-135). Обе операции — только администратору
-(`bootstrap.account.is_admin`), и решает это флаг из первого кадра, а не отказ `403`.
-
-Архив несёт хеши паролей и токенов всей установки, поэтому обе операции идут
-**мимо кэша запросов** — тем же образцом, что выпуск токена в `features/manage-access`:
-состояние действия держит сам хук, а не `QueryClient` или `MutationCache`.
+Перенос установки (`docs/moving.md`): скачать архив всех её данных и принять его в свежую установку;
+только администратору. Архив несёт хеши паролей и токенов, поэтому состояние действия держит сам хук,
+мимо кэша запросов.
 
 ## Папки
 
@@ -16,6 +12,4 @@
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `useExportArchive`, `useImportArchive`,
-  `readArchiveFile`, `exportInstallationArchive`, `ImportDialog`, `ImportResult`, типы
-  `InstallationArchive`, `InstallationArchiveUpload`, `ArchiveImportRead`
+- `index.ts` — публичный интерфейс среза

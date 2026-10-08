@@ -1,7 +1,7 @@
 # src/features/task-filters
 
-Отбор задач: условия, порядок, режим отображения, показ архива и страница как состояние адреса страницы. Своего состояния
-у отбора нет — перезагрузка и присланная ссылка обязаны показать одно и то же.
+Отбор задач как состояние адреса страницы: условия, порядок, режим отображения, показ архива и страница;
+перезагрузка и присланная ссылка показывают одно и то же.
 
 ## Папки
 
@@ -11,8 +11,4 @@
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `TaskCounters`, `TaskFiltersForm`, `useTaskFilters`,
-  `readFilters`, `writeFilters`, `filtersToListParams`, `hasConditions`,
-  `readQueryProblem`, `caretLine`, `describeFilters`, `queryOverrides`, `TASK_SORTS`,
-  `EMPTY_FILTERS`, `DEFAULT_SORT`, `OPEN_QUESTIONS_CONDITION`, типы `TaskFilters`, `TaskView`,
-  `TaskFiltersControl`, `QueryProblem`, `FilterCondition`
+- `index.ts` — публичный интерфейс среза
