@@ -278,7 +278,7 @@ export const LOGIN_URL = `http://localhost:${LOGIN_PORT}`;
  * Нужна сценариям запасного пути — экрана входа. Контур ключ выдаёт всем (иначе
  * продуктовый путь не проверял бы никто), и без этой подмены человек попадал бы сразу
  * на задачи. Подменяется ровно один запрос, а не выдача ключа во всём контуре:
- * ослаблять контур ради одного сценария нельзя (`docs/CONVENTIONS.md`).
+ * ослаблять контур ради одного сценария нельзя (TRK#233, шаг 3).
  */
 export async function installWithoutKey(target: Page | BrowserContext): Promise<void> {
   await target.route('**/config.json', (route) => route.fulfill({ status: 404, body: '' }));

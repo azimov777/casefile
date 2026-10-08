@@ -8,5 +8,5 @@
 
 - `merge-task-branch.sh` — слияние ветки задачи в `main`: без коммита, `pnpm check` затем
   `pnpm e2e` на результате, коммит только на двойном зелёном со строкой `Merge-verified:`
-  (`docs/CONVENTIONS.md`, «Слияние ветки задачи в main»); проверяет согласие с прозой
+  (решение проекта TRK#224); проверяет согласие с прозой
   `testing/merge-script.test.ts`

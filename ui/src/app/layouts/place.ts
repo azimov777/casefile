@@ -1,6 +1,6 @@
 import { projectOfKey } from '@/shared/lib';
 
-/** Раздел, в котором человек находится. Совпадает с таблицей экранов `CONCEPT.md`, 3. */
+/** Раздел, в котором человек находится. Совпадает с разделами оболочки (TRK/ui-screens#3). */
 export type Section =
   | 'tasks'
   | 'task'

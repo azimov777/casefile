@@ -16,7 +16,7 @@ function Routed() {
  *
  * `MemoryRouter` не трогает `window.location`, поэтому «а поменялся ли адрес» иначе
  * из теста не видно вовсе — а часть состояния экрана живёт именно в адресе
- * (`CONVENTIONS.md`, «Состояние»), и проверять её надо.
+ * (TRK/ui-api#4), и проверять её надо.
  */
 export const address = { current: '/' };
 

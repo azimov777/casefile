@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { fontsReady, silenceJournal } from './contour';
 
-/** Пять экранов из `CONCEPT.md`, 3: список, доска, карточка, дело, входящая. */
+/** Пять экранов: список, доска (TRK/ui-list#2), карточка, дело, входящая (TRK/ui-screens#8, #9, #13). */
 const SCREENS: [string, string][] = [
   ['список', '/tasks?project=DEMO'],
   ['доска', '/tasks?project=DEMO&view=board'],
