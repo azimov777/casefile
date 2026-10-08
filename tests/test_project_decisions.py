@@ -411,7 +411,7 @@ async def test_rest_supersedes_reads_statuses_and_cites_decisions(
     entries = f"/api/v1/projects/{project.key}/entries"
     first = await auth_client.post(entries, json={"type": "decision", "title": "Первое"})
     assert first.status_code == 201, first.text
-    assert first.json()["data"]["payload"] == {"supersedes": []}
+    assert first.json()["data"]["payload"] == {"supersedes": [], "draft_for": None}
     first_no = first.json()["data"]["no"]
 
     created = await auth_client.post(
@@ -432,7 +432,7 @@ async def test_rest_supersedes_reads_statuses_and_cites_decisions(
     )
     assert second.status_code == 201, second.text
     second_no = second.json()["data"]["no"]
-    assert second.json()["data"]["payload"] == {"supersedes": [first_no]}
+    assert second.json()["data"]["payload"] == {"supersedes": [first_no], "draft_for": None}
 
     detail = (await auth_client.get(f"/api/v1/projects/{project.key}")).json()["data"]
     assert [

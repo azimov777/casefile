@@ -174,6 +174,7 @@ async def test_a_task_goes_the_whole_way_through_rest(
         "open_blocking_questions": 0,
         "open_remarks": 0,
         "open_warnings": 0,
+        "open_drafts": 0,
         "last_summary_at": package["summary"]["created_at"],
         "last_entry_at": last_agent["created_at"],
     }

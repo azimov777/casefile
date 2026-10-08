@@ -10,7 +10,7 @@ from app.domain.case import EntryType
 from app.domain.discussions import is_discussion_address
 from app.mcp.arguments import CaseAddressArg, IdempotencyKeyArg
 from app.mcp.idempotency import Once
-from app.mcp.tools.case.arguments import EntryBodyArg, EntryRefsArg
+from app.mcp.tools.case.arguments import ENTRY_REFS_DESCRIPTION, EntryBodyArg
 from app.mcp.tools.case.views import AppendedProjectEntryView, appended_project_entry
 from app.mcp.toolset import FILING, Toolset
 from app.services import areas as areas_service
@@ -52,6 +52,20 @@ SupersedesArg = Annotated[
     ),
 ]
 
+ProjectEntryRefsArg = Annotated[
+    list[str] | None,
+    Field(
+        description=(
+            f"{ENTRY_REFS_DESCRIPTION}. A reference to a task's draft — a decision or "
+            "finding filed with `draft_for` naming this project or area — lifts the draft, "
+            "whatever the type of the referencing entry: the draft leaves the task's "
+            "`open_drafts`, and this entry appears in its `lifted_by`. A draft that replaces "
+            "an entry of this case is lifted together with `supersedes` naming that entry"
+        ),
+        examples=[["TRK-42#12"]],
+    ),
+]
+
 ProjectEntryTitleArg = Annotated[
     str,
     Field(
@@ -73,7 +87,7 @@ def register(tools: Toolset) -> None:
         type: ProjectEntryTypeArg,
         title: ProjectEntryTitleArg,
         body: EntryBodyArg = "",
-        refs: EntryRefsArg = None,
+        refs: ProjectEntryRefsArg = None,
         supersedes: SupersedesArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedProjectEntryView:

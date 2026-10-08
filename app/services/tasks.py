@@ -286,7 +286,9 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     вопросов, последняя сводка и опись нужны пакету целиком, а `blocked`, счётчики,
     `last_summary_at` и `last_entry_at` — это их производные. Отдельный запрос стоит один
     признак — `deferred`: ему нужны часы базы, и считает его то же выражение, что проверку
-    входа в `in_progress` и отбор `deferred:`.
+    входа в `in_progress` и отбор `deferred:`. Второй — `open_drafts`: подъём черновика
+    лежит в деле адресата, которого пакет не читает, и считает его запрос отбора
+    `open_drafts:`.
     """
     task = await read_task(session, key, actor=actor)
     links = await links_service.list_links(session, task, actor=actor)
@@ -334,6 +336,7 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
             blocked=links_service.blocked(links),
             deferred=deferred,
             discussion_questions=[question for question, _ in discussion_questions],
+            open_drafts=await case_service.count_open_drafts(session, task),
             remarks=remarks,
         ),
         summary=summary,
@@ -620,6 +623,7 @@ async def close_task(
                 title=item.title,
                 body=item.body,
                 refs=item.refs,
+                draft_for=item.draft_for,
                 action_id=action_id,
             )
         )

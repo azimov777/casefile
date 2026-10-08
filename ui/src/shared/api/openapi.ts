@@ -861,8 +861,9 @@ export interface paths {
          *     глубине, без самой X: дети, внуки и так далее.
          *
          *     Отбирать можно и по вычисляемым признакам (`blocked`, `open_questions`,
-         *     `open_blocking_questions`, `open_remarks`, `open_warnings`): колонок под них нет, они
-         *     считаются из связей и дела прямо в запросе. Запрос кандидатов назначателя — одна строка:
+         *     `open_blocking_questions`, `open_remarks`, `open_warnings`, `open_drafts`): колонок
+         *     под них нет, они считаются из связей и дела прямо в запросе. Запрос кандидатов
+         *     назначателя — одна строка:
          *     `project: TRK and status: open and blocked: false and open_blocking_questions: 0`.
          *     Есть и поле отбора без признака — `remarks_in_work`: «замечание приняли в работу, а
          *     названная задача ещё не закрыта».
@@ -1103,7 +1104,8 @@ export interface paths {
          *     — всё, что случилось после названной записи, и вместе они отвечают на вопрос «что
          *     произошло после последней сводки». `after_no` и `cursor` не спорят: первый задаёт
          *     клиент, второй продолжает страницу, действуют оба. Записи неизменяемы: маршрутов
-         *     правки и удаления нет.
+         *     правки и удаления нет. У черновика — решения или находки с `payload.draft_for` —
+         *     `lifted_by` перечисляет записи дела адресата, которые его подняли.
          */
         get: operations["list_task_entries"];
         put?: never;
@@ -1636,6 +1638,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -1930,6 +1938,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2131,6 +2145,12 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
             /**
              * Type
              * @constant
@@ -2543,6 +2563,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2677,6 +2703,12 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2817,6 +2849,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2942,6 +2980,12 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3121,6 +3165,12 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3493,6 +3543,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -3728,6 +3784,14 @@ export interface components {
              * @example null
              */
             superseded_by?: number | null;
+            /**
+             * Lifted By
+             * @description Computed on read of a task's case for a draft (`payload.draft_for` set): the entries of the named project's or area's case that reference this draft in `refs`, as `TRK/mcp#5`; empty while the draft is not lifted. `null` for an entry that is not a draft, in the journal and in the answer that files the entry
+             * @example [
+             *       "TRK/mcp#5"
+             *     ]
+             */
+            lifted_by?: string[] | null;
             payload?: components["schemas"]["SupersedesPayload"];
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -3890,6 +3954,12 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4345,6 +4415,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -4486,6 +4562,14 @@ export interface components {
              * @example null
              */
             superseded_by?: number | null;
+            /**
+             * Lifted By
+             * @description Computed on read of a task's case for a draft (`payload.draft_for` set): the entries of the named project's or area's case that reference this draft in `refs`, as `TRK/mcp#5`; empty while the draft is not lifted. `null` for an entry that is not a draft, in the journal and in the answer that files the entry
+             * @example [
+             *       "TRK/mcp#5"
+             *     ]
+             */
+            lifted_by?: string[] | null;
             payload?: components["schemas"]["SupersedesPayload"];
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4694,6 +4778,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -4857,6 +4947,12 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5292,6 +5388,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5389,6 +5491,12 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5806,6 +5914,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * Type
              * @constant
              */
@@ -5933,6 +6047,12 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -6140,6 +6260,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -6292,6 +6418,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -6436,6 +6568,12 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -6716,6 +6854,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -6882,6 +7026,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -6969,11 +7119,13 @@ export interface components {
         /**
          * SupersedesPayload
          * @description Нагрузка решения и заметки: какие записи того же типа и того же дела проекта или
-         *     области эта заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2; TRK#57, раздел 5).
+         *     области эта заменила (`CONCEPT.md`, 3.2; TRK#48, раздел 2; TRK#57, раздел 5), и у
+         *     черновика дела задачи — адрес его подъёма (TRK#57, раздел 8).
          *
-         *     Список со значением по умолчанию: записи задач, решения проекта, подшитые до замены
-         *     (`TRK-554`), заметки проекта до TRK-656 и записи областей до TRK-658 ключа не несут,
-         *     а ответ несёт его всегда — форма записи одна.
+         *     Оба поля со значением по умолчанию: записи задач, решения проекта, подшитые до замены
+         *     (`TRK-554`), заметки проекта до TRK-656 и записи областей до TRK-658 `supersedes` не
+         *     несут, а запись, которая не черновик, — `draft_for`; ответ несёт оба всегда — форма
+         *     записи одна.
          */
         SupersedesPayload: {
             /**
@@ -6984,6 +7136,12 @@ export interface components {
              *     ]
              */
             supersedes?: number[];
+            /**
+             * Draft For
+             * @description For a draft in a task's case: the project key or area address whose case the entry is to be lifted into once the task's code is merged. The draft is lifted by an entry of that case naming it in `refs` (`lifted_by`); `null` for an entry that is not a draft and in a project's or an area's case
+             * @example TRK/mcp
+             */
+            draft_for?: string | null;
         };
         /**
          * TaskAreaRead
@@ -7292,6 +7450,12 @@ export interface components {
              */
             open_warnings: number;
             /**
+             * Open Drafts
+             * @description Drafts in the case not lifted yet: decisions and findings filed with `draft_for` that no entry of the named project's or area's case references in `refs`. Computed on read; the tracker neither lifts nor reminds, and closing does not wait for it
+             * @example 0
+             */
+            open_drafts: number;
+            /**
              * Last Summary At
              * @description When the latest summary was filed; null if the case has none
              */
@@ -7573,6 +7737,12 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
             /**
              * Type
              * @constant
@@ -8191,6 +8361,12 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -8365,6 +8541,12 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -11657,11 +11839,11 @@ export interface operations {
     list_tasks: {
         parameters: {
             query?: {
-                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `area`, `assignee`, `blocked`, `decision`, `deferred`, `key`, `last_entry_at`, `open_blocking_questions`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
+                /** @description Query language string, for example `project: TRK and status: open and blocked: false and open_blocking_questions: 0`. Fields: `area`, `assignee`, `blocked`, `decision`, `deferred`, `key`, `last_entry_at`, `open_blocking_questions`, `open_drafts`, `open_questions`, `open_remarks`, `open_warnings`, `parent`, `priority`, `project`, `remarks_in_work`, `status`, `text`, `under`. Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains), `!~`, `in`, `not in`; `empty()` matches tasks with no value in the field. The operator goes **after** the colon — `status: in open, in_progress`, not `status in (open, in_progress)`: parentheses group conditions, not values. Without an operator a condition means equality, and several comma-separated values already mean set membership. Combine with `and`, `or` and parentheses. Values with spaces or a leading language word go in quotes. Examples: `project: TRK and status: open and blocked: false`; `status: in open, in_progress`; `priority: >= high and text: ~ login`; `assignee: empty() or open_questions: > 0`. A parse error answers 422 with the position of the offending character and, where the right shape follows from it, with that shape in `details.hint` */
                 query?: string | null;
                 /** @description Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. Sortable: `key`, `last_entry_at`, `priority`, `updated_at`. `key` orders by project and task number, so `TRK-10` follows `TRK-2`. The result is always tie-broken by task id, so paging stays stable while tasks are being created */
                 sort?: string[] | null;
-                /** @description Fields to return, to keep the answer small: `area`, `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `area` brings the area of the task, address and title, or `null` */
+                /** @description Fields to return, to keep the answer small: `area`, `assignee`, `checks`, `constraints`, `context`, `created_at`, `created_by`, `description`, `features`, `goal`, `id`, `key`, `not_before`, `output`, `parent`, `previous_keys`, `priority`, `project`, `status`, `title`, `updated_at`, `version`. Omit for the whole task, computed features included. The task key is always included. `features` is picked as a whole and brings `blocked`, `deferred`, `open_questions`, `open_blocking_questions`, `open_remarks`, `open_warnings`, `open_drafts`, `last_summary_at`, `last_entry_at`; a single feature is not a field of the answer, and asking for one answers 422 `search_field_unknown` with the selectable names. `parent` brings the parent of the task, key and title, or `null` for a top-level task. `area` brings the area of the task, address and title, or `null` */
                 fields?: string[] | null;
                 /** @description Page size */
                 limit?: number;
@@ -11699,6 +11881,8 @@ export interface operations {
                 open_remarks?: number | null;
                 /** @description 1 for tasks closed with checks `partial` or `unverifiable` whose warning has no `acceptance` or `remark` after it yet, 0 for the rest */
                 open_warnings?: number | null;
+                /** @description Exact number of drafts not lifted yet: decisions and findings filed with `draft_for` that no entry of the named case references. Use the query language for ranges: `open_drafts: > 0` */
+                open_drafts?: number | null;
                 /** @description Remarks resolved as `accepted` whose continuation task is still open: reviewed, but the work is not finished */
                 remarks_in_work?: number | null;
                 /** @description Substring of the title or the description, matched case-insensitively */

@@ -4,7 +4,13 @@
 
 from app.mcp.arguments import IdempotencyKeyArg, TaskKeyArg
 from app.mcp.idempotency import Once
-from app.mcp.tools.case.arguments import EntryBodyArg, EntryRefsArg, EntryTitleArg, EntryTypeArg
+from app.mcp.tools.case.arguments import (
+    DraftForArg,
+    EntryBodyArg,
+    EntryRefsArg,
+    EntryTitleArg,
+    EntryTypeArg,
+)
 from app.mcp.tools.case.views import AppendedEntryView, appended_entry
 from app.mcp.toolset import FILING, Toolset
 from app.services import case as case_service
@@ -22,6 +28,7 @@ def register(tools: Toolset) -> None:
         title: EntryTitleArg,
         body: EntryBodyArg = "",
         refs: EntryRefsArg = None,
+        draft_for: DraftForArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedEntryView:
         """Files an entry without payload: a decision, attempt, finding, artifact, remark,
@@ -46,17 +53,17 @@ def register(tools: Toolset) -> None:
                     title=title,
                     body=body,
                     refs=refs or (),
+                    draft_for=draft_for,
                 )
                 return appended_entry(entry, task_key=task.key)
 
+            request = {"task": task.key, "type": type, "title": title, "body": body, "refs": refs}
+            # Адрес подъёма — в отпечатке только присланным: ключ, сохранённый вызовом до
+            # черновиков, отвечает на повтор тем же отпечатком, а не `idempotency_key_reused`.
+            if draft_for is not None:
+                request["draft_for"] = draft_for
             return await Once.of(add_entry, session, actor, idempotency_key).run(
                 result=AppendedEntryView,
-                request={
-                    "task": task.key,
-                    "type": type,
-                    "title": title,
-                    "body": body,
-                    "refs": refs,
-                },
+                request=request,
                 build=append,
             )
