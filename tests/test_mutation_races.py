@@ -97,7 +97,7 @@ async def trio(committing_sessions: async_sessionmaker[AsyncSession]) -> AsyncIt
     руками: без записи о входе в работу закрытие отказало бы раньше, чем дошло до
     фактов гонки — граница «этого захода» считается от неё. Сводку подшивает само
     закрытие. Уборка записей идёт с выключенным триггером неизменяемости — единственное
-    законное место, где его выключают (`docs/notes/db.md`).
+    законное место, где его выключают (`TRK/db#30`).
     """
     async with committing_sessions() as session:
         project = Project(key=PROJECT_KEY, title="Гонка изменений", **created_by_columns(TRACKER))

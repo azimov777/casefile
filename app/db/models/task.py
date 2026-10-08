@@ -76,7 +76,7 @@ class Task(BaseModel, CreatedByMixin):
         Index("ix_tasks_updated_at_id", "updated_at", "id"),
         # Триграммные индексы под `text: ~ ...` — вхождение подстроки в названии и
         # описании. Работают от трёх символов: в двух триграмм нет, и план вырождается
-        # в последовательное чтение (`docs/notes/search.md`).
+        # в последовательное чтение (`TRK/search#15`).
         Index(
             "ix_tasks_title_trgm",
             "title",

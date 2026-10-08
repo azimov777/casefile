@@ -5693,7 +5693,7 @@ export interface components {
          *     `supersedes` — только у решения и находки: новая запись заменяет названные записи
          *     своего типа (TRK#89; TRK#48). Без значения по умолчанию в схеме
          *     (`default_factory`): иначе клиент интерфейса требовал бы его у каждой заметки
-         *     (`docs/notes/api.md`).
+         *     (`TRK/api#60`).
          */
         ProjectEntryCreate: {
             /**

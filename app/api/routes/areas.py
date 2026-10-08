@@ -122,7 +122,7 @@ async def create_area(
     """
 
     # Ответ без атрибутов: у новой области их нет, а форма ответа создающего вызова
-    # живёт сутки в ключах идемпотентности, и расширять её нельзя (`docs/notes/mcp.md`).
+    # живёт сутки в ключах идемпотентности, и расширять её нельзя (`TRK/mcp#11`).
     async def create() -> DataResponse[AreaRead]:
         area = await service.create_area(
             session,

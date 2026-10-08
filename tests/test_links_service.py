@@ -134,7 +134,7 @@ async def test_a_link_is_seen_from_both_sides_under_its_own_kind(
 
     # Множеством, а не списком: обе связи заведены одной транзакцией, `created_at` у них
     # общий (`now()` — время её начала), и порядок между ними задаёт идентификатор
-    # (`docs/notes/db.md`). В жизни связи приходят разными запросами и идут по времени.
+    # (`TRK/db#35`). В жизни связи приходят разными запросами и идут по времени.
     assert {(link.kind, link.other.key) for link in seen_from_first} == {
         (LinkKind.BLOCKS, "TRK-2"),
         (LinkKind.RELATES, "TRK-3"),
@@ -314,7 +314,7 @@ async def test_the_link_entry_is_signed_by_the_author_of_the_action(
     task_actor: Actor,
     project: Project,
 ) -> None:
-    """Служебную запись подписывает автор действия, а не трекер (`docs/notes/tasks.md`)."""
+    """Служебную запись подписывает автор действия, а не трекер (`TRK/tasks#7`)."""
     first = await make(db_session, task_actor, project, "первая")
     second = await make(db_session, task_actor, project, "вторая")
 

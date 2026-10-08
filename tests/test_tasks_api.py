@@ -334,7 +334,7 @@ async def test_sections_are_locked_outside_backlog(
     assert last["type"] == "section_changed"
     # `check_no` пуст у всякой правки, кроме точечной правки проверки: в хранимой
     # нагрузке его тогда нет вовсе, а в ответе он приезжает `null` — пустые поля в
-    # ответе едут вместе с остальными, иначе клиент теряет схему (`docs/notes/api.md`).
+    # ответе едут вместе с остальными, иначе клиент теряет схему (`TRK/api#47`).
     assert last["payload"] == {
         "field": "goal",
         "before": "Ключи не сгорают",
