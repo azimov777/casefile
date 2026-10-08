@@ -70,7 +70,9 @@ test('клик по вердикту читает ровно эту запись
   expect(new URL(entryCalls[0] as string).searchParams.getAll('nos')).toEqual([no]);
 });
 
-test('DEMO-4 показывает открытый блокирующий вопрос целиком, без клика', async ({ page }) => {
+test('DEMO-4 показывает ожидание ответа: вопрос в обсуждении, привязанном к ней, без клика', async ({
+  page,
+}) => {
   await silenceJournal(page);
   const entryCalls: string[] = [];
   page.on('request', (request) => {
@@ -79,10 +81,17 @@ test('DEMO-4 показывает открытый блокирующий воп
 
   await page.goto('/tasks/DEMO-4');
 
-  const questions = page.getByRole('region', { name: 'Открытые вопросы' });
-  await expect(questions.getByText('блокирующий')).toBeVisible();
-  await expect(questions.getByText('owner')).toBeVisible();
-  await expect(questions).toContainText('Сколько храним?');
+  // Вопрос ждёт ответа в обсуждении (`TRK#51`, п. 6): в деле задачи открытых вопросов нет,
+  // а блок «Обсуждения» называет адрес, название и чей ход — человек.
+  await expect(page.getByText('Вопросов без ответа нет.')).toBeVisible();
+  const discussions = page.getByRole('region', { name: 'Обсуждения', exact: true });
+  await expect(discussions.getByRole('link', { name: 'DEMO~2' })).toHaveAttribute(
+    'href',
+    '/discussions/DEMO~2',
+  );
+  await expect(discussions.getByText('ждёт вас')).toBeVisible();
+  await expect(discussions.getByText('1 вопрос без ответа')).toBeVisible();
+  await expect(discussions.getByText('Сколько хранить дела отменённых задач?')).toBeVisible();
   expect(entryCalls).toEqual([]);
 });
 
@@ -270,14 +279,7 @@ test('лента дела: все типы записей, отбор и отв�
   await expect(page.getByRole('article').filter({ hasText: 'decision' })).toHaveCount(0);
 });
 
-test('ответ на вопрос стоит под вопросом, а якорь подсвечивает запись', async ({ page }) => {
-  await page.goto('/tasks/DEMO-4/case');
-
-  // В деле DEMO-4 есть открытый вопрос: ответа под ним ещё нет, и это сказано словами.
-  const question = page.getByRole('article').filter({ hasText: 'question' }).first();
-  await expect(question).toBeVisible();
-  await expect(question.getByText('Ответа пока нет.')).toBeVisible();
-
+test('якорь в адресе дела подсвечивает запись', async ({ page }) => {
   await page.goto('/tasks/DEMO-6/case#4');
   const highlighted = page.getByRole('article').filter({ hasText: '#4' }).first();
   await expect(highlighted).toBeVisible();

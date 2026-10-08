@@ -209,6 +209,34 @@ export function fileLegacyQuestion({
 }
 
 /**
+ * Свой открытый прежний вопрос владельцу и способ убрать за собой: его закрывает ответ через
+ * REST. Демо открытых вопросов в делах задач не держит (TRK-684: ожидание ответа — вопрос
+ * в обсуждении), поэтому сценарию, которому нужна форма ответа на карточке задачи или кромка
+ * блокирующего вопроса в истории, вопрос нужен свой. Такие сценарии — пишущие (проект «запись»):
+ * читающие идут в двух темах разом и видели бы чужой открытый вопрос.
+ */
+export async function askLegacyOwner(
+  request: APIRequestContext,
+  { key, title, body = '', blocking = false }: Omit<LegacyQuestion, 'author' | 'addressees'>,
+): Promise<{ no: number; cleanup: () => Promise<void> }> {
+  const { no } = fileLegacyQuestion({ key, title, body, blocking, author: 'owner' });
+  return {
+    no,
+    cleanup: async () => {
+      const closed = await request.post(`/api/v1/tasks/${key}/entries`, {
+        headers: { Authorization: `Bearer ${readE2eToken()}` },
+        data: {
+          type: 'answer',
+          body: 'Закрыт сквозным тестом, чтобы входящая осталась какой была.',
+          payload: { question_no: no },
+        },
+      });
+      expect(closed.status()).toBe(201);
+    },
+  };
+}
+
+/**
  * Файл с ключом агента для запасного пути — входа на `/login`. Выпускается отдельно от
  * ключа установки (`e2e/global-setup.ts`): наборов у ключей больше нет (TRK-471), а
  * сценарию, проверяющему экран глазами агента, нужен именно ключ агента без учётной

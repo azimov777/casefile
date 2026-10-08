@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { fileLegacyQuestion, fontsReady, readE2eToken, side } from './contour';
+import { askLegacyOwner, fileLegacyQuestion, fontsReady, readE2eToken, side } from './contour';
 
 const token = readE2eToken();
 
@@ -13,17 +13,22 @@ async function answersOf(request: APIRequestContext, key: string): Promise<numbe
 }
 
 /**
- * Единственный сквозной сценарий, который пишет в демо-установку: он отвечает на
- * вопрос, и после него вопрос закрыт навсегда. Поэтому он вынесен в свой файл и свой
- * проект Playwright, который зависит от читающих: тем нужен ещё открытый вопрос
- * (`playwright.config.ts`, проект «ответ»).
+ * Сквозной сценарий, который отвечает на прежний вопрос в деле задачи: после него вопрос
+ * закрыт навсегда. Вопрос свой (`askLegacyOwner`): демо открытых вопросов в делах задач не
+ * держит, DEMO-4 ждёт ответа в обсуждении `DEMO~2` (TRK-684), а ответ на вопрос обсуждения —
+ * сценарий `discussion.spec.ts`. Вынесен в проект «запись» (`playwright.config.ts`).
  */
 test('ответ на вопрос с карточки задачи закрывает его на всех экранах', async ({
   page,
   request,
 }) => {
   const before = await answersOf(request, 'DEMO-4');
-  expect(before).toBe(0);
+  const { no: questionNo } = await askLegacyOwner(request, {
+    key: 'DEMO-4',
+    title: 'Срок хранения дел отменённых задач — вопрос сквозного теста',
+    body: 'Сколько храним?',
+    blocking: true,
+  });
 
   const posts: string[] = [];
   page.on('request', (call) => {
@@ -34,10 +39,10 @@ test('ответ на вопрос с карточки задачи закрыв
 
   // Адрес называет вопрос — форма раскрыта сразу. Отвечать из входящей больше нельзя:
   // прежний раздел вопросов в делах оттуда снят (TRK-683).
-  await page.goto('/tasks/DEMO-4?entry=4');
+  await page.goto(`/tasks/DEMO-4?entry=${questionNo}`);
 
   // Счётчик в панели — то же число, что показывает `bootstrap`. Пишущие сценарии идут
-  // по одному и убирают за собой, поэтому здесь открыт ровно вопрос демо.
+  // по одному и убирают за собой, поэтому здесь открыт ровно вопрос этого сценария.
   await expect(side(page).getByText('1 открытый вопрос')).toBeVisible();
 
   await page
@@ -46,7 +51,7 @@ test('ответ на вопрос с карточки задачи закрыв
   await page.getByRole('button', { name: 'Ответить' }).click();
 
   // Ответ подшит, и это сказано словами с номером записи.
-  const receipt = page.getByRole('region', { name: 'Ответ на DEMO-4#4 подшит' });
+  const receipt = page.getByRole('region', { name: `Ответ на DEMO-4#${questionNo} подшит` });
   await expect(receipt).toBeVisible();
   const entry = receipt.getByRole('link', { name: /^DEMO-4#\d+$/ });
   const href = await entry.getAttribute('href');
@@ -73,12 +78,12 @@ test('ответ на вопрос с карточки задачи закрыв
   // Запрос ушёл с ключом повтора, и ответ в деле ровно один.
   expect(posts).toHaveLength(1);
   expect(posts[0]).toMatch(/^[0-9a-f-]{36}$/);
-  expect(await answersOf(request, 'DEMO-4')).toBe(1);
+  expect(await answersOf(request, 'DEMO-4')).toBe(before + 1);
 
   // В карточке блок открытых вопросов пуст, а в описи появилась запись `answer`.
   await page.goto('/tasks/DEMO-4');
   await expect(page.getByText('Вопросов без ответа нет.')).toBeVisible();
-  await expect(page.getByRole('row').filter({ hasText: 'answer' })).toHaveCount(1);
+  await expect(page.getByRole('row').filter({ hasText: 'answer' })).toHaveCount(before + 1);
 });
 
 /**
