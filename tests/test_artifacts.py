@@ -117,7 +117,7 @@ async def test_a_refused_tool_call_names_a_code_from_the_reference(
 
     Код ищется **внутри** текста, а не в его начале: SDK приписывает спереди свою
     строку `Error executing tool <имя>: `, и текст `describe` начинается только после
-    неё (`docs/notes/mcp.md`).
+    неё (`TRK/mcp#17`).
     """
     catalog = {entry.code: entry.message for entry in error_catalog()}
 

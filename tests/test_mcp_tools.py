@@ -210,7 +210,7 @@ async def test_an_unknown_token_is_refused_before_the_list_is_built(
 #: Ожидаемые `(readOnlyHint, destructiveHint, idempotentHint)` каждого инструмента.
 #: `openWorldHint` сюда не входит — он один и тот же (`False`) у всех и проверяется
 #: отдельной строкой: сервер работает с данными установки, а не с внешним миром, ни в
-#: одном инструменте. Правило по каждому хинту — `docs/notes/mcp.md`, «Аннотации
+#: одном инструменте. Правило по каждому хинту — `TRK/mcp#25`, «Аннотации
 #: протокола ставятся по поведению вызова».
 TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     # Читающие: ничего не меняют, повтор всегда безопасен.
@@ -2223,7 +2223,7 @@ async def test_list_projects_is_the_entry_point_when_no_key_is_known(
 
     # Порядок страниц здесь не проверяется: проекты одного теста заведены в одной
     # транзакции, `created_at` у них общий, и пара `(created_at, id)` вырождается в
-    # сортировку по случайным UUID (`docs/notes/testing.md`). Проверяется полнота
+    # сортировку по случайным UUID (`TRK/testing#15`). Проверяется полнота
     # выдачи и то, что страницы не пересекаются.
     assert listed["next_cursor"] is None
     assert sorted(item["key"] for item in listed["items"]) == ["TRK", "UI"]

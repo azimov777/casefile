@@ -11,7 +11,7 @@
 ## 1. Поднять изолированный бэкенд
 
 Свой проект Compose и свои порты — не трогать `docker-compose.yml` соседних
-рабочих деревьев (`docs/notes/docker.md`, `parallel-agents-via-git-worktrees`).
+рабочих деревьев (`TRK/docker#37`, `parallel-agents-via-git-worktrees`).
 Тег образа тоже свой: базовый `docker-compose.yml` пишет `image: tracker-dev:latest`
 без параметра, и без надстройки сборка затёрла бы тег соседнего дерева. Надстройка
 ниже переопределяет тег только для сервисов, которые здесь нужны:

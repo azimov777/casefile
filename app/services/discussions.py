@@ -314,7 +314,7 @@ async def open_discussion(
     repository = DiscussionRepository(session)
     number = await repository.next_number(project.id)
     # Проект — объектом, а не только внешним ключом: адрес собирается из `project.key`,
-    # а у только что созданной строки связь сама не подгрузится (`docs/notes/db.md`).
+    # а у только что созданной строки связь сама не подгрузится (`TRK/db#26`).
     discussion = await repository.add(
         Discussion(
             project=project,

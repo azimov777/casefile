@@ -474,7 +474,7 @@ async def test_a_close_files_entries_verdicts_summary_and_the_transition_with_on
     """Обзорная проверка 2 TRK-118: записи одного `close_task` несут одно значение.
 
     Записи, вердикты, сводка и финальный `status_changed` — одна транзакция входа
-    приложения (`docs/notes/db.md`), и признак обязан связать их так же, как связал бы
+    приложения (`TRK/db#46`), и признак обязан связать их так же, как связал бы
     настоящий номер транзакции, — но независимо от него (`app/db/models/entry.py`).
     """
     await move(db_session, task, task_actor, TaskStatus.OPEN, TaskStatus.IN_PROGRESS)

@@ -507,7 +507,7 @@ async def test_an_unknown_under_key_is_refused_and_empty_is_not_supported(
 async def test_the_subtree_walk_stops_at_the_depth_ceiling_on_a_cycle_from_older_data(
     db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
-    """Кольцо в базе (гонка двух запросов, `docs/notes/links.md`) не вешает отбор.
+    """Кольцо в базе (гонка двух запросов, `TRK/links#10`) не вешает отбор.
 
     Сценарий кольца уже не поставит (`link_cycle_detected`), поэтому замыкающая связь
     кладётся мимо него. Обход ограничен глубиной, как проверка цикла, и выдача конечна:
@@ -1177,7 +1177,7 @@ async def test_sorting_by_update_time_descending_puts_the_latest_first(
     """Направление задаётся явно: `-updated_at` ставит свежее впереди.
 
     Время правится запросом, а не настоящим обновлением задачи: `now()` в PostgreSQL —
-    время начала транзакции, а весь тест идёт в одной (`docs/notes/db.md`). Настоящая
+    время начала транзакции, а весь тест идёт в одной (`TRK/db#35`). Настоящая
     правка проставила бы всем задачам одно и то же время, и порядок решал бы тайбрейкер
     по случайному `id` — проверка стала бы непроходимой через раз.
     """

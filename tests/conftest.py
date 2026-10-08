@@ -16,7 +16,7 @@ import asyncpg
 # `httpx2` — зависимость самого SDK MCP, а не проекта: клиент `streamable_http_client`
 # принимает именно его `AsyncClient`. Проектной зависимостью объявлять его нельзя —
 # приложение им не пользуется, — а подсунуть вместо него `httpx` 0.28 не выйдет: типы
-# транспорта у них разные (`docs/notes/mcp.md`).
+# транспорта у них разные (`TRK/mcp#14`).
 import httpx2
 import pytest
 from alembic import command
@@ -205,7 +205,7 @@ def mcp_server(mcp_sessions: SessionFactory) -> MCPServer:
 #: Базовый адрес клиента MCP в тестах. Порт обязателен: у эндпоинта стоит защита от DNS
 #: rebinding, и её список разрешённых значений `Host` — это `localhost:*` и `127.0.0.1:*`.
 #: Голый `localhost` под шаблон не подходит и отвергается `421` ещё до обработчика
-#: (`docs/notes/mcp.md`).
+#: (`TRK/mcp#10`).
 MCP_BASE_URL = "http://localhost:8100"
 
 #: Как тест подключается к серверу: контекстный менеджер, отдающий готовую сессию клиента.

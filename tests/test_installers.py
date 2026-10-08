@@ -5,7 +5,7 @@
 проверки «Docker запущен», и должна остановить установку до `docker compose pull`/`up`
 понятной фразой про переключение на Linux-контейнеры. Ни то, ни другое не проверить
 исполнением здесь: pwsh нет в этом образе (его гоняют в отдельном контейнере, заметка
-`docs/notes/docker.md`), а настоящий Docker Desktop в режиме Windows-контейнеров есть
+`TRK/docker#49`), а настоящий Docker Desktop в режиме Windows-контейнеров есть
 только на настоящем Windows. Сторожим текстом — как `tests/test_merge_script.py`
 сторожит `scripts/merge-task-branch.sh`: дешёвая проверка, которая всё равно ловит
 самое дорогое — исчезнувшую проверку или разъехавшуюся фразу.
@@ -1152,7 +1152,7 @@ def test_both_installers_sign_in_only_with_a_terminal_and_after_the_plugin_step(
 
 
 def test_install_ps1_parses_when_powershell_is_available() -> None:
-    """Парсер PowerShell без ошибок. В образе тестов pwsh нет (заметка `docs/notes/docker.md`):
+    """Парсер PowerShell без ошибок. В образе тестов pwsh нет (заметка `TRK/docker#49`):
     проверка идёт там, где он есть, например `docker run --platform linux/amd64
     mcr.microsoft.com/powershell`; здесь она пропускается."""
     pwsh = shutil.which("pwsh")
@@ -1819,7 +1819,7 @@ def test_backup_once_has_nothing_to_copy_without_a_file_and_fails_when_it_cannot
 
 # Близнец в install.ps1: pwsh в образе нет, поэтому шаги стерегутся текстом, а сам сканер
 # JSON прогнан на этих же 14 текстах в контейнере PowerShell 7 и дал те же байты, что node и
-# python3 (заметка в `docs/notes/docker.md`).
+# python3 (заметка в `TRK/docker#49`).
 
 
 def test_install_ps1_carries_the_consent_the_copies_and_the_point_edit() -> None:

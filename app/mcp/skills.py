@@ -188,7 +188,7 @@ async def advertise_on_handshake(ctx: ServerRequestContext[Any, Any], call_next:
     SDK кладёт `capabilities.extensions` только в ответ `server/discover` эпохи
     2026-07-28, а в рукопожатии старой эпохи срезает поле по схеме той версии. Клиенты
     же пока ходят именно рукопожатием, и без объявления не ищут скилов вовсе
-    (`docs/notes/mcp.md`).
+    (`TRK/mcp#39`).
     """
     result = await call_next(ctx)
     if ctx.method == "initialize" and isinstance(result, dict):

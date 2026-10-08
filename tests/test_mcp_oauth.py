@@ -846,7 +846,7 @@ async def _challenge(client: AsyncClient) -> str | None:
     """`WWW-Authenticate` ответа `401`; `None`, если узел запроса отверг сам транспорт.
 
     Эндпоинт MCP защищён от DNS rebinding: чужой `Host` получает `421` до проверки токена
-    (`docs/notes/mcp.md`), и вызова для входа там нет вовсе."""
+    (`TRK/mcp#10`), и вызова для входа там нет вовсе."""
     response = await client.post("/mcp", headers=ACCEPT, json=INITIALIZE)
     if response.status_code == 421:
         return None

@@ -481,7 +481,7 @@ MOVER = Actor(author=label_author("mover"))
 
 @pytest.fixture
 def committing_sessions(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
-    """Сессии поверх движка прогона: каждая коммитит по-настоящему (`docs/notes/testing.md`)."""
+    """Сессии поверх движка прогона: каждая коммитит по-настоящему (`TRK/testing#16`)."""
     return async_sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
 
 

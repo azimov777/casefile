@@ -452,7 +452,7 @@ def test_the_prod_contour_writes_nothing_onto_the_host() -> None:
     Каталог хоста у неё один — каталог установки, смонтированный обновлятору, — и пишет
     туда только он сам, освежая compose-файл. Разовый сервис с `--output` в каталог хоста
     вернул бы все беды с владельцем файла, от которых прод-контур ушёл на именованные тома
-    (`docs/notes/docker.md`, «Права на bind-mount»).
+    (`TRK/docker#24`, «Права на bind-mount»).
     """
     text = COMPOSE_FILES["prod"].read_text(encoding="utf-8")
 

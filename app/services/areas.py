@@ -127,7 +127,7 @@ async def create_area(
     if await repository.get(project.id, parsed.key) is not None:
         raise AreaKeyTakenError(details={"key": str(parsed)})
     # Проект — объектом, а не только внешним ключом: адрес собирается из `project.key`, а
-    # у только что созданной строки связь сама не подгрузится (`docs/notes/db.md`, «Связь у
+    # у только что созданной строки связь сама не подгрузится (`TRK/db#26`, «Связь у
     # только что созданной строки задаётся объектом, а не внешним ключом»).
     area = await repository.add(
         Area(
