@@ -381,7 +381,7 @@ async def _attributes(session: AsyncSession, project: Project, *, agent: Actor) 
         reason="Так названа ветка по умолчанию в git",
     )
     await attributes_service.set_attribute(
-        session, project, actor=agent, name="docs", value="docs/CONCEPT.md"
+        session, project, actor=agent, name="docs", value="wiki/Concept"
     )
     await attributes_service.set_attribute(
         session,

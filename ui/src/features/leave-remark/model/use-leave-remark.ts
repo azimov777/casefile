@@ -43,7 +43,7 @@ export function useLeaveRemark() {
       // Замечание меняет два экрана: карточку задачи (список неразобранных и признак)
       // и «что не разобрали» поперёк задач. Пересчитывает их бэкенд — интерфейс только
       // просит перечитать, а не правит кэш руками: признаки считаются из дела, и
-      // «прибавить один» здесь было бы догадкой (`CONCEPT.md`, 6).
+      // «прибавить один» здесь было бы догадкой (TRK#244).
       void queryClient.invalidateQueries({ queryKey: ['task', taskKey] });
       void queryClient.invalidateQueries({ queryKey: remarkKeys.all });
     },

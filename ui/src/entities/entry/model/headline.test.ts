@@ -111,7 +111,7 @@ describe.each(LANGUAGES)('заголовок записи по фактам на
       `${say.ui('entry.headline.status')} open → backlog ${say.ui('entry.headline.withReason')}`,
     );
 
-    // Статусы — идентификаторы контракта: их не переводят (`CONCEPT.md`, 6).
+    // Статусы — идентификаторы контракта: их не переводят (TRK#239).
     expect(ids(FACTS.status_changed)).toEqual(['open', 'done']);
   });
 

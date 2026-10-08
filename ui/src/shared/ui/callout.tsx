@@ -30,7 +30,7 @@ interface CalloutProps {
 
 /**
  * Короткое сообщение о состоянии: отказ, пояснение, честная пустота.
- * Спиннера без текста в интерфейсе нет (CONVENTIONS.md, «Интерфейс»).
+ * Спиннера без текста в интерфейсе нет (TRK#245).
  */
 export function Callout({ tone = 'neutral', id, children }: CalloutProps) {
   return (

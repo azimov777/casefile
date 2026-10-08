@@ -884,7 +884,7 @@ describe('замечание к задаче', () => {
     expect(
       await screen.findByRole('button', { name: say.ui('remark.submit') }),
     ).toBeInTheDocument();
-    // Роль человека не расширяется (`CONCEPT.md`, 7): закрытая задача не открывает
+    // Роль человека не расширяется (TRK#246): закрытая задача не открывает
     // правку разделов задания.
     expect(screen.queryByRole('textbox', { name: say.task('sections.goal') })).toBeNull();
   });

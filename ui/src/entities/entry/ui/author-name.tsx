@@ -4,7 +4,7 @@ import type { Author } from '../api/entries';
 /**
  * Кто говорит. Подпись пуста только у самого трекера: у человека и агента это имя
  * участника, у временного агента — метка. Различать метку и имя намеренно нельзя
- * (`docs/FRONTEND.md`), поэтому род показывается отдельной подписью.
+ * (TRK#80), поэтому род показывается отдельной подписью.
  */
 export function AuthorName({ author }: { author: Author }) {
   const signature = author.signature ?? null;
