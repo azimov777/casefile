@@ -15,7 +15,7 @@ export interface AnswerInput {
 
 /**
  * Ответ на вопрос — единственная запись, которую в трекере создаёт человек
- * (`CONCEPT.md`, 1).
+ * (TRK#235).
  *
  * Ключ повтора приходит снаружи, а не рождается здесь: если сеть оборвалась после
  * отправки, повтор обязан идти с тем же ключом — иначе бэкенд заведёт второй ответ
@@ -40,7 +40,7 @@ export function useAnswerQuestion() {
       // Ответ меняет три экрана сразу: входящую, карточку задачи и счётчик в шапке.
       // Пересчитывает их бэкенд — интерфейс только просит перечитать, а не правит
       // кэш руками: признаки задачи вычисляются из дела, и «уменьшить на один»
-      // здесь было бы догадкой (`CONCEPT.md`, 6).
+      // здесь было бы догадкой (TRK#244).
       void queryClient.invalidateQueries({ queryKey: questionKeys.all });
       void queryClient.invalidateQueries({ queryKey: ['task', taskKey] });
       void queryClient.invalidateQueries({ queryKey: sessionKeys.bootstrap });

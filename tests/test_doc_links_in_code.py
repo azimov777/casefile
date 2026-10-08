@@ -77,8 +77,8 @@ def test_the_scan_sees_the_code_and_its_links() -> None:
 def test_the_links_resolver_catches_a_missing_and_an_existing_file() -> None:
     sample = PROJECT_ROOT / "ui" / "src" / "shared" / "api" / "x.ts"
     assert _exists(sample, "docs/agent-install.md")
-    assert _exists(sample, "ui/docs/FRONTEND.md")
-    assert not _exists(sample, "../docs/FRONTEND.md")
+    assert _exists(sample, "../docs/moving.md")
+    assert not _exists(sample, "ui/docs/CONCEPT.md")
     assert not _exists(sample, "docs/no-such-document.md")
 
 

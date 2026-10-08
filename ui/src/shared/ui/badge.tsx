@@ -52,7 +52,7 @@ const badge = cva(
         attention: 'border-attention-line bg-attention-soft text-attention',
         danger: 'border-danger-line bg-danger-soft text-danger',
       },
-      /** Моноширинный: идентификатор из контракта, а не подпись (`CONVENTIONS.md`). */
+      /** Моноширинный: идентификатор из контракта, а не подпись (TRK#239). */
       mono: { true: 'font-mono', false: '' },
     },
     defaultVariants: { tone: 'neutral', mono: false },
@@ -72,7 +72,7 @@ interface BadgeProps {
    * ни глазами, ни на слух.
    */
   kind?: string;
-  /** Моноширинный: идентификатор из контракта, а не подпись (`CONVENTIONS.md`). */
+  /** Моноширинный: идентификатор из контракта, а не подпись (TRK#239). */
   mono?: boolean;
   title?: string;
   children: ReactNode;
@@ -82,7 +82,7 @@ interface BadgeProps {
  * Короткая метка в строке таблицы: статус, приоритет, тег, признак.
  *
  * Цвет не единственный носитель смысла: подпись внутри плашки остаётся всегда
- * (`CONCEPT.md`, 6) — тон только позволяет просканировать список взглядом,
+ * (TRK/ui-shared#5) — тон только позволяет просканировать список взглядом,
  * не читая каждую строку.
  */
 export function Badge({ tone = 'neutral', kind, mono = false, title, children }: BadgeProps) {
@@ -91,7 +91,7 @@ export function Badge({ tone = 'neutral', kind, mono = false, title, children }:
       {kind === undefined ? null : (
         /*
          * Род значения внутри плашки. Моноширинность на него не распространяется:
-         * это подпись, а не идентификатор контракта (`CONCEPT.md`, 6), — и различаются
+         * это подпись, а не идентификатор контракта (TRK#239), — и различаются
          * они гарнитурой, а не приглушённостью.
          */
         <span className="font-sans text-label font-normal">{kind} </span>
