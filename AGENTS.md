@@ -20,35 +20,35 @@ MCP-сервер для агентов; в `ui/` — интерфейс чело
 
 **Проект в трекере — один: `TRK`, весь репозиторий.** Ключ задачи `TRK-N` называет любую
 его часть, включая `ui/`; своего проекта `UI` у интерфейса больше нет — задачи перенесены
-в `TRK`, прежние ключи `UI-N` по-прежнему ведут на свои задачи (TRK-174).
+в `TRK`.
 
 ## Папки
 - `ui/` — интерфейс человека: отдельное приложение со своими соглашениями, картами и проверками
-- `.codex-plugin/` — манифест плагина `casefile` для Codex и универсального каталога OpenAI: `plugin.json` с полями листинга (`interface`), `mcp.json` с коннектором на адрес по умолчанию и иконка `icon.svg`; `version` равна версии выпуска; ZIP для подачи собирает `scripts/build-openai-plugin.sh` (TRK-461)
-- `.cursor-plugin/` — манифест плагина `casefile` для Cursor и его маркетплейса: `plugin.json`, `mcp.json` с коннектором на адрес по умолчанию и иконка `icon.svg`; `version` равна версии выпуска; заявка в Cursor Marketplace — только по слову владельца (TRK-496)
-- `.claude-plugin/` — маркетплейс `casefile` и плагин `casefile` для Claude Code и Codex: `marketplace.json`, `plugin.json` (с `userConfig` для адреса коннектора и `privacyPolicyUrl`), `mcp.json` (коннектор без токена), `icon.png` (1024×1024, перевод `.codex-plugin/icon.svg` для портала Anthropic, TRK-505); плагин несёт скил из `skills/` и коннектор, его `version` равна версии выпуска
+- `.codex-plugin/` — манифест плагина `casefile` для Codex и универсального каталога OpenAI: `plugin.json` с полями листинга (`interface`), `mcp.json` с коннектором на адрес по умолчанию и иконка `icon.svg`; `version` равна версии выпуска; ZIP для подачи собирает `scripts/build-openai-plugin.sh`
+- `.cursor-plugin/` — манифест плагина `casefile` для Cursor и его маркетплейса: `plugin.json`, `mcp.json` с коннектором на адрес по умолчанию и иконка `icon.svg`; `version` равна версии выпуска
+- `.claude-plugin/` — маркетплейс `casefile` и плагин `casefile` для Claude Code и Codex: `marketplace.json`, `plugin.json` (с `userConfig` для адреса коннектора и `privacyPolicyUrl`), `mcp.json` (коннектор без токена), `icon.png` (1024×1024, перевод `.codex-plugin/icon.svg` для портала Anthropic); плагин несёт скил из `skills/` и коннектор, его `version` равна версии выпуска
 - `.github/` — GitHub: конвейеры в `workflows/` (проверки на каждый PR — `ci.yml`, подпись вклада — `dco.yml`,
   образы ghcr.io после проверок — `images.yml`: `latest` на каждый коммит main, номер и канал `stable` на тег выпуска
   и после образов ветка `stable` на коммит выпуска (канал скила для `npx skills`),
   следом узкая ветка `plugin` — только файлы плагина, коммит на выпуск (с неё ставят маркетплейс Claude Code
-  и Codex, её отслеживает портал Anthropic, TRK-478, TRK-494),
+  и Codex, её отслеживает портал Anthropic),
   запись Casefile в официальном реестре MCP на тот же тег, входом через GitHub OIDC — `mcp-registry.yml`,
-  публикация `site/` на GitHub Pages при изменении папки на main — `pages.yml`, TRK-462,
-  расширение Claude Desktop `casefile.mcpb` в GitHub Release на его публикацию — `mcpb.yml`, TRK-514), бот
+  публикация `site/` на GitHub Pages при изменении папки на main — `pages.yml`,
+  расширение Claude Desktop `casefile.mcpb` в GitHub Release на его публикацию — `mcpb.yml`), бот
   еженедельных PR с обновлением `uv.lock` (`dependabot.yml`), текст `DCO` и шаблон запроса на слияние `PULL_REQUEST_TEMPLATE.md`
 - `app/` — код приложения: слои api, mcp, domain, services, db, core
 - `docs/` — руководство разработчика, справочник ошибок, заметки, установка для агентов, публичные руководства
 - `docker/` — образы для разработки и продакшена
-- `mcpb/` — расширение чата Claude Desktop `casefile.mcpb` (формат MCPB): манифест с полем адреса MCP, версия равна версии выпуска, `name` равно имени сервера; мост `mcp-remote` закреплён `package.json` и lock-файлом; архив собирает `scripts/build-mcpb.sh`, в выпуск кладёт `.github/workflows/mcpb.yml` (TRK-514)
+- `mcpb/` — расширение чата Claude Desktop `casefile.mcpb` (формат MCPB): манифест с полем адреса MCP, версия равна версии выпуска, `name` равно имени сервера; мост `mcp-remote` закреплён `package.json` и lock-файлом; архив собирает `scripts/build-mcpb.sh`, в выпуск кладёт `.github/workflows/mcpb.yml`
 - `tests/` — тесты, запускаются только в контейнере
 - `scripts/` — команды, которым нужен хост: слияние ветки задачи с прогоном набора на результате, сборка ZIP плагина для каталога OpenAI и расширения Claude Desktop, проверка подписи вклада, живая проверка автообновления, съёмка архива демо-данных выпуска для теста на данных выпусков
-- `site/` — публичные страницы для листингов каталогов, по-английски: сайт, поддержка, политика конфиденциальности, условия; GitHub Pages, адрес `https://azimov777.github.io/casefile/` (TRK-462)
-- `skills/` — скилы Casefile для агентов, по-английски: `casefile` — как вести задачу через MCP Casefile (шаги цикла, проверки между ними, примеры вызовов; подключение и установка — ссылкой на `docs/agent-install.md`), `casefile-setup` — как подключить Casefile там, где агент работает, срабатывает сам только без инструментов Casefile или при 401 (TRK-566); файлы отдают и плагин, и MCP-сервер
+- `site/` — публичные страницы для листингов каталогов, по-английски: сайт, поддержка, политика конфиденциальности, условия; GitHub Pages, адрес `https://azimov777.github.io/casefile/`
+- `skills/` — скилы Casefile для агентов, по-английски: `casefile` — как вести задачу через MCP Casefile (шаги цикла, проверки между ними, примеры вызовов; подключение и установка — ссылкой на `docs/agent-install.md`), `casefile-setup` — как подключить Casefile там, где агент работает, срабатывает сам только без инструментов Casefile или при 401; файлы отдают и плагин, и MCP-сервер
 
 ## Файлы
 - `README.md` — страница проекта на GitHub, по-английски: что это, установка одной строкой, подключение агента, сетевой режим со входом по учётным записям
 - `LICENSE` — MIT
-- `mcp.json` — коннектор MCP по стандарту Open Plugins для автоскана каталогов (cursor.directory), без точки — Claude Code не читает его как настройку проекта; содержимое = `.cursor-plugin/mcp.json`, тест сверяет; едет и в ветку `plugin` (TRK-584)
+- `mcp.json` — коннектор MCP по стандарту Open Plugins для автоскана каталогов (cursor.directory), без точки — Claude Code не читает его как настройку проекта; содержимое = `.cursor-plugin/mcp.json`, тест сверяет; едет и в ветку `plugin`
 - `CONTRIBUTING.md` — как вносить вклад, по-английски: подпись коммита (DCO), лицензия вклада, проверки до PR
 - `openapi.json` — выгруженная схема API, поставляемый артефакт; собирается `docker compose run --rm schema`
 - `.env.example` — все переменные окружения с комментариями; копируется в `.env`
@@ -58,7 +58,7 @@ MCP-сервер для агентов; в `ui/` — интерфейс чело
 - `docker-compose.prod.yml` — продакшен-контур: установка Casefile целиком из готовых образов ghcr.io,
   ключи в именованных томах, обновлятор на канал выпусков `stable` раз в час с откатом упавшего выпуска
   и его замена `updater-renew`, адрес публикации `CASEFILE_BIND` и режим входа интерфейса; едет и в образе выпуска
-- `gemini-extension.json` — расширение Casefile для Gemini CLI: имя, версия выпуска, коннектор MCP `httpUrl` на адрес по умолчанию без токена; скил Gemini находит сам в `skills/`; ставится `gemini extensions install https://github.com/azimov777/casefile`, галерея geminicli.com берёт репозиторий по теме `gemini-cli-extension` (её ставит владелец); файл едет и в ветку `plugin` (TRK-497)
+- `gemini-extension.json` — расширение Casefile для Gemini CLI: имя, версия выпуска, коннектор MCP `httpUrl` на адрес по умолчанию без токена; скил Gemini находит сам в `skills/`; ставится `gemini extensions install https://github.com/azimov777/casefile`, галерея geminicli.com берёт репозиторий по теме `gemini-cli-extension` (её ставит владелец); файл едет и в ветку `plugin`
 - `glama.json` — метаданные карточки Glama (`$schema` и `maintainers`), закрепляет владение
   каталожной записью за `azimov777`
 - `server.json` — карточка Casefile для официального реестра MCP: схема `2025-12-11`, без `packages`/`remotes`
@@ -67,10 +67,10 @@ MCP-сервер для агентов; в `ui/` — интерфейс чело
 - `install.sh` — установщик одной строкой для macOS и Linux: кладёт `docker-compose.prod.yml` из образа
   выпуска в `~/casefile`, поднимает контур, ставит плагин во все найденные харнессы и ведёт вход OAuth (перед шагом печатает файлы чужих программ,
   которые тронет, и на терминале спрашивает «y/N» — «N» пропускает шаг; перед первой правкой кладёт копию `*.casefile-bak`, `settings.json` правит одной вставкой;
-  `CASEFILE_PLUGIN_AUTOUPDATE=0` — без `autoUpdate`, TRK-546; `CASEFILE_SKILL=0` — не ставить;
+  `CASEFILE_PLUGIN_AUTOUPDATE=0` — без `autoUpdate`; `CASEFILE_SKILL=0` — не ставить;
   `CASEFILE_SKILL_ONLY=1` — без Docker, для машины агента: адрес сервера в `CASEFILE_URL` необязателен, только https; без него плагин встаёт с адресом по умолчанию), убирает прежние ручные
   записи `casefile`, ключ агента печатает только харнессам без OAuth; найденному Claude Desktop с тем же согласием
-  скачивает `casefile.mcpb` выпуска и открывает его, стоящее расширение второй раз не открывает (TRK-514)
+  скачивает `casefile.mcpb` выпуска и открывает его, стоящее расширение второй раз не открывает
 - `install.ps1` — тот же установщик для Windows (PowerShell 5.1 и 7): те же шаги в том же порядке
 - `alembic.ini` — настройка миграций, путь к ревизиям и адрес БД
 - `pyproject.toml` — зависимости нижними границами, настройки ruff и pytest
