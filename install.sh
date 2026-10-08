@@ -998,8 +998,8 @@ main() {
   echo
 
   # Дословный текст двух фраз (`app/domain/agent_phrases.py`, `AGENT_PHRASES`): это одна
-  # из копий, и сверяет их сплошная проверка множеств, а не вычитка (`docs/CONVENTIONS.md`,
-  # «Документация»; `tests/test_agent_phrases_everywhere.py`, TRK-367).
+  # из копий, и сверяет их сплошная проверка множеств, а не вычитка (решение проекта
+  # TRK#219; `tests/test_agent_phrases_everywhere.py`, TRK-367).
   # Адрес в последней строке — тот же порт, что и строка `Board:` выше, плюс `/start`:
   # там те же фразы стоят на языке человека, с копированием по кнопке.
   bold "Tell your agent what to do:"

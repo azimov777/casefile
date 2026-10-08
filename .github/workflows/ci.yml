@@ -1,4 +1,5 @@
-# Проверки: те же команды, что локально (`docs/CONVENTIONS.md`, `ui/docs/CONVENTIONS.md`) —
+# Проверки: те же команды, что локально (атрибуты проекта TRK `lint_command`, `test_command`;
+# `ui/docs/CONVENTIONS.md`) —
 # линтер и набор бэкенда в контейнере, `pnpm check` интерфейса.
 #
 # Срабатывает на каждый pull request и по вызову из `images.yml`: образы для установок
