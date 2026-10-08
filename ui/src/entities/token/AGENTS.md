@@ -11,4 +11,4 @@
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `tokensQueryOptions`, `tokenKeys`, `isRevoked`, `isSession`, `isConnection`, `isKey`, `isThisComputer`, `isLive`, `belongsTo`, `LOCAL_SESSION_NAME`, `TOKEN_PAGE_SIZE`, `TokenItem`, типы `Token`, `TokenKind`
+- `index.ts` — публичный интерфейс среза

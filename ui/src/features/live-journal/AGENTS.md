@@ -10,4 +10,4 @@
 
 ## Файлы
 
-- `index.ts` — публичный интерфейс среза: `useLiveJournal`, `useDeferredList`, `LiveStatus`, `UpdatesBar`, `QuestionNotice`, `FloatDock`, разбор кадров, `resetDeferred`
+- `index.ts` — публичный интерфейс среза

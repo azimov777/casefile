@@ -21,7 +21,7 @@ import { fileLegacyQuestion, readE2eToken, removeLink, silenceJournal } from './
 
 const token = readE2eToken();
 
-/** Фраза, по которой сценарий узнаёт свою задачу между прогонами (`e2e/AGENTS.md`). */
+/** Фраза, по которой сценарий узнаёт свою задачу между прогонами (решение `TRK/ui-testing#6`). */
 const MARKER = 'Δοκιμή γλώσσας υπηρεσίας';
 
 const GREEK = {

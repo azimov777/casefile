@@ -1,12 +1,9 @@
 # scripts
 
-Команды, которыми ветки задач сливают руками. Всё, что нужно прогонам и сборке, живёт
-не здесь: контур сквозных тестов поднимает `e2e/global-setup.ts`, образ собирает
-`docker/Dockerfile`, установку целиком поднимает `../docker-compose.prod.yml`.
+Команда, которой сливают ветку задачи с основной работой в `ui/`. Подъём контура сквозных тестов —
+`e2e/global-setup.ts`, образ — `docker/Dockerfile`, установка целиком — `../docker-compose.prod.yml`.
 
 ## Файлы
 
-- `merge-task-branch.sh` — слияние ветки задачи в `main`: без коммита, `pnpm check` затем
-  `pnpm e2e` на результате, коммит только на двойном зелёном со строкой `Merge-verified:`
-  (решение проекта TRK#224); проверяет согласие с прозой
-  `testing/merge-script.test.ts`
+- `merge-task-branch.sh` — слияние ветки задачи в `main`: без коммита, `pnpm check` и `pnpm e2e` на результате,
+  коммит только на двойном зелёном со строкой `Merge-verified:`; сверяет `testing/merge-script.test.ts`
