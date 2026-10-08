@@ -1,4 +1,4 @@
-"""Схемы входа по почте и паролю (`docs/CONCEPT.md`, 5.4)."""
+"""Схемы входа по почте и паролю (TRK#193)."""
 
 from datetime import datetime
 

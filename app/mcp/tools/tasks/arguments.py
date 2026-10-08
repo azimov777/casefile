@@ -1,7 +1,7 @@
 """Аргументы, общие для нескольких инструментов задач: решения, область и момент.
 
 Поля `decisions`, `area` и `not_before` ставит `create_task` и меняет `update_task`
-(`CONCEPT.md`, 3.3; решение проекта `TRK#47`), и правило у каждого одно на оба инструмента:
+(TRK#108, TRK#57; решение проекта `TRK#47`), и правило у каждого одно на оба инструмента:
 какое значение принимается и какой ответит отказ.
 """
 
@@ -12,8 +12,7 @@ from pydantic import Field
 from app.domain.tasks import MAX_DECISIONS
 
 #: Что такое ссылка на решение и чем трекер её отклонит. Отказ `task_entry` назван прямо:
-#: это та ссылка, которой практику одной задачи выдают за решение проекта (`CONCEPT.md`,
-#: 3.2, «Слухи»).
+#: это та ссылка, которой практику одной задачи выдают за решение проекта (TRK#95).
 DECISIONS_RULE = (
     "References `PROJECT#N` or `PROJECT/area#N` to `decision` entries of a project's or an "
     f"area's case, up to {MAX_DECISIONS}: the decisions the task relies on. A task entry "
@@ -23,7 +22,7 @@ DECISIONS_RULE = (
     "`decision_not_in_force`, its successor in `details`"
 )
 
-#: Область задачи (`CONCEPT.md`, 3.3, 3.7): адрес области её проекта. Ставит
+#: Область задачи (TRK#57): адрес области её проекта. Ставит
 #: `create_task`, меняет `update_task`; формулировка короткая намеренно — метадата
 #: инструментов держится в бюджете токенов (`docs/notes/mcp.md`).
 AREA_RULE = "Area address `PROJECT/key`"

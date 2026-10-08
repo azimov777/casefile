@@ -114,7 +114,7 @@ class AttributeRead(BaseModel):
 
 
 class AreaRefRead(BaseModel):
-    """Область строкой в чтении проекта: адрес и название (`CONCEPT.md`, 3.7)."""
+    """Область строкой в чтении проекта: адрес и название (TRK#57)."""
 
     address: str = Field(
         examples=["TRK/promotion"],

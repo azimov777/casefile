@@ -41,7 +41,7 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
-| `admin_required` | Only an administrator can manage accounts | Управление людьми открыто только администратору (`docs/CONCEPT.md`, 5.4). |
+| `admin_required` | Only an administrator can manage accounts | Управление людьми открыто только администратору (TRK#192). |
 | `agent_owned_by_another` | Only an administrator can issue a token to an agent owned by another person | Ключ агента с чужим хозяином выпускает только администратор (TRK-475#14). |
 | `human_token_not_allowed` | A key cannot be issued to a person: people sign in, keys are for agents | Ключ человеку не выпускается: человек входит в интерфейс, а не ходит с токеном (TRK-469#25). |
 | `permission_denied` | Action is not allowed | Действие запрещено. В v1 ролей нет, но точка отказа существует с самого начала. |
@@ -51,7 +51,7 @@
 | Код | Сообщение | Когда возникает |
 |---|---|---|
 | `account_not_found` | Account not found | Учётной записи с таким идентификатором или почтой нет. |
-| `area_not_found` | Area not found | Области с таким адресом нет: проект есть, ключа в нём нет (`CONCEPT.md`, 3.7). |
+| `area_not_found` | Area not found | Области с таким адресом нет: проект есть, ключа в нём нет (TRK#57). |
 | `attribute_not_found` | Attribute not found | Атрибута с таким именем (без учёта регистра) у проекта или области нет. |
 | `discussion_not_found` | Discussion not found | Обсуждения с таким адресом нет: проект есть, номера в нём нет (решение `TRK#51`). |
 | `discussion_task_not_found` | Task is not attached to the discussion | Задача не привязана к этому обсуждению — отвязывать нечего. |
@@ -76,7 +76,7 @@
 | `acceptance_by_closer` | The warning cannot be accepted by the signature that closed the task | Предупреждение принимает та же подпись, что закрыла задачу. |
 | `account_email_taken` | Account email is already taken | Почта уже занята другой учётной записью: адреса уникальны без учёта регистра. |
 | `archive_revision_unknown` | The archive comes from a newer Casefile; update this installation first | Ревизии схемы архива приёмник не знает: архив снят более новым Casefile. |
-| `area_archived` | Area is archived: its card, attributes and case are frozen | Область в архиве: карточка, атрибуты и дело заморожены (`CONCEPT.md`, 3.7). |
+| `area_archived` | Area is archived: its card, attributes and case are frozen | Область в архиве: карточка, атрибуты и дело заморожены (TRK#57). |
 | `area_key_taken` | Area key is already taken in this project | Ключ области уже занят в этом проекте: ключи уникальны без учёта регистра. |
 | `area_not_archived` | Area is not archived | Восстанавливать нечего: область не в архиве. |
 | `assignee_mismatch` | Task is assigned to someone else | Вход в `in_progress` не от исполнителя задачи. |
@@ -96,11 +96,11 @@
 | `link_exists` | Link already exists | Такая связь между этими задачами уже есть. |
 | `participant_has_account` | Participant already has an account | У этого участника учётная запись уже есть: у человека она одна. |
 | `participant_name_taken` | Participant name is already taken | Имя участника уже занято: имена уникальны без учёта регистра. |
-| `project_archived` | Project is archived: it and its tasks are frozen | Проект в архиве: он и его задачи заморожены для изменений (`CONCEPT.md`, 3.2). |
+| `project_archived` | Project is archived: it and its tasks are frozen | Проект в архиве: он и его задачи заморожены для изменений (TRK#101). |
 | `project_key_taken` | Project key is already taken | Ключ проекта уже занят: ключи уникальны без учёта регистра. |
 | `project_not_archived` | Project is not archived | Восстанавливать нечего: проект не в архиве. |
 | `summary_required` | Transition out of in_progress requires a summary | Выход из `in_progress` требует сводки, подшитой после последнего входа в него. |
-| `task_already_in_project` | Task is already in this project | Перенос в проект, где задача уже лежит: переносить некуда (`CONCEPT.md`, 3.3). |
+| `task_already_in_project` | Task is already in this project | Перенос в проект, где задача уже лежит: переносить некуда (TRK#114). |
 | `task_blocked` | Task has an open blocker | Вход в `in_progress` при незакрытом блокере: ключи блокеров в `details.blockers`. |
 | `task_checks_frozen` | Checks cannot be changed after the task has entered in_progress | Проверки задачи, уже входившей в `in_progress`, не правятся. |
 | `task_closed` | Task is closed | Задача в `done` или `cancelled`: поля не меняются, и связи, влияющие на переходы, тоже. |
@@ -158,7 +158,7 @@
 | `search_value_invalid` | Search value is invalid | Значение условия не разрешается: нет такого проекта, статуса, не число. |
 | `task_fields_invalid` | Task fields are invalid | Одно или несколько полей задачи не проходят проверку; все замечания в `details.fields`. |
 | `task_move_batch_size_invalid` | Number of tasks in one move is outside the allowed range | Список ключей переноса пуст или длиннее потолка: границы и присланное — в `details`. |
-| `task_move_reason_required` | Moving a task to another project requires a reason | Перенос задачи в другой проект требует непустой причины `reason` (`CONCEPT.md`, 3.3). |
+| `task_move_reason_required` | Moving a task to another project requires a reason | Перенос задачи в другой проект требует непустой причины `reason` (TRK#113). |
 | `task_sections_incomplete` | Task sections are incomplete | Перед `open` четыре раздела должны быть заполнены, а `checks` — не пуст. |
 | `transition_reason_required` | Transition requires a reason | Шаг назад по цепочке статусов и отмена требуют причины `reason`. |
 | `validation_error` | Validation failed | Входные данные синтаксически корректны, но нарушают правило предметной области. |

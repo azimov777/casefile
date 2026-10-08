@@ -127,7 +127,7 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
   switch (facts.type) {
     // `created` подшивается и в дело проекта (TRK-156), и в дело области (TRK-557).
     // Чьё это дело, видно по ключу владельца: дефис есть только в ключе задачи, косая
-    // черта — только в адресе области (`../docs/CONCEPT.md`, 3.4, 3.7).
+    // черта — только в адресе области (TRK#129).
     case 'created':
       return {
         kind: 'built',
