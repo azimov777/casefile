@@ -8,9 +8,10 @@
 - потерянный бит запуска: файл в репозитории есть, а `scripts/merge-task-branch.sh`
   отвечает «Permission denied»;
 - опечатка в самом скрипте: `bash -n` ловит её здесь, а не на первом слиянии;
-- разъехавшиеся скрипт и руководство: строка-доказательство названа в руководстве
-  разработчика, по ней же скрипт ищет непроверенные слияния, и переименование ключа в
-  одном месте оставляет ревизию без единой находки — тихо и навсегда;
+- разъехавшиеся скрипты слияния и конвейер: строка-доказательство одна на корневой скрипт
+  и скрипт интерфейса, по ней скрипт ищет непроверенные слияния, и переименование ключа
+  в одном месте оставляет ревизию без единой находки — тихо и навсегда; команды прогона
+  скрипта совпадают с шагами `ci.yml`;
 - сообщение из `-m` теряется на конфликте (TRK-54, готовое решение — UI-96): скрипт
   выходит подсказкой про `--continue` раньше, чем кладёт `MESSAGE` в `MERGE_MSG`, и
   повторный вызов `--continue` этого сообщения уже не знает — коммит слияния получает
@@ -43,11 +44,13 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = PROJECT_ROOT / "scripts" / "merge-task-branch.sh"
 
-#: Документы, описывающие слияние. Каждый обязан звать ту же строку и ту же команду, что
-#: и скрипт: расхождение здесь — это правило, которое исполняют по памяти. Само правило
-#: слияния — решения проекта TRK#223–TRK#225 (соглашения перенесены в трекер, TRK-611);
-#: в репозитории его команды называет руководство разработчика.
-DOCUMENTS = (PROJECT_ROOT / "docs" / "DEVELOPMENT.md",)
+#: Файлы, с которыми скрипт обязан совпадать. Само правило слияния и его команды — решения
+#: проекта TRK#223–TRK#225 и атрибуты проекта `merge_command`, `test_command`, `lint_command`
+#: в трекере (руководство разработчика перенесено в трекер, TRK-615); тест трекера не читает,
+#: поэтому сверяет скрипт с тем, что лежит в репозитории: конвейером GitHub (`ci.yml` — слияние
+#: гоняет тот же набор, что `checks`) и скриптом слияния интерфейса (ключ строки-доказательства).
+CI_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+SIBLING_SCRIPT = PROJECT_ROOT / "ui" / "scripts" / "merge-task-branch.sh"
 
 #: Объявления в шапке скрипта. Читаются текстом, а не запуском: запускать скрипт отсюда
 #: нечем, а объявлены они одной строкой именно затем, чтобы их можно было прочитать.
@@ -69,7 +72,7 @@ def test_the_script_is_there_and_carries_the_bit_to_run_it() -> None:
     """Бит запуска — часть содержимого файла, а не свойство машины.
 
     Он хранится в git (`100755`) и теряется ровно один раз — на создании файла. Дальше
-    команда из README отвечает «Permission denied» тому, кто сливает ветку.
+    команда из подсказки отвечает «Permission denied» тому, кто сливает ветку.
     """
     assert SCRIPT.is_file(), f"нет файла {SCRIPT}"
     assert os.access(SCRIPT, os.X_OK), f"{SCRIPT} без бита запуска: в git он хранится как 100755"
@@ -84,47 +87,41 @@ def test_the_script_parses() -> None:
     assert done.returncode == 0, done.stderr
 
 
-def test_the_documents_name_the_same_proof_line_as_the_script() -> None:
-    """Ключ строки-доказательства один на скрипт и на документы.
+def test_the_sibling_script_names_the_same_proof_line_as_the_script() -> None:
+    """Ключ строки-доказательства один на оба скрипта слияния.
 
-    По этому ключу скрипт ищет слияния, у которых прогона не было. Переименованный в
-    скрипте и оставшийся в документах, он не сломает ничего видимого: ревизия просто
-    перестанет находить непроверенные слияния, а документы будут звать искать строку,
-    которой больше нет.
+    По этому ключу скрипт ищет слияния, у которых прогона не было. Переименованный в одном
+    скрипте и оставшийся в другом, он не сломает ничего видимого: ревизия просто перестанет
+    находить непроверенные слияния соседа.
     """
     key = _declaration(TRAILER_KEY)
-    missing = [
-        document.name for document in DOCUMENTS if key not in document.read_text(encoding="utf-8")
-    ]
+    sibling = SIBLING_SCRIPT.read_text(encoding="utf-8")
 
-    assert not missing, f"строка {key!r} из скрипта не названа в {missing}"
+    assert f'TRAILER_KEY="{key}"' in sibling, f"строка {key!r} не названа в скрипте интерфейса"
 
 
 def test_the_merge_runs_the_whole_suite_and_says_so() -> None:
-    """Слияние проверяется той же командой, что и ветка перед коммитом.
+    """Слияние проверяется той же командой, что и конвейер, и ветка перед коммитом.
 
     Облегчённый прогон на слиянии — это вторая планка качества, о которой никто не
     договаривался: часть набора зелена, а `main` красный по тому, что решили не гонять.
-    Поэтому команда из скрипта обязана быть той же, которую `docs/DEVELOPMENT.md` называет прогоном
-    набора.
+    Поэтому команда из скрипта обязана быть той же, которой `ci.yml` прогоняет набор.
     """
     command = " ".join(_declaration(TEST_COMMAND).split())
-    readme = (PROJECT_ROOT / "docs" / "DEVELOPMENT.md").read_text(encoding="utf-8")
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
-    assert f"`{command}`" in readme, f"docs/DEVELOPMENT.md не называет {command!r} прогоном набора"
+    assert f"run: {command}\n" in workflow, f"ci.yml не прогоняет набор командой {command!r}"
 
 
-def test_the_documents_name_lint_and_pnpm_check_as_merge_steps() -> None:
+def test_the_ci_names_lint_and_pnpm_check_as_merge_steps() -> None:
     """TRK-117: линтер и `pnpm check` — такие же прогоны слияния, как набор, и обязаны
-    быть названы там же, где документы называют `TEST_COMMAND` — иначе память того, кто
-    сливает ветки, разойдётся со скриптом молча."""
+    быть теми же шагами конвейера — иначе слияние и конвейер разойдутся молча."""
     lint = " ".join(_declaration(LINT_COMMAND).split())
     check = " ".join(_declaration(CHECK_COMMAND).split())
-    documents = {document.name: document.read_text(encoding="utf-8") for document in DOCUMENTS}
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
-    for name, text in documents.items():
-        assert f"`{lint}`" in text, f"docs/{name} не называет {lint!r} шагом слияния"
-        assert f"`{check}`" in text, f"docs/{name} не называет {check!r} шагом слияния"
+    assert f"run: {lint}\n" in workflow, f"{CI_WORKFLOW.name} не прогоняет линтер командой {lint!r}"
+    assert f"run: {check}\n" in workflow, f"{CI_WORKFLOW.name} не прогоняет {check!r}"
 
 
 def test_the_build_command_uses_compose_and_not_a_hardcoded_tag() -> None:

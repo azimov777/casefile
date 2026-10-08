@@ -315,7 +315,7 @@ lambda: tuned)`. Подменять надо тот модуль, который
 TRK-54 git в дев-образе всё же появился, но не ради этого: он нужен
 `tests/test_merge_script.py`, который исполняет сам скрипт на временном репозитории,
 собранном самим тестом, а не на настоящей истории проекта (см. следующую запись).
-**Где:** `scripts/merge-task-branch.sh`, `docs/DEVELOPMENT.md`.
+**Где:** `scripts/merge-task-branch.sh`; команда слияния — атрибут проекта merge_command в трекере.
 
 ## Метка `pytest.mark.anyio` в наборе под pytest-asyncio ломается при обновлении anyio
 
