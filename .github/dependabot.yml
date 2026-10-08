@@ -8,7 +8,7 @@
 # автообновлением (`images.yml`), и сквозных тестов интерфейса в конвейере нет.
 #
 # То же обновление руками — `docker compose run --rm lock --upgrade`
-# (`docs/DEVELOPMENT.md`, раздел «Зависимости»).
+# (атрибут проекта `deps_commands`).
 
 version: 2
 

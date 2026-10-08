@@ -9,7 +9,7 @@ import type { Entry, EntryType } from '@/entities/entry';
  * адрес `TRK~7` у записи дела обсуждения (TRK-669, TRK-672).
  *
  * `seq` — курсор ленты: с него поток продолжается после обрыва
- * (`../docs/DEVELOPMENT.md`, «Лента журнала»).
+ * (трекер: заметка области `TRK/journal#5`).
  */
 export interface JournalFrame {
   seq: number;
