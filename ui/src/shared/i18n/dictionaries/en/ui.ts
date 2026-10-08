@@ -47,6 +47,11 @@ export const ui = {
       superseded: 'superseded',
     } satisfies Record<DecisionStatus, string>,
   },
+  /** A knowledge draft in a task's case (TRK-661): waits to be lifted into the project's or area's case. */
+  draft: {
+    open: 'Draft for {{address}} — not lifted',
+    lifted: 'Lifted:',
+  },
   error: {
     unknown: 'Unknown error.',
     unknownCode: 'Unknown error ({{code}}).',
@@ -262,6 +267,8 @@ export const ui = {
       blockingOf_other: '{{count, number}} of them blocking',
       remarks_one: '{{count, number}} remark not yet resolved',
       remarks_other: '{{count, number}} remarks not yet resolved',
+      drafts_one: '{{count, number}} knowledge draft not lifted into the project or area',
+      drafts_other: '{{count, number}} knowledge drafts not lifted into the project or area',
       warning: 'closed not in full: awaits a decision — accept or return',
       deferred: 'deferred: can be taken into work from {{moment}}',
       deferredBare: 'deferred: cannot be taken into work yet',

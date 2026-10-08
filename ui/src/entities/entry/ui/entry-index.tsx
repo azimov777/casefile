@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { cn, useExitHold } from '@/shared/lib';
 import { QueryState, RelativeTime, Reveal, TaskText } from '@/shared/ui';
 import { entryQueryOptions, type EntryHeading } from '../api/entries';
+import type { DraftState } from '../model/draft';
 import type { EntryState } from '../model/state';
 import { entryHeadline, type Headline } from '../model/headline';
 import type { EntryOwner } from '../model/owner';
@@ -15,6 +16,7 @@ import {
 } from '../model/section-edits';
 import { AuthorName } from './author-name';
 import { CopyEntryLink } from './copy-entry-link';
+import { DraftMark } from './draft-mark';
 import { EntryBody } from './entry-body';
 import { EntryHeadline } from './entry-headline';
 import { EntryKind } from './entry-kind';
@@ -52,6 +54,12 @@ interface EntryIndexProps {
    * служебные, прочие — пометки не несут.
    */
   states?: ReadonlyMap<number, EntryState>;
+  /**
+   * Черновики знания по номеру записи (TRK-661): у черновика в ячейке рода встаёт «Черновик
+   * в <адрес> — не поднят» или «Поднят: <ссылка>». Опись заголовками этого не знает —
+   * признак приходит из чтения тел решений и находок.
+   */
+  drafts?: ReadonlyMap<number, DraftState>;
   /** Ручка на прыжок «в начало описи» — вызывается из шапки блока (`task-page.tsx`). */
   ref?: Ref<EntryIndexHandle>;
 }
@@ -113,6 +121,7 @@ export function EntryIndex({
   index,
   checks = NO_CHECKS,
   states,
+  drafts,
   openAt,
   onOpenChange,
   ref,
@@ -261,6 +270,7 @@ export function EntryIndex({
                 heading={run.item}
                 checks={checks}
                 state={states?.get(run.item.no)}
+                draft={drafts?.get(run.item.no)}
                 open={expanded.has(run.item.no)}
                 scrollTo={scrollTarget === run.item.no}
                 onToggle={toggle}
@@ -272,6 +282,7 @@ export function EntryIndex({
                 run={run}
                 checks={checks}
                 states={states}
+                drafts={drafts}
                 open={openGroups.has(run.first) || run.items.some((item) => expanded.has(item.no))}
                 expanded={expanded}
                 scrollTarget={scrollTarget}
@@ -289,6 +300,7 @@ export function EntryIndex({
 interface GroupRowsProps {
   owner: EntryOwner;
   states?: ReadonlyMap<number, EntryState>;
+  drafts?: ReadonlyMap<number, DraftState>;
   run: Extract<SectionEditsRun<EntryHeading>, { kind: 'sections' }>;
   checks: string[];
   open: boolean;
@@ -310,6 +322,7 @@ interface GroupRowsProps {
 function GroupRows({
   owner,
   states,
+  drafts,
   run,
   checks,
   open,
@@ -376,6 +389,7 @@ function GroupRows({
               heading={item}
               checks={checks}
               state={states?.get(item.no)}
+              draft={drafts?.get(item.no)}
               open={expanded.has(item.no)}
               scrollTo={scrollTarget === item.no}
               onToggle={onToggle}
@@ -392,6 +406,8 @@ interface IndexRowProps {
   heading: EntryHeading;
   /** Состояние записи знания: заменённая помечается плашкой и ссылкой на преемника. */
   state?: EntryState;
+  /** Черновик знания: пометка «не поднят» или «Поднят: ссылка» (TRK-661). */
+  draft?: DraftState;
   checks: string[];
   open: boolean;
   /**
@@ -412,6 +428,7 @@ function IndexRow({
   owner,
   heading,
   state,
+  draft,
   checks,
   open,
   nested = false,
@@ -461,6 +478,11 @@ function IndexRow({
               <EntryStateMark owner={owner} state={state} kind={heading.type} />
             </div>
           ) : null}
+          {draft === undefined ? null : (
+            <div className="mt-1">
+              <DraftMark draft={draft} />
+            </div>
+          )}
         </td>
         <td className={cell}>
           <AuthorName author={heading.author} />

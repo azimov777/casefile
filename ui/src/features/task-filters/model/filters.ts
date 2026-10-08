@@ -1,5 +1,6 @@
 import {
   BOARD_COLUMNS,
+  OPEN_DRAFTS_CONDITION,
   OPEN_WARNINGS_CONDITION,
   TASK_PAGE_SIZE,
   TASK_PRIORITIES,
@@ -44,6 +45,8 @@ export interface TaskFilters {
   withRemarks: boolean;
   /** Только с открытым предупреждением (TRK-561); см. `OPEN_WARNINGS_CONDITION`. */
   withWarnings: boolean;
+  /** Только с неподнятым знанием (TRK-661); см. `OPEN_DRAFTS_CONDITION`. */
+  withDrafts: boolean;
   /** Только ждущие ответа (TRK-577): открытый вопрос `blocking` у задачи из работы; см. `WAITING_CONDITION`. */
   withWaiting: boolean;
   /** Строка на языке запросов бэкенда. Клиент её не разбирает. */
@@ -159,6 +162,7 @@ export const EMPTY_FILTERS: TaskFilters = {
   withQuestions: false,
   withRemarks: false,
   withWarnings: false,
+  withDrafts: false,
   withWaiting: false,
   query: '',
   sort: DEFAULT_SORT,
@@ -190,6 +194,7 @@ export function readFilters(params: URLSearchParams): TaskFilters {
     withQuestions: params.get('questions') === 'true',
     withRemarks: params.get('remarks') === 'true',
     withWarnings: params.get('warnings') === 'true',
+    withDrafts: params.get('drafts') === 'true',
     withWaiting: params.get('waiting') === 'true',
     query: params.get('query') ?? '',
     sort: isTaskSort(sort) ? sort : DEFAULT_SORT,
@@ -218,6 +223,7 @@ export function writeFilters(filters: TaskFilters): URLSearchParams {
   if (filters.withQuestions) params.set('questions', 'true');
   if (filters.withRemarks) params.set('remarks', 'true');
   if (filters.withWarnings) params.set('warnings', 'true');
+  if (filters.withDrafts) params.set('drafts', 'true');
   if (filters.withWaiting) params.set('waiting', 'true');
   if (filters.query.trim() !== '') params.set('query', filters.query.trim());
   if (filters.sort !== DEFAULT_SORT) params.set('sort', filters.sort);
@@ -313,6 +319,7 @@ function conditionsOf(filters: TaskFilters): string | undefined {
     filters.withQuestions ? OPEN_QUESTIONS_CONDITION : null,
     filters.withRemarks ? OPEN_REMARKS_CONDITION : null,
     filters.withWarnings ? OPEN_WARNINGS_CONDITION : null,
+    filters.withDrafts ? OPEN_DRAFTS_CONDITION : null,
     filters.withWaiting ? WAITING_CONDITION : null,
   ].filter((condition) => condition !== null);
 

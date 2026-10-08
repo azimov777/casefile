@@ -86,6 +86,7 @@ describe('панель «Фильтр»', () => {
       withQuestions: false,
       withRemarks: true,
       withWarnings: false,
+      withDrafts: false,
       withWaiting: false,
     });
 
@@ -96,6 +97,22 @@ describe('панель «Фильтр»', () => {
       withQuestions: false,
       withRemarks: false,
       withWarnings: true,
+      withDrafts: false,
+      withWaiting: false,
+    });
+  });
+
+  it('«есть неподнятое знание» (TRK-661) уходит своим полем отбора', async () => {
+    const user = userEvent.setup();
+    const { onApply } = renderMenu({});
+
+    await user.click(screen.getByRole('button', { name: say.tasks('filters.withDrafts') }));
+    expect(onApply).toHaveBeenLastCalledWith({
+      blocked: false,
+      withQuestions: false,
+      withRemarks: false,
+      withWarnings: false,
+      withDrafts: true,
       withWaiting: false,
     });
   });
@@ -110,6 +127,7 @@ describe('панель «Фильтр»', () => {
       withQuestions: false,
       withRemarks: false,
       withWarnings: false,
+      withDrafts: false,
       withWaiting: true,
     });
   });

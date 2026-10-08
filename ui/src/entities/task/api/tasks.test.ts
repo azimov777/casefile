@@ -33,7 +33,7 @@ function listing(respond: (query: string | null) => Response = () => taskPage([t
 
 /** Правило показа при часах `at` — написано здесь заново, а не собрано кодом. */
 function rule(at: string): string {
-  return `status: not in done, cancelled or last_entry_at: >= "${at}" or open_warnings: > 0`;
+  return `status: not in done, cancelled or last_entry_at: >= "${at}" or open_warnings: > 0 or open_drafts: > 0`;
 }
 
 describe('порог архива', () => {

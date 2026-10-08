@@ -73,6 +73,20 @@ async function expectBoard(page: Page, expected: Record<string, number>): Promis
   }
 }
 
+/**
+ * Закрытые задачи демо, которых правило архива не прячет сколько ни молчи: в деле есть
+ * неподнятое знание (TRK-661) — у демо это DEMO-8. Берутся по правде бэкенда, отбором
+ * `open_drafts`, а не списком ключей.
+ */
+async function pinnedClosed(request: APIRequestContext): Promise<string[]> {
+  const pinned = await tasksByStatus(
+    request,
+    { query: 'status: done, cancelled and open_drafts: > 0' },
+    { archive: true },
+  );
+  return [...pinned.values()].flat();
+}
+
 async function everything(request: APIRequestContext) {
   const all = await tasksByStatus(request, {}, { archive: true });
   const closed = CLOSED.flatMap((status) => all.get(status) ?? []);
@@ -89,25 +103,30 @@ test('со сдвигом часов на четыре дня закрытые �
   const { all, closed, open } = await everything(request);
   expect(closed.length, 'в демо нет закрытых задач — проверять нечего').toBeGreaterThan(0);
   const later = new Date(Date.now() + SHIFT);
+  const pinned = await pinnedClosed(request);
+  expect(pinned.length, 'в демо нет закрытой задачи с неподнятым знанием').toBeGreaterThan(0);
+  const archived = closed.filter((key) => !pinned.includes(key));
+  const visible = [...open, ...pinned];
 
-  // Правда бэкенда при том же пороге, что посчитает браузер: вне архива — только
-  // незакрытые. Это сверка самого правила, а не интерфейса.
+  // Правда бэкенда при том же пороге, что посчитает браузер: вне архива — незакрытые и
+  // закрытые с неподнятым знанием (TRK-661). Это сверка самого правила, а не интерфейса.
   const shownLater = await tasksByStatus(request, {}, { now: later });
-  expect([...shownLater.values()].flat().sort()).toEqual([...open].sort());
+  expect([...shownLater.values()].flat().sort()).toEqual([...visible].sort());
 
   await silenceJournal(page);
   await page.clock.install({ time: later });
 
   await page.goto('/tasks?project=DEMO');
-  await expect(rows(page)).toHaveCount(open.length);
-  for (const key of open) await expect(page.getByRole('rowheader', { name: key })).toBeVisible();
-  for (const key of closed) await expect(page.getByRole('rowheader', { name: key })).toHaveCount(0);
+  await expect(rows(page)).toHaveCount(visible.length);
+  for (const key of visible) await expect(page.getByRole('rowheader', { name: key })).toBeVisible();
+  for (const key of archived)
+    await expect(page.getByRole('rowheader', { name: key })).toHaveCount(0);
   await expect(archive(page)).not.toBeChecked();
   const tableHidden = await rows(page).count();
 
   // Доска: все столбцы развёрнуты, чтобы считать карточки, а не только числа.
   await page.goto('/tasks?project=DEMO&view=board&collapsed=');
-  const withoutArchive = { ...sizes(all), done: 0, cancelled: 0 };
+  const withoutArchive = sizes(shownLater);
   await expectBoard(page, withoutArchive);
   const boardHidden = await cardsByStatus(page);
 
@@ -177,10 +196,12 @@ test('показ архива держится адресом: пережива�
   request,
 }) => {
   const { closed, open } = await everything(request);
+  // Закрытая с неподнятым знанием в архив не уходит (TRK-661): она видна и без показа.
+  const visible = open.length + (await pinnedClosed(request)).length;
   await page.clock.install({ time: new Date(Date.now() + SHIFT) });
 
   await page.goto('/tasks?project=DEMO');
-  await expect(rows(page)).toHaveCount(open.length);
+  await expect(rows(page)).toHaveCount(visible);
   await archive(page).click();
   await expect(page).toHaveURL(/\/tasks\?project=DEMO&archive=shown$/);
   await expect(rows(page)).toHaveCount(open.length + closed.length);
@@ -198,7 +219,7 @@ test('показ архива держится адресом: пережива�
   // Снять — тоже одно действие, и адрес возвращается к умолчанию.
   await archive(copy).click();
   await expect(copy).toHaveURL(/\/tasks\?project=DEMO$/);
-  await expect(rows(copy)).toHaveCount(open.length);
+  await expect(rows(copy)).toHaveCount(visible);
   await copy.close();
 });
 
@@ -243,8 +264,10 @@ test('порог пересекается при следующем чтении
 }) => {
   const { closed } = await everything(request);
   const shown = await shownKeys(request);
-  // Закрытые, в которых была работа: они видны сейчас и уйдут, когда пройдут три дня.
-  const leaving = closed.filter((key) => shown.includes(key));
+  const pinned = await pinnedClosed(request);
+  // Закрытые, в которых была работа: они видны сейчас и уйдут, когда пройдут три дня;
+  // кроме тех, где есть неподнятое знание (TRK-661), — эти остаются.
+  const leaving = closed.filter((key) => shown.includes(key) && !pinned.includes(key));
   expect(leaving.length, 'в демо нет закрытой задачи с работой в деле').toBeGreaterThan(0);
 
   await silenceJournal(page);
@@ -274,9 +297,11 @@ test('запрос человека складывается с правилом
   page,
 }) => {
   const token = readE2eToken();
+  // Закрытые с неподнятым знанием в архив не уходят (TRK-661), поэтому в запросе они
+  // исключены: `open_drafts: 0` оставляет только то, что со сдвигом часов архивно.
   const allDone = await (async () => {
     const response = await page.request.get(
-      '/api/v1/tasks?project=DEMO&status=done&fields=status&limit=100',
+      `/api/v1/tasks?project=DEMO&fields=status&limit=100&query=${encodeURIComponent('status: done and open_drafts: 0')}`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     return ((await response.json()) as { data: { key: string }[] }).data.map((row) => row.key);
@@ -287,7 +312,7 @@ test('запрос человека складывается с правилом
   await page.clock.install({ time: new Date(Date.now() + SHIFT) });
 
   // `status: done` без показа архива — только неархивные `done`: со сдвигом их нет.
-  const query = 'project: DEMO and status: done';
+  const query = 'project: DEMO and status: done and open_drafts: 0';
   await page.goto(`/tasks?query=${encodeURIComponent(query)}`);
   await expect(page.getByText('Задач по этим условиям нет')).toBeVisible();
   await expect(page.getByText('Архив не показан.')).toBeVisible();

@@ -25,7 +25,12 @@ export {
   isAwaitingAnswer,
   type BoardColumn,
 } from './model/waiting';
-export { ARCHIVE_AFTER_DAYS, CLOSED_STATUSES, OPEN_WARNINGS_CONDITION } from './model/archive';
+export {
+  ARCHIVE_AFTER_DAYS,
+  CLOSED_STATUSES,
+  OPEN_DRAFTS_CONDITION,
+  OPEN_WARNINGS_CONDITION,
+} from './model/archive';
 export {
   taskPackageKeys,
   taskPackageQueryOptions,
