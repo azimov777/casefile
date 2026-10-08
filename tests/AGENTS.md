@@ -75,5 +75,4 @@
 - `test_check_dco_script.py` — скрипт подписи вклада и исключение для Dependabot
 - `test_merge_script.py` — скрипт слияния ветки задачи
 - `test_watch_journal_sample.py` — образец сторожа `scripts/watch-journal.sh`
-- `test_notes.py` — заметки `docs/notes/`: поля записи и указатели «Где:» в живой код
 - `test_doc_links_in_code.py` — ссылки на документы в комментариях кода ведут на существующие файлы
