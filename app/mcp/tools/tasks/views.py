@@ -36,7 +36,7 @@ class TaskProjectView(ProjectRefView):
 
 
 def task_project(project: Project) -> TaskProjectView:
-    """Проект в карточке задачи: строка проекта, описание и архив (`CONCEPT.md`, 4.2).
+    """Проект в карточке задачи: строка проекта, описание и архив (TRK#153).
 
     Описание короткое и признак архива едут здесь ровно затем, чтобы агент получал
     контекст проекта и знал о заморозке тем же `get_task`, без `get_project` (TRK-167).
@@ -59,7 +59,7 @@ class TaskAreaView(BaseModel):
 
 
 def task_area(area: Area) -> TaskAreaView:
-    """Область в карточке задачи: адрес, название, описание и архив (`CONCEPT.md`, 4.2).
+    """Область в карточке задачи: адрес, название, описание и архив (TRK#153).
 
     Атрибуты и дело области в пакет не едут — они читаются у самой области.
     """
@@ -186,7 +186,7 @@ def mutation(value: TaskMutation, *, parent_entry: int | None = None) -> Mutatio
     )
 
 
-# Вычисляемые признаки задачи (`CONCEPT.md`, 4.3).
+# Вычисляемые признаки задачи (TRK#158).
 class FeaturesView(BaseModel):
     """Computed task features."""
 
@@ -213,7 +213,7 @@ class FeaturesView(BaseModel):
 
 
 def features(value: TaskFeatures) -> FeaturesView:
-    """Вычисляемые признаки задачи (`CONCEPT.md`, 4.3)."""
+    """Вычисляемые признаки задачи (TRK#158)."""
     return FeaturesView(
         blocked=value.blocked,
         deferred=value.deferred,

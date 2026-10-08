@@ -1,4 +1,4 @@
-"""Схемы областей проекта (`CONCEPT.md`, 3.7)."""
+"""Схемы областей проекта (TRK#57)."""
 
 import uuid
 from datetime import datetime

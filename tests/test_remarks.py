@@ -40,7 +40,7 @@ READY = {
     "constraints": "Счётчик не переписывать",
     "output": "Тест на несгоревший номер",
     "checks": ["Создание задачи без названия не тратит номер"],
-    # В работу задачу берёт исполнитель (`CONCEPT.md`, 3.3): запросы идут от `owner`.
+    # В работу задачу берёт исполнитель (TRK#109): запросы идут от `owner`.
     "assignee": "owner",
 }
 
@@ -73,7 +73,7 @@ async def make(session: AsyncSession, actor: Actor, project: Project, title: str
         constraints="ограничения",
         output="выход",
         checks=["проверка"],
-        # В работу задачу берёт исполнитель (`CONCEPT.md`, 3.3): им назначен автор.
+        # В работу задачу берёт исполнитель (TRK#109): им назначен автор.
         assignee=actor.author.signature,
     )
 

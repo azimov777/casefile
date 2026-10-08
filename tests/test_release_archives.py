@@ -147,7 +147,7 @@ def _intended(table: str, column: str, before: Row, after: Row, archive: Before)
     if table != "tokens" or before["revoked_at"] is not None or after["revoked_at"] is None:
         return False
     if before["name"] in MACHINE_KEY_NAMES:
-        # Одноимённые ключи машины источника отзываются при приёме (CONCEPT.md, 5.5).
+        # Одноимённые ключи машины источника отзываются при приёме (TRK#203).
         return column in {"revoked_at", "updated_at"}
     owner = archive.rows("participants").get(str(before["participant_id"]))
     return (
@@ -177,7 +177,7 @@ def _open_task_questions(archive: Before) -> set[tuple[str, int]]:
 def _added(table: str, row: Row, archive: Before) -> bool:
     """Строка, которой нет в архиве, но которую обязаны добавить приём или миграции."""
     if table == "tokens":
-        # Ключи машины приёмника переживают приём (CONCEPT.md, 5.5).
+        # Ключи машины приёмника переживают приём (TRK#203).
         return row["name"] in MACHINE_KEY_NAMES and row["revoked_at"] is None
     if table != "entries" or row["created_by_kind"] != "tracker":
         return False

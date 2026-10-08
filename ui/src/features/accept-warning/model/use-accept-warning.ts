@@ -39,7 +39,7 @@ export function useAcceptWarning() {
     onSuccess: (_entry, { taskKey }) => {
       // Принятие снимает предупреждение: устаревают карточка задачи, раздел «Требуют
       // внимания» и число в значке входящей. Пересчитывает их бэкенд — интерфейс
-      // только просит перечитать (`../docs/CONCEPT.md`, 6).
+      // только просит перечитать (TRK#207).
       void queryClient.invalidateQueries({ queryKey: ['task', taskKey] });
       void queryClient.invalidateQueries({ queryKey: taskKeys.attention });
       void queryClient.invalidateQueries({ queryKey: sessionKeys.bootstrap });

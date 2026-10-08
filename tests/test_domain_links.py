@@ -23,7 +23,7 @@ from app.domain.links import (
 
 
 def test_the_kinds_match_the_concept() -> None:
-    """Ровно три вида связи, пять имён: правка перечисления — правка концепции."""
+    """Ровно три вида связи, пять имён: правка перечисления — новое решение проекта."""
     assert set(LinkKind) == {
         LinkKind.PARENT,
         LinkKind.CHILD,
@@ -63,8 +63,7 @@ def test_every_kind_is_classified_by_whether_it_changes_behaviour() -> None:
     """Новый вид связи обязан попасть в набор или быть из него исключён осознанно.
 
     От этого зависит, пройдёт ли связь с закрытой задачей: незачисленный вид молча
-    оказался бы «ни на что не влияющим» и появился бы у закрытой задачи (`CONCEPT.md`,
-    3.5).
+    оказался бы «ни на что не влияющим» и появился бы у закрытой задачи (TRK#142).
     """
     assert BEHAVIOURAL_LINK_KINDS | {LinkKind.RELATES} == set(LinkKind)
     assert all(changes_behaviour(kind) for kind in BEHAVIOURAL_LINK_KINDS)

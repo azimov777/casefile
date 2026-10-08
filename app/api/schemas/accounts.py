@@ -1,4 +1,4 @@
-"""Схемы учётных записей (`docs/CONCEPT.md`, 3.1 и 5.4)."""
+"""Схемы учётных записей (TRK#72, TRK#190)."""
 
 import uuid
 from datetime import datetime

@@ -273,7 +273,7 @@ LONG_TEXT_FIELDS: frozenset[str] = frozenset(
 )
 
 
-# Родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4).
+# Родитель задачи в строке выдачи: ключ и название (TRK#165).
 class ParentView(BaseModel):
     """Parent task: key and title."""
 
@@ -281,14 +281,14 @@ class ParentView(BaseModel):
     title: str
 
 
-# Область задачи в строке выдачи: адрес и название (`CONCEPT.md`, 4.4).
+# Область задачи в строке выдачи: адрес и название (TRK#167).
 class AreaRowView(BaseModel):
     address: str
     title: str
 
 
 def parent_row(value: TaskParent) -> ParentView:
-    """Родитель задачи в строке выдачи: ключ и название (`CONCEPT.md`, 4.4)."""
+    """Родитель задачи в строке выдачи: ключ и название (TRK#165)."""
     return ParentView(key=value.key, title=value.title)
 
 

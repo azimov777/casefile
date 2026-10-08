@@ -68,7 +68,7 @@ from conftest import (
     without_empty_standing,
 )
 
-#: Инструменты рабочего цикла — ровно те, что перечислены в `CONCEPT.md`, 5.2.
+#: Инструменты рабочего цикла — ровно те, что перечислены в TRK#181.
 TASK_TOOLS = {
     "get_task",
     "read_entries",

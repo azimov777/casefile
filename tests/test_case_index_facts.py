@@ -62,7 +62,7 @@ async def make(session: AsyncSession, actor: Actor, project: Project, title: str
         constraints="constraints",
         output="output",
         checks=["check"],
-        # В работу задачу берёт исполнитель (`CONCEPT.md`, 3.3): им назначен автор.
+        # В работу задачу берёт исполнитель (TRK#109): им назначен автор.
         assignee=actor.author.signature,
     )
 
