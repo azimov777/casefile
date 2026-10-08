@@ -221,7 +221,7 @@ test('длинное название родителя — одна строка
     await expect(caption(two).getByRole('link')).toHaveAttribute('href', `/tasks/${program}`);
 
     // Тот же столбец в тёмной теме — снимком для дела, без проверок: сразу после смены
-    // темы кадр бывает смешанным (`docs/notes/testing.md`), поэтому снимок — после покоя
+    // темы кадр бывает смешанным (`TRK/ui-testing#45`), поэтому снимок — после покоя
     // переходов цвета у карточек.
     await page.emulateMedia({ colorScheme: 'dark' });
     await motionSettled(born);

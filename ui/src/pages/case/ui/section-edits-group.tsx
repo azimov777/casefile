@@ -92,7 +92,7 @@ export function SectionEditsGroup({
         <button
           type="button"
           // Фон и цвет рамки названы явно — та же причина, что у копирования ссылки
-          // в `EntryCard` (`docs/notes/ui.md`, «Кнопка без объявленного фона»).
+          // в `EntryCard` (`TRK/ui-shared#16`, «Кнопка без объявленного фона»).
           className="ml-auto border-none border-current bg-transparent p-0 text-label text-accent hover:underline"
           aria-expanded={open}
           onClick={() => setChoice(!open)}

@@ -113,7 +113,7 @@ function rows(page: Page): Locator {
   return page.locator('tbody tr');
 }
 
-/** Верх элемента в окне. Элемент приводится в вид заранее: см. `docs/notes/ui.md`. */
+/** Верх элемента в окне. Элемент приводится в вид заранее: см. `TRK/ui-testing#64`. */
 async function topOf(target: Locator): Promise<number> {
   return (await target.boundingBox())?.y ?? Number.NaN;
 }

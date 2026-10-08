@@ -59,7 +59,7 @@ export function TokenItem({
       className={cn(
         'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-block border px-4 py-3',
         // Отозванный доступ остаётся историей. Отличается он заливкой и плашкой, а не
-        // прозрачностью: та роняет контраст (`docs/notes/ui.md`).
+        // прозрачностью: та роняет контраст (`TRK/ui-shared#11`).
         revoked ? 'border-line bg-sunken' : 'border-line bg-surface',
       )}
     >

@@ -43,7 +43,7 @@ const INDICATOR =
  * экране и так делит строку с крошками и переключателями. Сообщает о смене состояния
  * (`role="status"`) подпись внутри кнопки, а не кнопка: роль живой области у кнопки
  * заменила бы роль кнопки. Панель Radix в jsdom открывается десятки секунд
- * (`docs/notes/testing.md`), поэтому её открытие проверяет сквозной тест.
+ * (`TRK/ui-testing#51`), поэтому её открытие проверяет сквозной тест.
  */
 export function LiveStatus({ status }: { status: LiveStatusValue }) {
   const state = STATES[status];
@@ -58,7 +58,7 @@ export function LiveStatus({ status }: { status: LiveStatusValue }) {
           data-live-status={status}
           className={cn(
             INDICATOR,
-            // Кнопка остаётся подписью: рамку и фон снимает явно (`docs/notes/ui.md`,
+            // Кнопка остаётся подписью: рамку и фон снимает явно (`TRK/ui-shared#16`,
             // «Кнопка без объявленного фона получает `ButtonFace` браузера»), на
             // телефоне мишень не ниже `--ui-tap` (UI-154).
             'cursor-pointer border-none border-current bg-transparent p-0 max-fold:min-h-(--ui-tap)',

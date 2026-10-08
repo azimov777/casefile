@@ -197,7 +197,7 @@ function AreaField({
         {t('filters.areaLegend')}
       </label>
       {/* Фон и цвет названы у поля явно: у `select` своя системная палитра формы
-          (`docs/notes/ui.md`, «Кнопка без объявленного фона получает `ButtonFace`»). */}
+          (`TRK/ui-shared#16`, «Кнопка без объявленного фона получает `ButtonFace`»). */}
       <select
         id={fieldId}
         className="max-w-full truncate rounded-mark border border-line-strong bg-surface px-2 py-1 text-text max-fold:min-h-(--ui-tap)"

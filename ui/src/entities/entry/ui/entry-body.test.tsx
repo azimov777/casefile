@@ -280,7 +280,7 @@ describe('служебная запись', () => {
     withReason.unmount();
 
     // Без причины: тела нет вовсе, весь факт уместился в шапку. Заголовок и тело
-    // не должны говорить одно и то же (`docs/notes/ui.md`).
+    // не должны говорить одно и то же (`TRK/ui-screens#29`).
     const bare = render(
       <MemoryRouter>
         <EntryCard

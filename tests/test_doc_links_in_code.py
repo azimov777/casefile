@@ -71,7 +71,9 @@ def test_the_scan_sees_the_code_and_its_links() -> None:
     """Сканер промахнулся каталогом или шаблоном — проверка ниже зеленеет на пустом множестве."""
     files = _scanned_files()
     assert len(files) > 200, "исходники для сверки ссылок не найдены"
-    assert sum(len(_links(path)) for path in files) > 100, "ссылки на документы не найдены"
+    # Порог — проверка исправности сканера, а не цель: после переноса заметок в трекер
+    # (TRK-612, TRK-614) живых ссылок 49 (замер 2026-10-08), порог взят с запасом ниже.
+    assert sum(len(_links(path)) for path in files) > 30, "ссылки на документы не найдены"
 
 
 def test_the_links_resolver_catches_a_missing_and_an_existing_file() -> None:

@@ -32,7 +32,7 @@ const SCREEN = 'flex max-w-[64rem] flex-col gap-4';
  * искать то же условие глазами он не должен. Кнопка, а не ссылка, — действие меняет
  * состояние экрана, а не ведёт по адресу; вид у неё подчёркнутый, потому что стоит
  * она внутри предложения. Фон и граница названы явно: у `<button>` без объявленного
- * фона браузер рисует свой `ButtonFace` (`docs/notes/ui.md`).
+ * фона браузер рисует свой `ButtonFace` (`TRK/ui-shared#16`).
  */
 const INLINE_RESET = 'border-none bg-transparent p-0 text-accent underline';
 

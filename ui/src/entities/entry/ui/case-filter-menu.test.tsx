@@ -7,7 +7,7 @@ import { CaseFilterMenu } from './case-filter-menu';
 
 /*
  * Панель проверяется сама по себе, без всплывающего слоя: `Popover` Radix в jsdom
- * раскрывается десятки секунд, если вообще раскрывается (`docs/notes/testing.md`).
+ * раскрывается десятки секунд, если вообще раскрывается (`TRK/ui-testing#51`).
  * Открытие панели, `Esc` и возврат фокуса проверяет сквозной `e2e/case-latest.spec.ts`.
  */
 function renderMenu(selected: EntryType[] = []) {

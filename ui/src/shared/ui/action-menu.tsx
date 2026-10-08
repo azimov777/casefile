@@ -72,7 +72,7 @@ export function ActionMenu({ label, items, ref }: ActionMenuProps) {
 
 /**
  * Пункты меню — отдельно от всплывающего слоя: их проверяет модульный тест без `Popover`,
- * который в jsdom раскрывается секундами (`docs/notes/testing.md`, «Панель `Popover` в
+ * который в jsdom раскрывается секундами (`TRK/ui-testing#51`, «Панель `Popover` в
  * jsdom открывается десятки секунд»). Открытие, `Esc` и возврат фокуса проверяет сквозной.
  */
 export function ActionMenuItems({
@@ -92,7 +92,7 @@ export function ActionMenuItems({
             data-action={id}
             className={cn(
               // Фон и рамка названы явно: без объявленного фона браузер рисует свой
-              // `ButtonFace` (`docs/notes/ui.md`, «Кнопка без объявленного фона»).
+              // `ButtonFace` (`TRK/ui-shared#16`, «Кнопка без объявленного фона»).
               'flex w-full cursor-pointer items-center gap-2 rounded-mark border-none border-current bg-transparent px-2.5 py-1.5 text-left text-body text-text',
               'transition-colors duration-(--motion-fast) ease-fast hover:bg-sunken max-fold:min-h-(--ui-tap)',
               'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',

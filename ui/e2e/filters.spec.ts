@@ -220,7 +220,7 @@ test('шеврон выбора языка стоит на одной оси с 
   await page.goto('/tasks?project=DEMO');
   await expect(page.locator('tbody tr').first()).toBeVisible();
   /*
-   * Замер снят после `document.fonts.ready` (`docs/notes/ui.md`, «Замер геометрии
+   * Замер снят после `document.fonts.ready` (`TRK/ui-testing#67`, «Замер геометрии
    * снимается после document.fonts.ready»): до этого текст набран запасной
    * гарнитурой, и метрика строки отличается от той, что видит человек.
    */

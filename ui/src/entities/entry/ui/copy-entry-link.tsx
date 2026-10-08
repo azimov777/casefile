@@ -40,7 +40,7 @@ export function CopyEntryLink({ owner, no }: { owner: EntryOwner; no: number }) 
       <button
         type="button"
         // Фон и цвет рамки названы явно — та же причина, что у `CopyReference`
-        // (`docs/notes/ui.md`, «Кнопка без объявленного фона»).
+        // (`TRK/ui-shared#16`, «Кнопка без объявленного фона»).
         className="inline-grid cursor-pointer place-items-center rounded-mark border-none border-current bg-transparent p-0 text-muted max-fold:min-h-(--ui-tap) max-fold:min-w-(--ui-tap) hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         aria-label={label}
         title={label}

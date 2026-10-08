@@ -10,7 +10,7 @@ export const login = {
   tokenPlaceholder: 'trk_...',
   // Команда стоит внутри фразы, поэтому она размечена, а не приклеена по краям:
   // порядок слов у языков разный, и склейка `t('a') + <code/> + t('b')` переставится
-  // неверно (`<Trans>`, см. `docs/notes/ui.md`).
+  // неверно (`<Trans>`, см. `TRK/ui-shared#34`).
   tokenHint:
     'The token is printed by <cmd>docker compose run --rm init</cmd> in the backend repository. It is kept in this browser only and goes to the server in a header.',
   submit: 'Sign in',

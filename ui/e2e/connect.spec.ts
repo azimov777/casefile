@@ -172,7 +172,7 @@ test('ключ агента, введённый на `/login`: экран отк
 
   // Флажок общего токена добавляет метку во фрагменты и держится адресом. `click()`,
   // а не `check()`: состояние флажка приходит из адреса на кадр позже
-  // (`docs/notes/testing.md`, «`check()` не ждёт флажок…»).
+  // (`TRK/ui-testing#18`, «`check()` не ждёт флажок…»).
   const shared = page.getByRole('checkbox', { name: /X-Actor-Label/ });
   await shared.click();
   await expect(shared).toBeChecked();
