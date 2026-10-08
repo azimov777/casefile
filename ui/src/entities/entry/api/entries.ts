@@ -115,6 +115,8 @@ export const entryKeys = {
    * адрес]`, как тела проекта под его префиксом (TRK-557).
    */
   areaBody: (address: string, no: number) => ['area', address, 'entries', no] as const,
+  /** Знание области целиком — решения и заметки, с поиском или без (TRK-660). */
+  areaKnowledge: (address: string, text: string) => ['area', address, 'knowledge', text] as const,
   /** Дело области страницами, с отбором или без. */
   areaCase: (address: string, params: ProjectEntryListParams) =>
     ['area', address, 'case', params] as const,
@@ -307,5 +309,44 @@ export function caseFeedQueryOptions(taskKey: string, params: EntryListParams) {
     getNextPageParam: (last: Page<Entry>) =>
       last.meta?.has_more === true ? (last.meta.next_cursor ?? undefined) : undefined,
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Предел страниц знания области: 25 страниц по 200 записей — потолок, а не ожидаемый размер. */
+const KNOWLEDGE_MAX_PAGES = 25;
+
+/** Типы записей, из которых состоит знание области: решения и заметки (TRK#57, §5). */
+export const KNOWLEDGE_TYPES: EntryType[] = ['decision', 'finding', 'note'];
+
+/**
+ * Знание области — все её решения и заметки, действующие и заменённые, по номеру
+ * (TRK-660, TRK#59). Читается целиком, страница за страницей: экрану нужны числа вкладок
+ * и переключатель «Показать заменённые», а для них пришлось бы знать все записи; дело
+ * области коротко (решения и заметки, без сводок и вопросов задач).
+ *
+ * `text` — поиск бэкенда по названию и телу записи. Пустая строка уходит без параметра.
+ * Ключ лежит под префиксом области: действие в деле области перечитывает и его.
+ */
+export function areaKnowledgeQueryOptions(address: string, text: string) {
+  return queryOptions({
+    queryKey: entryKeys.areaKnowledge(address, text),
+    // Набор слова в поиске не гасит список между запросами.
+    placeholderData: keepPreviousData,
+    queryFn: async (): Promise<Entry[]> => {
+      const items: Entry[] = [];
+      let cursor = '';
+      for (let page = 0; page < KNOWLEDGE_MAX_PAGES; page += 1) {
+        const read = await readAreaCasePage(
+          address,
+          { types: KNOWLEDGE_TYPES, ...(text === '' ? {} : { text }) },
+          cursor,
+        );
+        items.push(...read.items);
+        const next = nextCursor(read);
+        if (next === undefined) break;
+        cursor = next;
+      }
+      return items;
+    },
   });
 }

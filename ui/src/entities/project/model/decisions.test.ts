@@ -7,6 +7,11 @@ describe('ссылка на решение проекта', () => {
     expect(decisionNo('OPS#3')).toBe(3);
   });
 
+  it('решение области ведёт на страницу области с раскрытой записью', () => {
+    expect(decisionHref('TRK/mcp#3')).toBe('/projects/TRK/areas/mcp?entry=3');
+    expect(decisionNo('TRK/mcp#3')).toBe(3);
+  });
+
   it('строку не той формы не превращает в номер', () => {
     expect(decisionNo('TRK-1#2')).toBeNull();
     expect(decisionHref('TRK')).toBe('/projects/TRK');

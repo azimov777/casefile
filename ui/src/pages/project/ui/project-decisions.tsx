@@ -1,8 +1,8 @@
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, type To } from 'react-router';
-import { AuthorName } from '@/entities/entry';
-import { DecisionStatusMark, decisionTasksQuery, type ProjectDecision } from '@/entities/project';
+import { AuthorName, DecisionStatusMark } from '@/entities/entry';
+import { decisionTasksQuery, type ProjectDecision } from '@/entities/project';
 import { tasksHref } from '@/features/task-filters';
 import { RelativeTime } from '@/shared/ui';
 

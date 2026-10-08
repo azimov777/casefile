@@ -201,6 +201,47 @@ describe('экран проекта', () => {
     expect(address.current).toBe('/projects/DEMO?tab=case&entry=5');
   });
 
+  it('заменённая заметка и заменённое решение в описи «Дела» помечены ссылкой на преемника (TRK-660)', async () => {
+    server.use(
+      http.get(`${API}/api/v1/projects/DEMO/entries`, () =>
+        collection([
+          projectEntry(1, 'finding', {
+            title: 'Старая заметка',
+            status: 'superseded',
+            superseded_by: 3,
+          } as Partial<Entry>),
+          projectEntry(2, 'finding', {
+            title: 'Действующая заметка',
+            status: 'in_force',
+            superseded_by: null,
+          } as Partial<Entry>),
+          projectEntry(3, 'finding', {
+            title: 'Новая заметка',
+            status: 'in_force',
+            superseded_by: null,
+          } as Partial<Entry>),
+        ]),
+      ),
+    );
+    renderApp('/projects/DEMO?tab=case', { language: 'ru' });
+
+    const index = await screen.findByRole('table');
+    const old = within(index)
+      .getByRole('button', { name: /Старая заметка/ })
+      .closest('tr') as HTMLElement;
+    expect(within(old).getByText(say.ui('decision.status.superseded'))).toBeInTheDocument();
+    expect(within(old).getByRole('link', { name: 'DEMO#3' })).toHaveAttribute(
+      'href',
+      '/projects/DEMO?entry=3',
+    );
+    // У действующей пометки нет: в описи она была бы шумом.
+    const current = within(index)
+      .getByRole('button', { name: /Действующая заметка/ })
+      .closest('tr') as HTMLElement;
+    expect(within(current).queryByText(say.ui('decision.status.in_force'))).toBeNull();
+    expect(within(current).queryByRole('link')).toBeNull();
+  });
+
   it('свёрнутая запись, пришедшая ссылкой `?entry=N`, оставляет «Дело» открытым', async () => {
     const user = userEvent.setup();
     renderApp('/projects/DEMO?entry=5');

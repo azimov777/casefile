@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { areaQueryOptions } from '@/entities/area';
+import { areaKnowledgeQueryOptions } from '@/entities/entry';
 import { projectQueryOptions } from '@/entities/project';
 import {
   AttributesSection,
@@ -9,6 +10,8 @@ import {
   AreaMenu,
   HOLDER_SCREEN,
   HolderScreen,
+  KnowledgeSection,
+  knowledgeLists,
   useHolderAddress,
   useProjectRights,
   type HolderTabLink,
@@ -25,8 +28,10 @@ const MISSING: readonly string[] = ['area_not_found', 'project_not_found'];
 /**
  * Страница области (TRK-557, TRK#16, ч. 4) — на том же каркасе, что экран проекта
  * (`HolderScreen`, TRK-618, решение TRK#46): шапка — адрес, название, описание, ссылки на
- * проект и на задачи области, меню «⋯», — и вкладки «Атрибуты» и «Дело». «Обзора» у
- * области нет: без параметра открывается «Дело».
+ * проект и на задачи области, меню «⋯», — и вкладки «Решения», «Заметки», «Атрибуты» и
+ * «Дело». «Обзора» у области нет: без параметра открываются «Решения» (TRK-660, TRK#59).
+ * «Решения» и «Заметки» — знание области: действующие записи, заменённые по переключателю,
+ * поиск `?q=` по тексту.
  *
  * Адрес страницы — под проектом, как путь API: `/projects/TRK/areas/promotion`.
  * Состояние — в адресе, как у проекта (`useHolderAddress`): `?tab=` — вкладка, `?entry=N`
@@ -53,6 +58,10 @@ export function AreaPage() {
   const project = useQuery(projectQueryOptions(key));
   const rights = useProjectRights();
   const place = useHolderAddress('area');
+  const knowledge = useQuery({
+    ...areaKnowledgeQueryOptions(address, place.search),
+    enabled: area.data !== undefined,
+  });
   const { language } = useLanguage();
   const { t } = useTranslation('area');
 
@@ -86,7 +95,16 @@ export function AreaPage() {
   const canArchive = rights.manage && projectKnown && !projectFrozen;
   const holder = { kind: 'area', key: card.address } as const;
 
+  // Числа вкладок знания — число действующих записей (с поиском — найденных): то, что
+  // задаёт работу в области. Пока знание не прочитано, числа нет, а не ноль.
+  const lists = knowledge.data === undefined ? null : knowledgeLists(knowledge.data);
   const tabs: HolderTabLink[] = [
+    {
+      tab: 'decisions',
+      label: t('tabs.decisions'),
+      count: lists?.decisions.inForce.length,
+    },
+    { tab: 'notes', label: t('tabs.notes'), count: lists?.notes.inForce.length },
     { tab: 'attributes', label: t('tabs.attributes'), count: card.attributes.length },
     { tab: 'case', label: t('tabs.case') },
   ];
@@ -142,7 +160,16 @@ export function AreaPage() {
       current={place.tab}
       tabHref={place.tabHref}
     >
-      {place.tab === 'attributes' ? (
+      {place.tab === 'decisions' || place.tab === 'notes' ? (
+        <KnowledgeSection
+          holder={holder}
+          kind={place.tab}
+          canWrite={canWrite}
+          search={place.search}
+          onSearch={place.rememberSearch}
+          entryHref={place.entryHref}
+        />
+      ) : place.tab === 'attributes' ? (
         <AttributesSection
           holder={holder}
           attributes={card.attributes}
