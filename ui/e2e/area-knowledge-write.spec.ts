@@ -52,7 +52,7 @@ test('«Решение» на странице области записывае
   // Среди действующих: в списке со статусом «действует», число вкладки — единица.
   const row = page.locator('li[data-knowledge]', { hasText: title });
   await expect(row).toHaveAttribute('data-status', 'in_force');
-  await expect(row.getByText('действует', { exact: true })).toBeVisible();
+  await expect(row.locator('[data-entry-state]')).toContainText('действует');
   await expect(
     page
       .getByRole('navigation', { name: 'Разделы области' })
