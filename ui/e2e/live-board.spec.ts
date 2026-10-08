@@ -257,6 +257,10 @@ test.describe('доска под живым потоком', () => {
     await page.goto('/tasks?project=DEMO&view=board');
     await expect(column(page, 'open').getByRole('article').first()).toBeVisible();
     await expect(page.getByRole('banner').getByText('на связи')).toBeVisible();
+    // Число страниц считается по прочитанному столбцу, а не по тому, что успело
+    // нарисоваться: ответ `backlog` под нагрузкой приходит позже «покоя» запросов, и
+    // пустой столбец дал бы ожидание на страницу меньше (TRK-691).
+    await expect(column(page, 'backlog').getByRole('article').first()).toBeVisible();
     await settled(() => calls.length);
 
     const before = calls.length;
