@@ -18,7 +18,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 #: Где ищем: код бэкенда, его тесты и скрипты, исходники интерфейса, его тестовая обвязка и e2e.
 SCANNED = ("app", "tests", "scripts", "ui/src", "ui/testing", "ui/e2e")
 
-SUFFIXES = frozenset({".py", ".ts", ".tsx", ".js", ".mjs", ".cjs", ".sh", ".ps1", ".css", ".yml", ".yaml"})
+SUFFIXES = frozenset(
+    {".py", ".ts", ".tsx", ".js", ".mjs", ".cjs", ".sh", ".ps1", ".css", ".yml", ".yaml"}
+)
 SKIPPED_DIRS = frozenset({"node_modules", "__pycache__", "dist", ".venv"})
 
 #: Ссылка на документ: путь с отрезком `docs/` и расширением `.md`.
@@ -29,7 +31,7 @@ DOC_LINK = re.compile(r"[A-Za-z0-9_./-]*docs/[A-Za-z0-9_./-]+\.md")
 #: ссылка с первой косой чертой — не путь в дереве, её пропускаем.
 URL = re.compile(r"[a-z][a-z0-9+.-]*://\S+")
 
-#: Заведомо несуществующие примеры «неверной ссылки» (проверки полей `refs`), а не ссылки на документ.
+#: Заведомо несуществующие примеры «неверной ссылки» (проверки полей `refs`), не ссылки на документ.
 EXAMPLE_LINKS = frozenset({"docs/x.md"})
 
 THIS_FILE = Path(__file__).resolve()
