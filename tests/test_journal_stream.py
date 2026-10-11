@@ -40,6 +40,7 @@ from app.domain.case import EntryType
 from app.services import case as case_service
 from app.services import journal as journal_service
 from app.services.auth import Actor
+from app.services.journal import RECONNECT_DELAY_MS
 
 STREAM = "/api/v1/journal/stream"
 
@@ -118,9 +119,32 @@ async def read_frames(
 ) -> list[dict[str, str]]:
     """Открывает поток, забирает `count` кадров с данными и закрывает его.
 
-    Строку `retry:` и тики (строки-комментарии) пропускает: они часть транспорта, а не
-    содержимого. Каждый кадр приезжает отдельным сообщением `http.response.body`,
-    потому что обработчик отдаёт его одним `yield`.
+    Первый блок (`id:` и `retry:`) и тики (строки-комментарии) пропускает: они часть
+    транспорта, а не содержимого. Блок читает `read_stream`.
+    """
+    _, frames = await read_stream(app, secret, params=params, headers=headers, count=count)
+    return frames
+
+
+async def read_stream(
+    app: FastAPI,
+    secret: str,
+    *,
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    count: int,
+    settle: float = 0.0,
+) -> tuple[dict[str, str], list[dict[str, str]]]:
+    """То же, что `read_frames`, но с первым блоком потока: `(первый блок, кадры)`.
+
+    Каждый кадр приезжает отдельным сообщением `http.response.body`, потому что
+    обработчик отдаёт его одним `yield`; первый блок — тоже одним, и это то сообщение,
+    в котором есть строка `retry:`.
+
+    `settle` — пауза после последнего прочитанного кадра перед уходом клиента. Нужна,
+    когда кадров не ждут вовсе: поток всё равно делает первую выборку в сессии теста, и
+    клиент, ушедший посреди неё, отменил бы запрос и оставил сессию закрытой (см.
+    «Почему поток и тест делят одну сессию безопасно»).
     """
     query = urlencode(params or {}, doseq=True)
     request_headers = {"host": "tracker.test", "authorization": f"Bearer {secret}"}
@@ -150,6 +174,7 @@ async def read_frames(
 
     runner = asyncio.create_task(app(_scope_for(query, request_headers), receive, send))
     frames: list[dict[str, str]] = []
+    preamble: dict[str, str] | None = None
     try:
         async with asyncio.timeout(READ_TIMEOUT):
             start = await events.get()
@@ -160,15 +185,19 @@ async def read_frames(
             }
             assert headers_of_response["content-type"].startswith("text/event-stream")
             assert headers_of_response["cache-control"] == "no-cache"
-            while len(frames) < count:
+            while preamble is None or len(frames) < count:
                 message = await events.get()
                 assert message["type"] == "http.response.body", message
                 chunk = message.get("body", b"").decode()
-                if not chunk.strip() or chunk.startswith(":") or chunk.startswith("retry:"):
+                if not chunk.strip() or chunk.startswith(":"):
                     continue
-                frames.append(
-                    dict(line.split(": ", 1) for line in chunk.strip().split("\n"))  # type: ignore[misc,arg-type]
-                )
+                block = dict(line.split(": ", 1) for line in chunk.strip().split("\n"))
+                if "retry" in block:
+                    preamble = block
+                    assert chunk.endswith("\n\n") and not chunk.endswith("\n\n\n"), chunk
+                    continue
+                frames.append(block)
+        await asyncio.sleep(settle)
     finally:
         # Клиент уходит так же, как ушёл бы настоящий: обрывом соединения. Поток
         # обязан от этого закончиться сам и вернуть место в лимите — снятие задачи
@@ -180,7 +209,35 @@ async def read_frames(
             runner.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await runner
-    return frames
+    return preamble, frames
+
+
+async def test_the_first_block_names_the_position_before_any_entry(
+    streaming_app: FastAPI,
+    main_secret: str,
+    entries: list[Entry],
+) -> None:
+    """Обзорная проверка 1: без курсора `id:` первого блока — последний `seq` журнала.
+
+    Поток открыт, ни один кадр записи не пришёл, а клиент уже знает номер, после
+    которого поток начал выдачу. `id:` и `retry:` — один блок.
+    """
+    preamble, _ = await read_stream(streaming_app, main_secret, count=0, settle=0.5)
+
+    assert preamble == {"id": str(entries[-1].seq), "retry": str(RECONNECT_DELAY_MS)}
+
+
+async def test_the_first_block_repeats_the_cursor_the_client_resumed_from(
+    streaming_app: FastAPI,
+    main_secret: str,
+    entries: list[Entry],
+) -> None:
+    """С курсором первый блок называет сам курсор, а не конец журнала."""
+    preamble, _ = await read_stream(
+        streaming_app, main_secret, headers={"Last-Event-ID": "17"}, count=0, settle=0.5
+    )
+
+    assert preamble["id"] == "17"
 
 
 async def test_a_frame_carries_the_sequence_number_the_type_and_the_entry(
