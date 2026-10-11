@@ -1439,6 +1439,11 @@ export interface paths {
          *     записи в `id:`, тип записи в `event:` и саму запись в `data:` — той же формы, что и
          *     элемент ленты.
          *
+         *     Первый блок потока — `id: <номер>` и `retry: <мс>` одной группой строк без `data:`.
+         *     Номер в нём — позиция, после которой поток выдаёт записи (то же, что ниже названо
+         *     началом выдачи): клиент знает её до первой записи, а значит, может закрыть поток и
+         *     переоткрыть его с `Last-Event-ID` в любой момент.
+         *
          *     Начало выдачи: без курсора — конец журнала, то есть «что будет дальше». С курсором
          *     (`Last-Event-ID`, параметр `last_event_id` или `after`) — сразу после названного
          *     номера. Слишком старого курсора не бывает: записи постоянны, и поток, оборванный на
@@ -13707,7 +13712,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description An endless `text/event-stream`. Every frame carries the entry `seq` in `id:`, the entry type in `event:` and the entry itself in `data:`. Lines starting with `:` are heartbeats and carry no data */
+            /** @description An endless `text/event-stream`. The first block is `id: <seq>` and `retry: <ms>` with no `data:`: `id:` is the number the stream starts after (the resume cursor when one was sent, otherwise the last `seq` of the journal, `0` on an empty one), so a client knows its position before the first entry and can reopen with `Last-Event-ID`. Every entry frame after it carries the entry `seq` in `id:`, the entry type in `event:` and the entry itself in `data:`. Lines starting with `:` are heartbeats and carry no data */
             200: {
                 headers: {
                     [name: string]: unknown;
