@@ -1,7 +1,7 @@
 import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { act, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { API, bootstrap, collection, data, taskListing, taskPackage } from '@testing/msw/responses';
 import { liveJournal } from '@testing/live-journal';
 import { server } from '@testing/msw/server';
@@ -9,7 +9,7 @@ import { renderApp } from '@testing/render';
 import { say } from '@testing/say';
 import { task } from '@testing/msw/responses';
 import { TASK_COLUMN_PAGE_SIZE, TASK_PAGE_SIZE, type TaskStatus } from '@/entities/task';
-import { setToken } from '@/shared/api';
+import { clearToken, setToken } from '@/shared/api';
 import { COALESCE_WINDOW_MS } from './deferred';
 
 /** Сколько раз спрашивали список задач: по этому видно, перечитал ли кадр экран. */
@@ -30,6 +30,41 @@ beforeEach(() => {
   );
   setToken('trk_test');
 });
+
+afterEach(() => {
+  // Скрытость объявлена свойством самого документа: без уборки следующий тест
+  // начинался бы в фоновой вкладке.
+  Reflect.deleteProperty(document, 'hidden');
+});
+
+/**
+ * Вкладка ушла в фон или вернулась — так, как это объявляет браузер: значением и
+ * событием. Без события приложение о смене видимости не узнаёт.
+ */
+function setHidden(hidden: boolean): void {
+  Object.defineProperty(document, 'hidden', { configurable: true, value: hidden });
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+}
+
+/** Вкладка открыта в фоне: скрыта с рождения, события об этом браузер не шлёт. */
+function bornHidden(): void {
+  Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+}
+
+/** Показывал ли экран «нет связи» хоть на одну отрисовку — с этого места и до вызова. */
+function watchOffline(): () => boolean {
+  let seen = false;
+  const observer = new MutationObserver(() => {
+    if (screen.queryByText(say.ui('live.offline')) !== null) seen = true;
+  });
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  return () => {
+    observer.disconnect();
+    return seen;
+  };
+}
 
 /** Кадр журнала: запись дела с её сквозным номером, как её отдаёт поток. */
 function entry(seq: number, taskKey: string, overrides: Record<string, unknown> = {}) {
@@ -316,28 +351,28 @@ describe('живой поток', () => {
     await waitFor(() => expect(listings).toBeGreaterThan(before));
   });
 
-  it('в фоновой вкладке кадры копятся, а возврат не переставляет список', async () => {
+  it('запись, подшитая пока вкладка в фоне, после возврата стоит в полосе, а список не переставлен', async () => {
     const user = userEvent.setup();
     renderApp('/tasks');
     await screen.findByText('DEMO-1');
+    await screen.findByText(say.ui('live.online'));
     const before = listings;
 
-    // Вкладка ушла в фон.
-    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    // Вкладка ушла в фон: потока у неё больше нет, и запись до неё не доходит.
+    setHidden(true);
+    expect(liveJournal.options).toBeNull();
 
     act(() => {
       liveJournal.send(entry(1040, 'DEMO-1', { type: 'status_changed' }));
     });
-    await waitFor(() => expect(liveJournal.options).not.toBeNull());
     expect(listings).toBe(before);
+    expect(screen.queryByText(say.ui('live.changed', { count: 1 }))).not.toBeInTheDocument();
 
     // Человек вернулся и смотрит в ту же точку, где был.
-    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
-    act(() => {
-      document.dispatchEvent(new Event('visibilitychange'));
-    });
+    setHidden(false);
 
-    // Накопленное не вылилось на экран: список ждёт просьбы, как и при видимой вкладке.
+    // Случившееся в фоне пришло кадром, но на экран не вылилось: список ждёт просьбы,
+    // как и при видимой вкладке.
     expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
     expect(listings).toBe(before);
 
@@ -365,6 +400,231 @@ describe('живой поток', () => {
 
     expect(await screen.findByLabelText(say.login('tokenLabel'))).toBeInTheDocument();
     expect(window.localStorage.getItem('tracker.token')).toBeNull();
+  });
+});
+
+/**
+ * Поток держит только видимая вкладка (TRK-697).
+ *
+ * Браузер даёт шесть соединений на адрес, а поток занимает одно на всё время жизни:
+ * скрытая вкладка закрывает его, как только знает свою позицию, и после возврата
+ * продолжает с неё. Здесь проверяется порядок — когда открыт, когда закрыт, с какой
+ * позиции продолжен и что это не обрыв; настоящие соединения считает сквозной сценарий
+ * (`e2e/live-tabs.spec.ts`).
+ */
+describe('поток и видимость вкладки', () => {
+  it('уход в фон и возврат — не обрыв: «нет связи» не показано, поток продолжен с позиции первого блока', async () => {
+    // Позиция, которую поток назовёт первым блоком: ни один кадр записи её не подскажет.
+    liveJournal.position = 4242;
+    renderApp('/tasks');
+    await screen.findByText('DEMO-1');
+    await screen.findByText(say.ui('live.online'));
+    const before = listings;
+    const offline = watchOffline();
+
+    setHidden(true);
+
+    // Скрытая вкладка поток закрыла, а статус остался каким был.
+    expect(liveJournal.options).toBeNull();
+    expect(liveJournal.closed).toBe(1);
+    expect(screen.getByText(say.ui('live.online'))).toBeInTheDocument();
+
+    setHidden(false);
+
+    await waitFor(() => expect(liveJournal.options).not.toBeNull());
+    expect(liveJournal.connections).toBe(2);
+    expect(liveJournal.options?.after).toBe(4242);
+    expect(await screen.findByText(say.ui('live.online'))).toBeInTheDocument();
+    // Возврат — не восстановление после обрыва: показанное не перечитывается, и полосы
+    // «что-то изменилось» нет — не изменилось ничего.
+    expect(offline()).toBe(false);
+    expect(screen.queryByText(say.ui('live.changedUnknown'))).not.toBeInTheDocument();
+    expect(listings).toBe(before);
+  });
+
+  it('позиция ноль — тоже позиция: с неё вкладка и продолжает', async () => {
+    // Пустой журнал: первый блок называет ноль.
+    liveJournal.position = 0;
+    renderApp('/tasks');
+    await screen.findByText(say.ui('live.online'));
+
+    setHidden(true);
+    expect(liveJournal.options).toBeNull();
+
+    setHidden(false);
+    await waitFor(() => expect(liveJournal.options).not.toBeNull());
+    expect(liveJournal.options?.after).toBe(0);
+  });
+
+  it('вкладка, открытая в фоне, узнаёт позицию и поток закрывает; после показа догоняет подшитое', async () => {
+    bornHidden();
+    renderApp('/tasks');
+    await screen.findByText('DEMO-1');
+
+    // Позиции у новой вкладки нет: поток она открыла, первый блок получила — и закрыла.
+    await waitFor(() => expect(liveJournal.closed).toBe(1));
+    expect(liveJournal.connections).toBe(1);
+    expect(liveJournal.options).toBeNull();
+    const before = listings;
+
+    act(() => {
+      liveJournal.send(entry(1001, 'DEMO-1', { type: 'status_changed' }));
+    });
+    expect(liveJournal.connections).toBe(1);
+
+    setHidden(false);
+
+    expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
+    expect(liveJournal.connections).toBe(2);
+    expect(liveJournal.options?.after).toBe(1000);
+    expect(listings).toBe(before);
+  });
+
+  it('вкладка ушла в фон до первого блока: поток закрыт сразу после него, не раньше', async () => {
+    liveJournal.holdPosition = true;
+    renderApp('/tasks');
+    await screen.findByText('DEMO-1');
+    await screen.findByText(say.ui('live.online'));
+
+    setHidden(true);
+
+    // Позиции ещё нет: закрыть сейчас значило бы вернуться с конца журнала и потерять
+    // всё, что случится до возврата.
+    expect(liveJournal.options).not.toBeNull();
+    expect(liveJournal.closed).toBe(0);
+
+    act(() => liveJournal.namePosition());
+
+    expect(liveJournal.options).toBeNull();
+    expect(liveJournal.closed).toBe(1);
+
+    act(() => {
+      liveJournal.send(entry(1001, 'DEMO-1', { type: 'status_changed' }));
+    });
+    setHidden(false);
+
+    expect(await screen.findByText(say.ui('live.changed', { count: 1 }))).toBeInTheDocument();
+    expect(liveJournal.options?.after).toBe(1000);
+  });
+
+  it('вопрос ко мне, заданный пока вкладка в фоне, объявлен после возврата', async () => {
+    renderApp('/tasks');
+    await screen.findByText(say.ui('live.online'));
+
+    setHidden(true);
+    act(() => {
+      liveJournal.send(
+        entry(1045, 'DEMO-4', {
+          type: 'question',
+          no: 14,
+          title: 'Вопрос, заданный пока вкладка была скрыта',
+          payload: { addressees: ['owner'], blocking: false },
+        }),
+      );
+    });
+    expect(screen.queryByRole('link', { name: 'DEMO-4#14' })).not.toBeInTheDocument();
+
+    setHidden(false);
+
+    expect(await screen.findByRole('link', { name: 'DEMO-4#14' })).toBeVisible();
+    expect(screen.getByText('Вопрос, заданный пока вкладка была скрыта')).toBeVisible();
+  });
+
+  it('пачка записей, подшитых в фоне, после возврата стоит одного перечитывания, а не по одному на запись', async () => {
+    // Вопрос перечитывает счётчик в оболочке — он на экране всегда, и его чтения видно числом.
+    let bootstraps = 0;
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () => {
+        bootstraps += 1;
+        return data(bootstrap());
+      }),
+    );
+    renderApp('/tasks');
+    await screen.findByText('DEMO-1');
+    await screen.findByText(say.ui('live.online'));
+    const before = bootstraps;
+
+    setHidden(true);
+    act(() => {
+      for (const no of [31, 32, 33]) {
+        liveJournal.send(
+          entry(1100 + no, 'DEMO-4', {
+            type: 'question',
+            no,
+            payload: { addressees: ['demo_agent'], blocking: false },
+          }),
+        );
+      }
+    });
+    expect(bootstraps).toBe(before);
+
+    setHidden(false);
+
+    // Поток отдал пропущенное пачкой — и перечитывание одно на всю пачку: по одному на
+    // кадр оно стоило бы сотни чтений открытой карточки после долгого фона.
+    await waitFor(() => expect(bootstraps).toBeGreaterThan(before));
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 400));
+    });
+    expect(bootstraps).toBe(before + 1);
+  });
+
+  it('ключ сменился, пока вкладка в фоне: поток ждёт возврата и открывается новым ключом с прежней позиции', async () => {
+    liveJournal.position = 4242;
+    renderApp('/tasks');
+    await screen.findByText(say.ui('live.online'));
+
+    setHidden(true);
+    expect(liveJournal.options).toBeNull();
+
+    // Смена ключа пересобирает поток, но скрытой вкладке с известной позицией он не нужен.
+    act(() => setToken('trk_fresh'));
+    expect(liveJournal.connections).toBe(1);
+
+    setHidden(false);
+
+    await waitFor(() => expect(liveJournal.options).not.toBeNull());
+    expect(liveJournal.connections).toBe(2);
+    expect(liveJournal.options?.token).toBe('trk_fresh');
+    expect(liveJournal.options?.after).toBe(4242);
+  });
+
+  it('обрыв до ухода в фон остаётся обрывом: поток закрыт, а возврат перечитывает показанное', async () => {
+    renderApp('/tasks');
+    await screen.findByText('DEMO-1');
+    await screen.findByText(say.ui('live.online'));
+
+    act(() => liveJournal.options?.onLost());
+    expect(await screen.findByText(say.ui('live.offline'))).toBeInTheDocument();
+
+    // Поток стоял в паузе переподключения. Позиция известна — скрытая вкладка его
+    // закрывает, а что связь теряли, не забывает.
+    setHidden(true);
+    expect(liveJournal.options).toBeNull();
+    expect(screen.getByText(say.ui('live.offline'))).toBeInTheDocument();
+
+    setHidden(false);
+
+    expect(await screen.findByText(say.ui('live.online'))).toBeInTheDocument();
+    expect(liveJournal.options?.after).toBe(1000);
+    expect(await screen.findByText(say.ui('live.changedUnknown'))).toBeInTheDocument();
+  });
+
+  it('ключ отвергнут: возврат во вкладку поток тем же ключом не открывает', async () => {
+    renderApp('/tasks');
+    await screen.findByText(say.ui('live.online'));
+
+    // Отказ, уход в фон и возврат подряд — раньше, чем установка ответила, годен ли ключ.
+    act(() => {
+      liveJournal.options?.onUnauthorized();
+    });
+    setHidden(true);
+    setHidden(false);
+
+    expect(liveJournal.connections).toBe(1);
+    // Дальше — общая обработка входа, как при любом отказе ключа.
+    expect(await screen.findByLabelText(say.login('tokenLabel'))).toBeInTheDocument();
+    clearToken();
   });
 });
 
@@ -533,7 +793,7 @@ describe('доска под живым потоком', () => {
     await openBoard();
     const before = columnRequests().length;
 
-    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    setHidden(true);
     moved = true;
     act(() => {
       for (const frame of [1100, 1101, 1102]) {
@@ -545,17 +805,42 @@ describe('доска под живым потоком', () => {
     await idle(COALESCE_WINDOW_MS * 1.5);
     expect(columnRequests()).toHaveLength(before);
 
-    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
-    act(() => {
-      document.dispatchEvent(new Event('visibilitychange'));
-    });
+    setHidden(false);
 
-    // Накопленное вылилось одним перечитыванием — по запросу на столбец, а не по три.
+    // Случившееся в фоне вылилось одним перечитыванием — по запросу на столбец, а не по три.
     expect(
       await within(column('in_progress')).findByRole('article', undefined, { timeout: 5_000 }),
     ).toHaveTextContent('DEMO-1');
     expect(columnRequests()).toHaveLength(before + 4);
     expect(bar()).not.toBeInTheDocument();
+  });
+
+  it('обрыв у вкладки, открытой в фоне, до первого блока: доска молчит до показа', async () => {
+    // Единственный случай, когда скрытая вкладка держит поток: позиции ещё нет.
+    bornHidden();
+    liveJournal.holdPosition = true;
+    await openBoard();
+    const before = columnRequests().length;
+
+    moved = true;
+    act(() => {
+      liveJournal.options?.onLost();
+      liveJournal.options?.onOpen();
+    });
+
+    // Связь вернулась, но перечитывать невидимое незачем: показанное ждёт возврата.
+    await idle(COALESCE_WINDOW_MS * 1.5);
+    expect(columnRequests()).toHaveLength(before);
+
+    act(() => liveJournal.namePosition());
+    expect(liveJournal.options).toBeNull();
+
+    setHidden(false);
+
+    expect(
+      await within(column('in_progress')).findByRole('article', undefined, { timeout: 5_000 }),
+    ).toHaveTextContent('DEMO-1');
+    expect(columnRequests()).toHaveLength(before + 4);
   });
 
   it('переподключение после обрыва обновляет доску само', async () => {
