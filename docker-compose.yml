@@ -256,9 +256,20 @@ services:
   # Адрес тестовой базы отдельной переменной не задаётся: по умолчанию это основная
   # база с суффиксом `_test` (`Settings.effective_test_database_url`). Строка в
   # окружении сервиса победила бы `.env`, где владелец вправе указать свою.
+  # Всё, что написано после имени сервиса, уходит аргументами в pytest, поэтому команда
+  # объявлена `entrypoint`, а не `command` — `command` заменился бы целиком, и путь к тесту
+  # контейнер пытался бы исполнить (`permission denied`). Работают три записи:
+  #   docker compose run --rm test                                   # весь набор
+  #   docker compose run --rm test tests/test_health.py -k health    # короткая
+  #   docker compose run --rm test pytest tests/test_health.py       # прежняя, со словом pytest
+  # Первое слово `pytest` отбрасывается, затем `exec` отдаёт процесс pytest сигналам и коду выхода.
   test:
     <<: *app-service
-    command: pytest
+    entrypoint:
+      - sh
+      - -c
+      - if [ "$$1" = pytest ]; then shift; fi; exec pytest "$$@"
+      - test
     restart: "no"
     profiles: ["tools"]
 
