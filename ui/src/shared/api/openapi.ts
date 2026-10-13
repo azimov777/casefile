@@ -1982,6 +1982,12 @@ export interface components {
              * @example null
              */
             replaced_by?: number | null;
+            /**
+             * Relayed From
+             * @description Human whose words an agent carried into the answer; `null` otherwise
+             * @example null
+             */
+            relayed_from?: string | null;
         };
         /**
          * AnswerFilingPayload
@@ -2053,6 +2059,12 @@ export interface components {
              * @example null
              */
             replaced_by: number | null;
+            /**
+             * Relayed From
+             * @description Human whose words an agent carried into the answer; `null` otherwise
+             * @example null
+             */
+            relayed_from: string | null;
         };
         /**
          * AnsweredQuestionRead

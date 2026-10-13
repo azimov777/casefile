@@ -57,6 +57,7 @@ export const discussions = {
     answered: 'answered',
     waiting: 'waiting for an answer',
     addressees: 'To:',
+    relayedFrom: 'relayed from {{name}}',
     details: 'Details',
     conclusionActual: 'current conclusion',
     conclusionPrior: 'earlier conclusion',

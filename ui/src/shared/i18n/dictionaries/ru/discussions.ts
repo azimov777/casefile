@@ -61,6 +61,7 @@ export const discussions = {
     answered: 'отвечено',
     waiting: 'ждёт ответа',
     addressees: 'Кому:',
+    relayedFrom: 'со слов {{name}}',
     details: 'Подробности',
     conclusionActual: 'актуальный итог',
     conclusionPrior: 'прежний итог',

@@ -13,6 +13,7 @@ import {
   discussionNote,
   discussionQuestion,
   failure,
+  relayedDiscussionAnswer,
 } from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { renderApp } from '@testing/render';
@@ -193,6 +194,30 @@ describe('экран обсуждения', () => {
     expect(await within(thread).findByText(say.discussions('thread.answered'))).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: say.discussions('reply.open', { no: 2 }) }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('ответ со слов человека называет его рядом с подписью агента, обычный ответ — нет', async () => {
+    openDiscussion();
+    server.use(
+      http.get(`${PATH}/entries`, () =>
+        collection([
+          discussionQuestion(ADDRESS, 2),
+          relayedDiscussionAnswer(ADDRESS, 3, 2, 'owner'),
+          discussionAnswer(ADDRESS, 4, 2),
+        ]),
+      ),
+    );
+    renderApp(`/discussions/${ADDRESS}`);
+
+    const thread = await screen.findByRole('list', { name: say.discussions('thread.label') });
+    const relayed = await within(thread).findByRole('article', { name: `${ADDRESS}#3` });
+    expect(
+      within(relayed).getByText(say.discussions('thread.relayedFrom', { name: 'owner' })),
+    ).toBeInTheDocument();
+    const own = within(thread).getByRole('article', { name: `${ADDRESS}#4` });
+    expect(
+      within(own).queryByText(say.discussions('thread.relayedFrom', { name: 'owner' })),
     ).not.toBeInTheDocument();
   });
 
