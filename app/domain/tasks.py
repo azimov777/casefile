@@ -596,6 +596,87 @@ def apply_check_edit(checks: Sequence[str], edit: CheckEdit) -> list[str]:
 #: на присланное.
 CHECK_EDIT_FIELD = "check"
 
+#: Имена точечных правок текста и ссылок в отказе: указывать надо на присланное.
+REPLACE_FIELD = "replace"
+DECISIONS_ADD_FIELD = "decisions_add"
+DECISIONS_REMOVE_FIELD = "decisions_remove"
+
+#: Поля, в которых правится один фрагмент: название, описание и четыре текстовых раздела.
+#: Проверки сюда не входят: у них своя точечная правка (`CheckEdit`).
+REPLACEABLE_FIELDS: tuple[TaskField, ...] = (
+    TaskField.TITLE,
+    TaskField.DESCRIPTION,
+    *TEXT_SECTIONS,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class TextReplace:
+    """Замена одного фрагмента в названии, описании или текстовом разделе.
+
+    Заведена затем же, что и `CheckEdit`: чтобы поправить одну фразу, не пересылать раздел
+    целиком. Пересылка целиком остаётся единственным способом задать поле заново.
+    """
+
+    field: TaskField
+    old: str
+    new: str
+
+
+def apply_text_replace(current: str, edit: TextReplace) -> str:
+    """Текст поля с заменённым фрагментом `old`, который обязан встретиться ровно один раз.
+
+    Ноль вхождений и больше одного — отказ, а не «первое вхождение»: выбрать между
+    несколькими местами трекеру нечем, а молча не поправить ничего — значит ввести
+    автора в заблуждение. Результат проходит ту же нормализацию, что и поле целиком.
+    """
+    problems = FieldProblems()
+    with problems.field(REPLACE_FIELD):
+        if edit.field not in REPLACEABLE_FIELDS:
+            raise FieldProblem("not_allowed", target=edit.field.value)
+        if not isinstance(edit.old, str) or not isinstance(edit.new, str):
+            raise FieldProblem("not_a_string", target=edit.field.value)
+        if not edit.old:
+            raise FieldProblem("required", target=edit.field.value, part="old")
+        occurrences = current.count(edit.old)
+        if occurrences != 1:
+            raise FieldProblem(
+                "old_not_found" if occurrences == 0 else "old_not_unique",
+                target=edit.field.value,
+                occurrences=occurrences,
+            )
+    problems.raise_as(TaskFieldsInvalidError)
+    return current.replace(edit.old, edit.new, 1)
+
+
+def apply_decision_edit(
+    current: Sequence[str], *, add: Sequence[str], remove: Sequence[str]
+) -> list[str]:
+    """Список ссылок на решения с добавленными и снятыми по одной.
+
+    Ссылка проходит ту же нормализацию, что и в списке целиком. Уже стоящая в `add` ничего
+    не меняет; отсутствующая в `remove` — отказ с этой ссылкой: снять нечего, и это ошибка
+    вызывающего, а не «уже сделано».
+    """
+    problems = FieldProblems()
+    removed: list[str] = []
+    added: list[str] = []
+    with problems.field(DECISIONS_REMOVE_FIELD):
+        for item in remove:
+            ref = normalize_decision_ref(item)
+            if ref not in current:
+                problems.add(DECISIONS_REMOVE_FIELD, "not_in_field", ref=ref)
+            elif ref not in removed:
+                removed.append(ref)
+    with problems.field(DECISIONS_ADD_FIELD):
+        added = [normalize_decision_ref(item) for item in add]
+    problems.raise_as(TaskFieldsInvalidError)
+    result = [ref for ref in current if ref not in removed]
+    for ref in added:
+        if ref not in result:
+            result.append(ref)
+    return result
+
 
 def _normalize_assignee(value: Any) -> str | None:
     """Свободная строка: имя участника или метка. Трекер её не проверяет по реестру.
