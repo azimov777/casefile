@@ -602,3 +602,20 @@ def test_the_mcp_service_learns_the_mode_and_the_bind_like_the_ui() -> None:
     assert UI_LOGIN.replace("TRACKER_UI_LOGIN", "TRACKER_LOGIN") in prod, prod
     assert UI_BIND.replace("TRACKER_UI_BIND", "TRACKER_BIND") in prod, prod
     assert 'TRACKER_BIND: "0.0.0.0"' in dev, dev
+
+
+def test_the_test_service_takes_its_arguments_through_the_entrypoint() -> None:
+    """Сервис `test` объявлен `entrypoint`, а не `command`: путь к тесту не заменяет команду.
+
+    Со `command: pytest` всё, что стоит после имени сервиса, подменяло команду целиком, и
+    `docker compose run --rm test tests/test_x.py` падал с `permission denied` (TRK-705).
+    Обёртка отбрасывает первое слово `pytest` — прежняя запись продолжает работать — и
+    отдаёт процесс pytest через `exec`, чтобы сигнал и код выхода дошли без посредника.
+    """
+    service = _services(COMPOSE_FILES["dev"].read_text(encoding="utf-8"))["test"]
+    keys = [line.strip().split(":")[0] for line in service if _indent(line) == 4]
+    lines = [line.strip() for line in service]
+
+    assert "entrypoint" in keys, keys
+    assert "command" not in keys, keys
+    assert any("exec pytest" in line and "shift" in line for line in lines), lines
