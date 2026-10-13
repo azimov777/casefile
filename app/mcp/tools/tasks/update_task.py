@@ -9,12 +9,20 @@
 а снять его было бы нечем.
 """
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.sentinels import unset_field
-from app.domain.tasks import FIRST_CHECK_NUMBER, MAX_CHECK_LENGTH, MAX_TITLE_LENGTH, CheckEdit
+from app.domain.tasks import (
+    FIRST_CHECK_NUMBER,
+    MAX_CHECK_LENGTH,
+    MAX_TEXT_LENGTH,
+    MAX_TITLE_LENGTH,
+    CheckEdit,
+    TaskField,
+    TextReplace,
+)
 from app.mcp.arguments import TaskKeyArg
 from app.mcp.enums import TaskPrioritySchema
 from app.mcp.tools.tasks.arguments import AREA_RULE, DECISIONS_RULE, NOT_BEFORE_RULE
@@ -47,6 +55,18 @@ class CheckEditArg(BaseModel):
         min_length=1,
         max_length=MAX_CHECK_LENGTH,
         description="New wording of this check",
+    )
+
+
+class ReplaceArg(BaseModel):
+    """Replacement of one fragment of a text field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: Literal["title", "description", "goal", "context", "constraints", "output"]
+    old: str = Field(min_length=1, max_length=MAX_TEXT_LENGTH, description="Fragment to replace")
+    new: str = Field(
+        max_length=MAX_TEXT_LENGTH, description="Text in its place; empty removes the fragment"
     )
 
 
@@ -115,6 +135,22 @@ class TaskChanges(BaseModel):
         ),
         examples=[["TRK#15"]],
     )
+    replace: ReplaceArg = unset_field(
+        description=(
+            "Replaces one fragment of `field`; `old` occurs in its current text exactly once, "
+            "otherwise `task_fields_invalid`. Same rules as the whole field; refused "
+            "together with that field"
+        )
+    )
+    decisions_add: list[str] = unset_field(
+        description="References added to `decisions` one by one; refused together with `decisions`"
+    )
+    decisions_remove: list[str] = unset_field(
+        description=(
+            "References taken off `decisions`; one not there is `task_fields_invalid`. Refused "
+            "together with `decisions`"
+        )
+    )
 
 
 def register(tools: Toolset) -> None:
@@ -143,6 +179,12 @@ def register(tools: Toolset) -> None:
         async with runtime.call() as (session, actor):
             task = await tasks_service.get_task(session, key)
             given = changes.model_dump(exclude_unset=True)
+            if "replace" in given:
+                given["replace"] = TextReplace(
+                    field=TaskField(given["replace"]["field"]),
+                    old=given["replace"]["old"],
+                    new=given["replace"]["new"],
+                )
             if "check" in given:
                 # Аргумент приезжает словарём, а сценарий ждёт значение домена: перевод
                 # стоит здесь, где кончается транспорт.

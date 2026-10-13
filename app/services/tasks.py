@@ -73,18 +73,24 @@ from app.domain.links import LinkKind
 from app.domain.tasks import (
     BACKLOG_ONLY_FIELDS,
     CHECK_EDIT_FIELD,
+    DECISIONS_ADD_FIELD,
+    DECISIONS_REMOVE_FIELD,
     DEFAULT_PRIORITY,
     FIRST_CHECK_NUMBER,
     INITIAL_STATUS,
+    REPLACE_FIELD,
     CheckEdit,
     CheckGap,
     TaskFeatures,
     TaskField,
     TaskPriority,
     TaskStatus,
+    TextReplace,
     TransitionFacts,
     allowed_transitions,
     apply_check_edit,
+    apply_decision_edit,
+    apply_text_replace,
     editable_fields,
     ensure_transition_allowed,
     format_task_key,
@@ -137,9 +143,14 @@ class TaskChanges:
     #: `None` снимает момент.
     not_before: str | datetime | None = UNSET
     decisions: Sequence[str] = UNSET
+    #: Точечные правки текста и ссылок: к полю задачи приводятся в `apply_task_changes`,
+    #: под очередью изменений, по нынешнему значению.
+    replace: TextReplace = UNSET
+    decisions_add: Sequence[str] = UNSET
+    decisions_remove: Sequence[str] = UNSET
 
     #: Поля, у которых нет одноимённого поля задачи: они разбираются отдельно.
-    _NOT_TASK_FIELDS = frozenset({"check"})
+    _NOT_TASK_FIELDS = frozenset({"check", "replace", "decisions_add", "decisions_remove"})
 
     def given(self) -> dict[TaskField, Any]:
         """Только переданные поля, по именам домена. Точечной правки здесь нет."""
@@ -915,6 +926,48 @@ async def apply_task_changes(
         # Номер проверяется по нынешнему списку задачи — значит, **под очередью**, где
         # список уже перечитан и больше никем не меняется.
         given[TaskField.CHECKS] = apply_check_edit(task.checks, edit)
+    if is_set(changes.replace):
+        replace = changes.replace
+        if replace.field in given:
+            raise TaskFieldsInvalidError(
+                details={
+                    "fields": [
+                        {
+                            "field": REPLACE_FIELD,
+                            "reason": "conflicts_with",
+                            "other": replace.field.value,
+                        }
+                    ]
+                }
+            )
+        # Право править поле — по факту запроса, до разбора фрагмента: в `open` ответ
+        # «поле закрыто», а не «фрагмента нет».
+        _ensure_editable(task, {replace.field: replace.new})
+        given[replace.field] = apply_text_replace(getattr(task, replace.field.value), replace)
+    if is_set(changes.decisions_add) or is_set(changes.decisions_remove):
+        if TaskField.DECISIONS in given:
+            conflicting = [
+                name
+                for name, value in (
+                    (DECISIONS_ADD_FIELD, changes.decisions_add),
+                    (DECISIONS_REMOVE_FIELD, changes.decisions_remove),
+                )
+                if is_set(value)
+            ]
+            raise TaskFieldsInvalidError(
+                details={
+                    "fields": [
+                        {"field": name, "reason": "conflicts_with", "other": "decisions"}
+                        for name in conflicting
+                    ]
+                }
+            )
+        _ensure_editable(task, {TaskField.DECISIONS: None})
+        given[TaskField.DECISIONS] = apply_decision_edit(
+            task.decisions,
+            add=changes.decisions_add if is_set(changes.decisions_add) else (),
+            remove=changes.decisions_remove if is_set(changes.decisions_remove) else (),
+        )
     if given:
         _ensure_editable(task, given)
         if TaskField.CHECKS in given:

@@ -28,6 +28,7 @@
 - `test_task*.py` — задачи: сценарии и REST, поле `area`, перенос (одной и списком), момент `not_before`, блок `state`
 - `test_assignee_takes_work.py` — вход в `in_progress` только исполнителю, через REST и MCP
 - `test_check_edit.py` — правка одной проверки и пометка устаревшего вердикта
+- `test_task_point_edit.py` — точечная правка задачи: замена одного фрагмента текста и добавление или снятие одной ссылки на решение
 - `test_closing_warning.py` — исходы `partial` и `unverifiable` и предупреждение закрытия
 - `test_case_*.py` — дело: сценарии и REST, факты в описи против `EntryType`
 - `test_entry_numbering.py` — гонка за номером записи дела без дыр
