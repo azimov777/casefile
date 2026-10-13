@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field, JsonValue, SerializerFunctionWrapHandler,
 
 from app.db.models.entry import Entry
 from app.domain.case import (
-    TITLED_ENTRY_TYPES,
     AnswerFacts,
     AssigneeChangedFacts,
     AttachmentFacts,
@@ -448,9 +447,10 @@ def entry(
 
 # Ответ подшивающего инструмента: чем запись адресуют, без самой записи.
 #
-# `title` непуст только там, где заголовок собрал трекер: у сводки, ответа, вердикта и
-# резолюции его не принимают вовсе (`app/domain/case.py`, `TITLED_ENTRY_TYPES`). Где
-# заголовок прислал агент, здесь стоит `null` — «в описи ровно то, что ты прислал».
+# `title` — заголовок записи таким, каким он лёг в дело: и собранный трекером у сводки,
+# ответа, вердикта и резолюции (`app/domain/case.py`, `TITLED_ENTRY_TYPES`), и присланный
+# агентом. Тип поля остался `str | None`: ответ, сохранённый до этой правки, в ключах
+# идемпотентности несёт `null`, и повтор обязан его поднять (`TRK/mcp#21`).
 class AppendedEntryView(BaseModel):
     """A filed entry, by its address rather than its content; the entry in full is
     returned by `read_entries`.
@@ -464,9 +464,9 @@ class AppendedEntryView(BaseModel):
     author: AuthorView
     title: str | None = Field(
         description=(
-            "The title the tracker built, for entry types whose title is not sent "
-            "(summary, answer, verdict, resolution, service entries); `null` when the "
-            "caller sent the title"
+            "The title of the entry as filed: the one the caller sent, or the one the "
+            "tracker built for entry types whose title is not sent (summary, answer, "
+            "verdict, resolution, service entries)"
         )
     )
     created_at: datetime
@@ -475,16 +475,15 @@ class AppendedEntryView(BaseModel):
 def appended_entry(value: Entry, *, task_key: str) -> AppendedEntryView:
     """Ответ подшивающего инструмента: чем запись адресуют, без самой записи.
 
-    Почему не запись целиком — в шапке `app/mcp/views.py`. Здесь важно, откуда берётся `title`:
-    из принадлежности типа к `TITLED_ENTRY_TYPES`, а не из списка типов, переписанного
-    по месту. Заголовок, выведенный у нового типа записи, приедет сюда сам.
+    Почему не запись целиком — в шапке `app/mcp/views.py`. Заголовок — всегда заголовок
+    записи в деле: присланный или собранный трекером.
     """
     return AppendedEntryView(
         no=value.no,
         seq=value.seq,
         task_key=task_key,
         author=author(value.author),
-        title=None if value.type in TITLED_ENTRY_TYPES else value.title,
+        title=value.title,
         created_at=value.created_at,
     )
 
@@ -506,15 +505,29 @@ class AppendedDiscussionEntryView(BaseModel):
     discussion: str | None = None
     task_key: str | None = None
     author: AuthorView
-    title: str | None = Field(description="Title built by the tracker; `null` when sent")
+    title: str | None = Field(
+        description="The title of the entry as filed: the one sent, or the one the tracker built"
+    )
     created_at: datetime
+    attached_task: str | None = Field(
+        default=None,
+        description=(
+            "Key of the task attached to the opened discussion; `null` unless `ask` was "
+            "called with a task key"
+        ),
+    )
 
 
 def appended_discussion_entry(
-    value: Entry, *, discussion: str | None = None, task_key: str | None = None
+    value: Entry,
+    *,
+    discussion: str | None = None,
+    task_key: str | None = None,
+    attached_task: str | None = None,
 ) -> AppendedDiscussionEntryView:
     """Ответ подшивки в дело обсуждения — или в дело задачи у ответа на прежний вопрос.
-    Владелец — ровно один, как у `entry`."""
+    Владелец — ровно один, как у `entry`. `attached_task` — ключ задачи, которую `ask`
+    привязал к обсуждению; поле `task_key` его не заменяет: оно называет владельца записи."""
     assert (discussion is None) != (task_key is None), "entry owner is exactly one key"
     return AppendedDiscussionEntryView(
         no=value.no,
@@ -522,8 +535,9 @@ def appended_discussion_entry(
         discussion=discussion,
         task_key=task_key,
         author=author(value.author),
-        title=None if value.type in TITLED_ENTRY_TYPES else value.title,
+        title=value.title,
         created_at=value.created_at,
+        attached_task=attached_task,
     )
 
 

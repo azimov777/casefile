@@ -5,7 +5,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.links import LinkKind
-from app.domain.tasks import DEFAULT_PRIORITY
+from app.domain.tasks import DEFAULT_PRIORITY, MAX_TITLE_LENGTH
 from app.mcp.arguments import IdempotencyKeyArg, ProjectKeyArg
 from app.mcp.enums import TaskPrioritySchema
 from app.mcp.idempotency import Once
@@ -30,7 +30,9 @@ ParentKeyArg = Annotated[
     ),
 ]
 
-TaskTitleArg = Annotated[str, Field(description="Task title, one line")]
+TaskTitleArg = Annotated[
+    str, Field(description=f"Task title, one line; up to {MAX_TITLE_LENGTH} characters")
+]
 
 
 TaskDescriptionArg = Annotated[

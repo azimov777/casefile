@@ -37,6 +37,7 @@ from mcp_types import INVALID_REQUEST, ToolAnnotations
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.domain.idempotency import IDEMPOTENCY_KEY_ARGUMENT
+from app.mcp.argument_refusal import install as enrich_argument_refusals
 from app.mcp.errors import describe
 from app.mcp.runtime import Runtime
 
@@ -58,6 +59,8 @@ LIST_TOOLS = "tools/list"
 # Импорт `ArgModelBase` — намеренная опора на устройство SDK. Ломается она громко:
 # переименование класса даёт `ImportError` при старте, а не молчаливо снятый запрет.
 ArgModelBase.model_config = {**ArgModelBase.model_config, "extra": "forbid"}
+# Тот же отказ называет принимаемые аргументы и место вложенного поля (`TRK-702`).
+enrich_argument_refusals()
 
 # Четыре формы аннотаций, по числу различных поведений среди инструментов сервера
 # (правило — `TRK/mcp#25`, «Аннотации протокола ставятся по поведению вызова»).

@@ -106,7 +106,7 @@ def register(tools: Toolset) -> None:
                         refs=refs or (),
                     )
                     return appended_discussion_entry(
-                        opened.entry, discussion=opened.discussion.address
+                        opened.entry, discussion=opened.discussion.address, attached_task=task.key
                     )
 
             return await Once.of(ask, session, actor, idempotency_key).run(
