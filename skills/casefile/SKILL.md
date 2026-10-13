@@ -57,13 +57,14 @@ not warn when you skip: skipping is how an agent redoes a choice already made, o
 a rule that was replaced. Read them every time you enter a task, a small one too.
 
 1. The whole project: `get_project(key="TRK")` — its decisions in force, its findings in
-   force and the list of its areas, each with a title and a description.
+   force and the list of its areas by address and title.
 2. The area of the task: its address is `area` in `get_task` (`TRK/importer`). Read it
    with the same call, `get_project(key="TRK/importer")`: decisions in force bind the work
    in that area, findings in force are what is known about it. A task from before areas
    were required may have none; then read the area whose description fits the work.
-3. The other parts the work touches. Read the list of areas from step 1 by title and
-   description, not by the name alone. For every part the goal or the output mentions
+3. The other parts the work touches. Read the list of areas from step 1 by title; where
+   the title does not settle it, open the area with the same call and read its
+   description. For every part the goal or the output mentions
    besides the task's own area, read its area the same way. Do not read all of them, and
    do not stop at the task's own: a task that changes the importer and the schema binds
    `TRK/importer` and `TRK/schema` alike.
@@ -116,6 +117,15 @@ add_entry(key="TRK-42", type="decision",
           title="Cache in Redis, not in process memory",
           body="Two workers share it; an in-process cache would diverge. Rejected: sticky sessions.")
 ```
+
+**Give every filing call a retry key.** A call can break off before its result reaches you:
+the connection drops, or the server restarts for an update. Then you do not know whether
+the entry was filed. Pass `idempotency_key` — any fresh UUID — on every call that files or
+creates something; a tool that does so has this argument. If the call breaks off, repeat it
+with the same key and the same arguments: you get the first result back and nothing is
+filed twice. If you sent no key, read the case before you repeat
+(`read_entries(key="TRK-42", after_no=<the last number you saw>)`): a blind repeat files a
+second entry.
 
 ### Knowledge that outlives the task
 
@@ -246,6 +256,18 @@ person which question is open. The answer makes the task a candidate for work ag
 takes it up moves it to `in_progress`, which starts a new pass: verdicts filed before no
 longer count.
 
+**Waiting on several tasks while you do other work.** When you hand out work and merge
+results, the human's answers and notes arrive while you look elsewhere — at a build, at
+another agent's report. Between any two steps of your own, read what was filed in the
+project since you last looked:
+
+```
+wait_journal(project="TRK", types=["answer", "note", "remark"], after=<last seq you saw>)
+```
+
+Keep the `seq` of the last entry you saw and pass it as `after` the next time. An entry
+written by a human comes first: it sets the work like an answer does.
+
 ### Discussions
 
 A discussion is one narrow question with its own case; the tasks whose work depends on its
@@ -361,7 +383,8 @@ create_task(project="TRK", area="TRK/importer", parent="TRK-42",
 A task is filed with an area, `PROJECT/key`: without `area` the call is refused with
 `area_required`, and `details.areas` lists the project's active areas. The tracker never
 picks it, and a child does not take its parent's. Pick the area the work of the task is
-done in: read the titles and descriptions in `get_project(key="PROJECT")` and match them to
+done in: read the titles in `get_project(key="PROJECT")`, open the candidates
+(`get_project(key="PROJECT/key")`) for their descriptions, and match them to
 the part of the work, not the first area of the list and not the one you used last. If the
 work is in two areas, that is a reason to split it into two tasks, one per area. A project
 without a fitting area needs one first: `create_project` with the address `PROJECT/key`.
@@ -370,7 +393,31 @@ without a fitting area needs one first: `create_project` with the address `PROJE
 
 Write a task for the agent who will do it without your context: one step per action, the
 environment named exactly in `context` (repository, branch, how to run it), each check
-naming what is run and the expected result.
+written as below.
+
+### Writing a check
+
+A check is read at closing by someone who was not there, and it is not edited once the
+task has entered `in_progress`. Write each one so that it can pass and can fail.
+
+- **Name what is run and what must come out.** A command, a call or a page to open, and
+  the result that counts as passed: "`pytest tests/test_importer.py`: all passed", not
+  "the importer works".
+- **Name the moment.** When the check counts or searches something that keeps changing —
+  rows of a table, matches of a search, open tasks — say as of which commit or date:
+  "on the branch of this task", "in the export of 8 October". Without the moment the
+  check fails later through no fault of the work.
+- **Keep it inside the task.** The check must be passable by doing only what
+  `constraints` allow. "The search finds nothing" fails when the remaining matches
+  belong to other tasks or to files this task must not touch: name the files the check
+  covers. A check that needs an account, a device or a decision the assignee does not
+  have is a question to the human, not a check.
+- **Measure the end, not a stage.** A check written for the middle of the work ("the old
+  file is still there while the new one is filled") cannot hold at closing. Write what is
+  true when the task is done.
+- **Measure the result for its reader, not its form.** "The entry exists" and "the file
+  has five sections" pass on an empty shell. Ask what the reader will do with the result
+  and check that: "the entry names the source of every number".
 
 Work you find on the way that is not part of this task goes into a new task in `backlog`
 with `link(key=<new key>, kind="relates", other="TRK-42")` — not silently into this one.
