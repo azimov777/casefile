@@ -36,7 +36,10 @@ export function Markdown({ children }: { children: string }) {
      * уходит на следующую.
      */
     <div className="[&>:first-child]:mt-0 [&>:last-child]:mb-0 wrap-anywhere">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkTaskRefs]} components={NODES}>
+      <ReactMarkdown
+        remarkPlugins={[[remarkGfm, { singleTilde: false }], remarkTaskRefs]}
+        components={NODES}
+      >
         {children}
       </ReactMarkdown>
     </div>
