@@ -9,6 +9,35 @@ const TABLE = [
   '| Push | "the context loss between sessions is brutal"; "essentially resetting its hour of work" | TRK-526#6 |',
 ].join('\n');
 
+const DISCUSSION_REFS =
+  'Ответ владельца TRK~16#4: заводить все кандидаты. Обсуждение TRK~16 закрыто итогом #5. А ~~это~~ зачёркнуто нарочно.';
+
+describe('адреса обсуждений в одном абзаце', () => {
+  /*
+   * `remark-gfm` по умолчанию читает пару одиночных `~` как зачёркивание и съедает
+   * тильды адресов `TRK~16#4` и `TRK~16`; зачёркивание остаётся только двойным `~~`.
+   */
+  it('не зачёркивают текст между собой, оба становятся ссылками, `~~` зачёркивает', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Markdown>{DISCUSSION_REFS}</Markdown>
+      </MemoryRouter>,
+    );
+
+    const dels = container.querySelectorAll('del');
+    expect(dels).toHaveLength(1);
+    expect(dels[0]).toHaveTextContent(/^это$/);
+    expect(screen.getByRole('link', { name: 'TRK~16#4' })).toHaveAttribute(
+      'href',
+      '/discussions/TRK~16?entry=4',
+    );
+    expect(screen.getByRole('link', { name: 'TRK~16' })).toHaveAttribute(
+      'href',
+      '/discussions/TRK~16',
+    );
+  });
+});
+
 describe('таблица в разметке', () => {
   /*
    * Раскладку jsdom не считает: ширину столбца видит только браузер (живая проверка
