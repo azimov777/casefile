@@ -29,9 +29,10 @@ import pytest
 from mcp_types import Tool
 
 from app.db.pagination import MAX_PAGE_SIZE, MIN_PAGE_SIZE
+from app.domain.case import MAX_ENTRY_TITLE_LENGTH
 from app.domain.query_language import QUERY_EXAMPLES
 from app.domain.search import Operator, operators_by_field
-from app.domain.tasks import TaskStatus
+from app.domain.tasks import MAX_TITLE_LENGTH, TaskStatus
 from conftest import Connect
 
 #: Предел клиента Claude Code на описание инструмента: 2048 единиц UTF-16 (TRK-142#15).
@@ -444,3 +445,22 @@ async def test_add_entry_refs_names_the_area_entry_form(tools: list[Tool]) -> No
     """TRK-644: описание `refs` называет и записи области, как их принимает REST."""
     add = next(tool for tool in tools if tool.name == "add_entry")
     assert "area entries `TRK/promotion#3`" in add.input_schema["properties"]["refs"]["description"]
+
+
+async def test_every_title_argument_names_its_length_limit(tools: list[Tool]) -> None:
+    """TRK-702: описание заголовка записи и задачи называет предел числом из константы
+    домена, а не литералом, чтобы агент узнавал о нём до вызова, а не из отказа."""
+    by_name = {tool.name: tool.input_schema for tool in tools}
+    entry_titles = [
+        by_name[name]["properties"]["title"]["description"]
+        for name in ("add_entry", "ask", "add_project_entry")
+    ]
+    task_titles = [
+        by_name["create_task"]["properties"]["title"]["description"],
+        by_name["update_task"]["$defs"]["TaskChanges"]["properties"]["title"]["description"],
+    ]
+
+    for text in entry_titles:
+        assert f"up to {MAX_ENTRY_TITLE_LENGTH} characters" in text
+    for text in task_titles:
+        assert f"up to {MAX_TITLE_LENGTH} characters" in text

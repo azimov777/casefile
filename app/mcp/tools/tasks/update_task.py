@@ -14,7 +14,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.sentinels import unset_field
-from app.domain.tasks import FIRST_CHECK_NUMBER, MAX_CHECK_LENGTH, CheckEdit
+from app.domain.tasks import FIRST_CHECK_NUMBER, MAX_CHECK_LENGTH, MAX_TITLE_LENGTH, CheckEdit
 from app.mcp.arguments import TaskKeyArg
 from app.mcp.enums import TaskPrioritySchema
 from app.mcp.tools.tasks.arguments import AREA_RULE, DECISIONS_RULE, NOT_BEFORE_RULE
@@ -62,7 +62,7 @@ class TaskChanges(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    title: str = unset_field(description="Task title")
+    title: str = unset_field(description=f"Task title; up to {MAX_TITLE_LENGTH} characters")
     description: str = unset_field(description="Task description")
     goal: str = unset_field(description="Section `goal`")
     context: str = unset_field(description="Section `context`")

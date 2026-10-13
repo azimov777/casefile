@@ -1360,7 +1360,7 @@ async def test_filing_an_entry_returns_only_what_the_agent_did_not_send(
 
     Проверяется в паре, потому что осмысленны эти два факта только вместе: убрать из
     ответа тело можно, лишь если взять его есть где. Заголовок здесь прислал агент, и в
-    ответе он `null` — эхом присланное не возвращается.
+    ответе он тот же — заголовок записи, каким он лёг в дело (TRK-702).
     """
     line = "Вызов `next_task_number` стоит первым и тратит номер на отказе"
     body = "\n".join([line] * 20)
@@ -1377,7 +1377,7 @@ async def test_filing_an_entry_returns_only_what_the_agent_did_not_send(
         stored = await call(session, "read_entries", key=task.key, nos=[filed["no"]])
 
     assert set(filed) == APPENDED_FIELDS
-    assert filed["title"] is None
+    assert filed["title"] == "Номер выдаётся до валидации"
     assert filed["task_key"] == task.key
     assert filed["author"] == {"kind": "human", "signature": "owner"}
     assert body not in json.dumps(filed, ensure_ascii=False)
@@ -1414,7 +1414,7 @@ async def test_the_short_answer_carries_the_next_move(
             session, "wait_journal", after=question["seq"], task=task.key, types=["answer"]
         )
 
-    assert question["title"] is None, "заголовок вопроса прислал агент"
+    assert question["title"] == "Какой ключ канонический?"
     assert answered["title"] == f"Answer to {address}#{question['no']}"
     assert [item["no"] for item in tail["items"]] == [answered["no"]]
     assert tail["items"][0]["body"] == "Верхний"

@@ -51,8 +51,16 @@ async def test_ask_about_a_task_opens_a_discussion_and_attaches_the_task(
         package = await call(session, "get_task", key=key)
 
     assert "blocking" not in declared["ask"].input_schema["properties"]
-    assert (address, asked["no"], asked["task_key"], asked["title"]) == ("TRK~1", 2, None, None)
-    assert (again["discussion"], again["no"]) == (address, 4)
+    assert (address, asked["no"], asked["task_key"], asked["title"]) == (
+        "TRK~1",
+        2,
+        None,
+        QUESTION,
+    )
+    # TRK-702: ключ привязанной задачи — в ответе по ключу задачи, не по адресу обсуждения.
+    assert asked["attached_task"] == key
+    assert (again["discussion"], again["no"], again["attached_task"]) == (address, 4, None)
+    assert again["title"] == "Архивных тоже?"
     assert [(item["no"], item["type"]) for item in discussion_case["items"]] == [
         (1, "created"),
         (2, "question"),
@@ -109,6 +117,7 @@ async def test_ask_takes_no_blocking_and_repeats_by_its_key(
 
     assert "blocking" in extra
     assert first == second
+    assert first["attached_task"] == key
     assert [item["address"] for item in package["discussions"]] == [first["discussion"]]
 
 
@@ -381,3 +390,25 @@ async def test_an_answer_to_an_earlier_task_question_still_files_in_the_task_cas
     assert answered["title"] == f"Answer to {key}#{question.no}: withdrawn"
     assert package["questions"] == []
     assert package["features"]["open_blocking_questions"] == 0
+
+
+async def test_a_repeated_add_entry_returns_the_same_body_and_files_one_entry(
+    mcp_session: Connect, task_secret: str, open_task: Task
+) -> None:
+    """TRK-702: `add_entry` отвечает присланным заголовком, повтор по ключу отдаёт то же
+    тело и второй записи не подшивает."""
+    key = open_task.key
+    arguments = {
+        "key": key,
+        "type": "finding",
+        "title": "X",
+        "idempotency_key": "5d2f0c7a-3b1e-4c58-9a16-7e4b2d8f1a03",
+    }
+    async with mcp_session(task_secret) as session:
+        first = await call(session, "add_entry", **arguments)
+        second = await call(session, "add_entry", **arguments)
+        case = await call(session, "read_entries", key=key, types=["finding"])
+
+    assert first == second
+    assert first["title"] == "X"
+    assert [item["no"] for item in case["items"]] == [first["no"]]

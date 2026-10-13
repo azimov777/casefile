@@ -10,7 +10,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
-from app.domain.case import EntryType
+from app.domain.case import MAX_ENTRY_TITLE_LENGTH, EntryType
 from app.mcp.enums import EntryTypeSchema, VerdictOutcomeSchema
 
 EntryBodyArg = Annotated[
@@ -103,7 +103,7 @@ EntryTitleArg = Annotated[
     Field(
         description=(
             "Entry title: its line in the case index of `get_task`. It states what "
-            "happened, not how"
+            f"happened, not how; up to {MAX_ENTRY_TITLE_LENGTH} characters"
         )
     ),
 ]
