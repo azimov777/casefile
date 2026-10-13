@@ -469,7 +469,7 @@ async def test_mcp_acceptance_by_another_participant_clears_the_warning(
             session, "add_entry", key=task.key, type="acceptance", title="Ещё раз"
         )
 
-    assert filed["title"] is None
+    assert filed["title"] == "Принято владельцем"
     assert package["features"]["open_warnings"] == 0
     assert listed["items"] == []
     assert "warning_not_open" in refused

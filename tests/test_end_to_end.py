@@ -229,10 +229,10 @@ async def test_a_task_goes_the_whole_way_through_mcp(
         )
         closed = await call(session, "close_task", key=key, summary=CLOSING_SUMMARY, **CLOSING)
         assert closed["status"] == "done"
-        # Ответ называет каждую подшитую страницу и говорит, чей заголовок вывел трекер:
-        # у артефакта он прислан вызовом и обратно не едет.
+        # Ответ называет каждую подшитую страницу с её заголовком в деле: у артефакта он
+        # прислан вызовом и возвращается как есть (TRK-702).
         assert [item["title"] for item in closed["entries"]] == [
-            None,
+            CLOSING["entries"][0]["title"],
             "Verdict on check 1: passed",
             CLOSING_SUMMARY["done"],
             "Status changed: in_progress -> done",

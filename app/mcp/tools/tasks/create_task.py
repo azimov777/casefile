@@ -30,7 +30,9 @@ ParentKeyArg = Annotated[
     ),
 ]
 
-TaskTitleArg = Annotated[str, Field(description=f"Task title, one line; up to {MAX_TITLE_LENGTH} characters")]
+TaskTitleArg = Annotated[
+    str, Field(description=f"Task title, one line; up to {MAX_TITLE_LENGTH} characters")
+]
 
 
 TaskDescriptionArg = Annotated[

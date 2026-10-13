@@ -343,6 +343,9 @@ async def test_every_tool_refuses_an_argument_it_does_not_declare(
             failure = await refuse(session, tool.name, **{NOT_AN_ARGUMENT: "x"})
             assert NOT_AN_ARGUMENT in failure, f"{tool.name}: отказ не называет аргумент: {failure}"
             assert "extra_forbidden" in failure, f"{tool.name}: {failure}"
+            # TRK-702: отказ называет принимаемые аргументы из схемы самого инструмента.
+            for accepted in tool.input_schema.get("properties", {}):
+                assert f"`{accepted}`" in failure, f"{tool.name}: нет `{accepted}`: {failure}"
 
 
 async def test_create_task_with_a_section_at_the_top_level_files_nothing(
@@ -372,6 +375,36 @@ async def test_create_task_with_a_section_at_the_top_level_files_nothing(
     assert "goal" in failure, failure
     assert "extra_forbidden" in failure, failure
     assert [item["key"] for item in after["items"]] == [item["key"] for item in before["items"]]
+    # TRK-702: и где лежит присланное мимо — во вложенном аргументе.
+    assert "`goal` is a field of the argument `sections`" in failure, failure
+
+
+async def test_an_argument_refusal_names_the_accepted_arguments_and_the_nested_field(
+    mcp_session: Connect, task_secret: str, open_task: Task
+) -> None:
+    """TRK-702: `add_summary` с лишним `body` называет все свои аргументы; `close_task` с
+    `done` верхним уровнем — вложенное поле `summary`, и задача остаётся в работе."""
+    key = open_task.key
+    async with mcp_session(task_secret) as session:
+        await call(session, "transition", key=key, to="in_progress")
+        extra = await refuse(
+            session,
+            "add_summary",
+            key=key,
+            done="d",
+            remaining="r",
+            blockers="b",
+            next_step="n",
+            body="лишнее",
+        )
+        misplaced = await refuse(session, "close_task", key=key, done="Закрыл")
+        package = await call(session, "get_task", key=key, brief=True)
+
+    assert "extra_forbidden" in extra
+    for name in ("key", "done", "remaining", "blockers", "next_step"):
+        assert f"`{name}`" in extra, extra
+    assert "`done` is a field of the argument `summary`" in misplaced, misplaced
+    assert package["state"]["status"] == "in_progress"
 
 
 # --- Чтение задачи --------------------------------------------------------------------
