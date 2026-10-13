@@ -162,6 +162,7 @@ async def test_a_question_carries_its_answers_in_order_and_only_its_own(
         "question_no": answered,
         "outcome": "answered",
         "replaced_by": None,
+        "relayed_from": None,
     }
     assert rows["TRK-2"]["answers"] == []
     # Во «входящей» ответов нет по определению: там только открытые вопросы.
@@ -291,6 +292,7 @@ async def test_a_withdrawn_question_leaves_the_inbox_and_its_history_names_why(
         "question_no": stale,
         "outcome": "replaced",
         "replaced_by": fresh,
+        "relayed_from": None,
     }
     assert [q["no"] for q in await questions(auth_client)] == [fresh]
 
@@ -299,6 +301,7 @@ async def test_a_withdrawn_question_leaves_the_inbox_and_its_history_names_why(
         "question_no": dropped,
         "outcome": "withdrawn",
         "replaced_by": None,
+        "relayed_from": None,
     }
     assert rows[dropped]["answers"][0]["body"] == "Эндпоинт удалён в соседней задаче"
     assert rows[stale]["answers"][0]["payload"]["outcome"] == "replaced"

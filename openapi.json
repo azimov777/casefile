@@ -11104,6 +11104,21 @@
             "examples": [
               null
             ]
+          },
+          "relayed_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relayed From",
+            "description": "Human whose words an agent carried into the answer; `null` otherwise",
+            "examples": [
+              null
+            ]
           }
         },
         "type": "object",
@@ -11206,6 +11221,21 @@
             "examples": [
               null
             ]
+          },
+          "relayed_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relayed From",
+            "description": "Human whose words an agent carried into the answer; `null` otherwise",
+            "examples": [
+              null
+            ]
           }
         },
         "additionalProperties": false,
@@ -11213,7 +11243,8 @@
         "required": [
           "question_no",
           "outcome",
-          "replaced_by"
+          "replaced_by",
+          "relayed_from"
         ],
         "title": "AnswerPayload",
         "description": "Ответ, как его **читают**: исход есть всегда.\n\nТрекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,\nподшитый до появления исхода, этих ключей не несёт; значения «тогда» — `answered` и\n`null` — подставляет не эта модель, а `read_payload` (`app/domain/case.py`), одно\nправило на REST и на MCP. Поэтому у полей нет умолчаний: модель только подтверждает,\nчто правило отработало, а не повторяет его."

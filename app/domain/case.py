@@ -115,6 +115,7 @@ from app.domain.errors import (
 )
 from app.domain.fields import FieldProblem, FieldProblems
 from app.domain.links import LinkKind
+from app.domain.participants import normalize_participant_name
 from app.domain.projects import PROJECT_KEY_PATTERN, normalize_project_key
 from app.domain.tasks import (
     ENTRY_REF_SEPARATOR,
@@ -570,6 +571,7 @@ class AnswerFacts:
     question_no: int | None = None
     outcome: AnswerOutcome | None = None
     replaced_by: int | None = None
+    relayed_from: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1200,7 +1202,8 @@ def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str,
     читали один и тот же ответ по-разному (TRK-563).
 
     Так читаются четыре типа. Ответ, подшитый до появления исходов (`question_no` и ничего
-    более), читается как `answered` без заменившего вопроса (TRK-563). Решение и заметка
+    более), читается как `answered` без заменившего вопроса (TRK-563); ответ, подшитый до
+    пометки «со слов человека», — с `relayed_from: null` (TRK-711). Решение и заметка
     без `supersedes` — запись задачи, запись области до TRK-658, решение проекта до
     замены (TRK-554) и заметка проекта до TRK-656 — ничего не заменяют; без `draft_for` —
     любая, кроме черновика дела задачи (TRK-659), — не черновик. Правка раздела
@@ -1213,6 +1216,7 @@ def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str,
     if entry_type is EntryType.ANSWER:
         data["outcome"] = answer_outcome(payload).value
         data.setdefault("replaced_by", None)
+        data.setdefault("relayed_from", None)
     elif entry_type in REPLACEABLE_ENTRY_TYPES:
         data.setdefault(SUPERSEDES_FIELD, [])
         data.setdefault(DRAFT_FIELD, None)
@@ -1555,7 +1559,7 @@ def _answer_payload(
     пустыми, — по той же причине, что `task` у резолюции: форма записи одна на все
     интерфейсы.
     """
-    _reject_extra(raw, ("question_no", "outcome", "replaced_by"), problems)
+    _reject_extra(raw, ("question_no", "outcome", "replaced_by", "relayed_from"), problems)
     payload: dict[str, Any] = {}
     with problems.field("question_no"):
         payload["question_no"] = _entry_number(raw.get("question_no"))
@@ -1575,7 +1579,32 @@ def _answer_payload(
         payload["replaced_by"] = _replacement_no(
             raw.get("replaced_by"), outcome, payload.get("question_no")
         )
+
+    with problems.field("relayed_from"):
+        payload["relayed_from"] = _relayed_from(raw.get("relayed_from"), outcome)
     return payload
+
+
+def _relayed_from(value: Any, outcome: AnswerOutcome | None) -> str | None:
+    """Имя человека, чьи слова перенесены в ответ, — только в ответе по существу.
+
+    Здесь форма: строка и исход `answered`. Что имя есть в реестре, что участник —
+    человек и что подшивает не человек, проверяет сценарий — ему нужна база.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise FieldProblem("not_a_string")
+    name = normalize_participant_name(value)
+    if not name:
+        raise FieldProblem("empty")
+    if outcome is not AnswerOutcome.ANSWERED:
+        raise FieldProblem(
+            "not_allowed",
+            only_with=AnswerOutcome.ANSWERED.value,
+            got=outcome.value if outcome else None,
+        )
+    return name
 
 
 def _replacement_no(value: Any, outcome: AnswerOutcome | None, question_no: Any) -> int | None:

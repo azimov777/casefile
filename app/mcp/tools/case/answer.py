@@ -68,6 +68,16 @@ ReplacedByArg = Annotated[
     ),
 ]
 
+RelayedFromArg = Annotated[
+    str | None,
+    Field(
+        description=(
+            "Participant name of the human whose words are carried into the answer from "
+            "outside the tracker; accepted with `answered` from an agent only"
+        )
+    ),
+]
+
 
 def register(tools: Toolset) -> None:
     """Объявляет `answer`."""
@@ -80,6 +90,7 @@ def register(tools: Toolset) -> None:
         body: EntryBodyArg = "",
         outcome: AnswerOutcomeArg = AnswerOutcome.ANSWERED,
         replaced_by: ReplacedByArg = None,
+        relayed_from: RelayedFromArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedDiscussionEntryView:
         """Answers a question of a discussion or of a task's case, or closes it unanswered
@@ -107,6 +118,7 @@ def register(tools: Toolset) -> None:
                         body=body,
                         outcome=outcome,
                         replaced_by=replaced_by,
+                        relayed_from=relayed_from,
                     )
                     return appended_discussion_entry(entry, discussion=discussion.address)
 
@@ -123,6 +135,7 @@ def register(tools: Toolset) -> None:
                         body=body,
                         outcome=outcome,
                         replaced_by=replaced_by,
+                        relayed_from=relayed_from,
                     )
                     return appended_discussion_entry(entry, task_key=task.key)
 
@@ -134,6 +147,7 @@ def register(tools: Toolset) -> None:
                     "body": body,
                     "outcome": outcome,
                     "replaced_by": replaced_by,
+                    **({"relayed_from": relayed_from} if relayed_from is not None else {}),
                 },
                 build=append,
             )

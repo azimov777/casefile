@@ -97,6 +97,7 @@ from app.db.repositories import (
 )
 from app.db.wakeup import journal_wakeup
 from app.domain.areas import is_area_address, parse_area_address
+from app.domain.authors import AuthorKind
 from app.domain.case import (
     AGENT_ENTRY_TYPES,
     CLOSING_SUMMARY_PART,
@@ -142,6 +143,7 @@ from app.domain.errors import (
 )
 from app.domain.fields import FieldProblems
 from app.domain.links import LinkKind, other_side_phrase
+from app.domain.participants import ParticipantKind
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
     CheckGap,
@@ -654,7 +656,7 @@ async def append_entry(
         refs=refs,
     )
     await lock_changes(session)
-    await _ensure_targets_exist(session, task, draft)
+    await _ensure_targets_exist(session, task, draft, actor=actor)
     if draft.type is EntryType.ACCEPTANCE:
         await _ensure_warning_acceptable(session, task, actor=actor)
     return await _append(
@@ -757,6 +759,7 @@ async def answer(
     body: Any = "",
     outcome: Any = None,
     replaced_by: Any = None,
+    relayed_from: Any = None,
     refs: Any = (),
     action_id: uuid.UUID | None = None,
 ) -> Entry:
@@ -778,7 +781,12 @@ async def answer(
         type=EntryType.ANSWER,
         body=body,
         refs=refs,
-        payload={"question_no": question_no, "outcome": outcome, "replaced_by": replaced_by},
+        payload={
+            "question_no": question_no,
+            "outcome": outcome,
+            "replaced_by": replaced_by,
+            "relayed_from": relayed_from,
+        },
         action_id=action_id,
     )
 
@@ -1198,6 +1206,7 @@ async def append_discussion_entry(
     await freeze.lock_unfrozen(session, discussion=discussion)
     problems = FieldProblems()
     await _check_addressees(session, draft, problems)
+    await _check_relayed_from(session, draft, actor, problems)
     await _check_discussion_question_no(session, discussion, draft, problems)
     await _check_refs(session, discussion, draft, problems)
     problems.raise_as(EntryFieldsInvalidError, key=discussion.address)
@@ -1281,6 +1290,7 @@ async def answer_in_discussion(
     body: Any = "",
     outcome: Any = None,
     replaced_by: Any = None,
+    relayed_from: Any = None,
     refs: Any = (),
 ) -> Entry:
     """Ответ на вопрос **этого** обсуждения, его снятие или замена — правила те же, что у
@@ -1291,7 +1301,12 @@ async def answer_in_discussion(
         actor=actor,
         type=EntryType.ANSWER,
         body=body,
-        payload={"question_no": question_no, "outcome": outcome, "replaced_by": replaced_by},
+        payload={
+            "question_no": question_no,
+            "outcome": outcome,
+            "replaced_by": replaced_by,
+            "relayed_from": relayed_from,
+        },
         refs=refs,
     )
 
@@ -1696,7 +1711,9 @@ async def _ensure_warning_acceptable(session: AsyncSession, task: Task, *, actor
         raise AcceptanceByCloserError(details={**details, "signature": actor.author.signature})
 
 
-async def _ensure_targets_exist(session: AsyncSession, task: Task, draft: EntryDraft) -> None:
+async def _ensure_targets_exist(
+    session: AsyncSession, task: Task, draft: EntryDraft, *, actor: Actor
+) -> None:
     """Проверки, которым нужна база: адресаты, ссылки, номер вопроса.
 
     Все замечания собираются вместе и уезжают одним ответом — по тому же правилу, что и
@@ -1704,6 +1721,7 @@ async def _ensure_targets_exist(session: AsyncSession, task: Task, draft: EntryD
     """
     problems = FieldProblems()
     await _check_addressees(session, draft, problems)
+    await _check_relayed_from(session, draft, actor, problems)
     await _check_question_no(session, task, draft, problems)
     await _check_remark_no(session, task, draft, problems)
     await _check_continuation(session, draft, problems)
@@ -1760,6 +1778,28 @@ async def _check_addressees(
     for name in addressees:
         if name not in known:
             problems.add("addressees", "unknown_participant", name=name)
+
+
+async def _check_relayed_from(
+    session: AsyncSession, draft: EntryDraft, actor: Actor, problems: FieldProblems
+) -> None:
+    """«Со слов» называет человека из реестра, а подшивает не человек (TRK-711).
+
+    Пометка нужна, чтобы читатель дела отличил слова человека, перенесённые агентом из
+    чата, от ответа самого агента: человек, отвечающий в интерфейсе, говорит за себя, и
+    такая пометка у его ответа была бы ложью. Форму (строка, исход `answered`) проверил
+    домен; здесь — что имя есть в реестре и что участник — человек.
+    """
+    name = draft.payload.get("relayed_from") if draft.type is EntryType.ANSWER else None
+    if name is None:
+        return
+    if actor.author.kind is AuthorKind.HUMAN:
+        problems.add("relayed_from", "author_is_human", signature=actor.author.signature)
+    participant = await ParticipantRepository(session).get_by_name(name)
+    if participant is None:
+        problems.add("relayed_from", "unknown_participant", name=name)
+    elif participant.kind is not ParticipantKind.HUMAN:
+        problems.add("relayed_from", "not_a_human", name=name, kind=participant.kind.value)
 
 
 async def _check_question_no(

@@ -231,7 +231,12 @@ async def test_an_answer_without_an_outcome_is_filed_as_answered(
 
     entry = await service.answer(db_session, task, actor=task_actor, question_no=stale, body="Да")
 
-    assert entry.payload == {"question_no": stale, "outcome": "answered", "replaced_by": None}
+    assert entry.payload == {
+        "question_no": stale,
+        "outcome": "answered",
+        "replaced_by": None,
+        "relayed_from": None,
+    }
     assert entry.title == f"Answer to TRK-1#{stale}"
 
 
@@ -286,6 +291,7 @@ async def test_a_replaced_question_names_the_question_that_replaced_it(
         "question_no": stale,
         "outcome": "replaced",
         "replaced_by": fresh,
+        "relayed_from": None,
     }
     assert replacement.title == f"Answer to TRK-1#{stale}: replaced by TRK-1#{fresh}"
     assert await _features(db_session, task_actor) == (1, 0)
