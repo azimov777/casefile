@@ -73,6 +73,7 @@
 - `test_readme_tools.py` — README для каталогов MCP против зарегистрированных инструментов
 - `test_agent_phrases_everywhere.py` — сплошная сверка фраз для агента во всех копиях
 - `test_check_dco_script.py` — скрипт подписи вклада и исключение для Dependabot
+- `test_run_locked_script.py` — скрипт очереди тяжёлых прогонов: замок, печать ожидания, устаревший замок, снятие по сигналу
 - `test_merge_script.py` — скрипт слияния ветки задачи
 - `test_watch_journal_sample.py` — образец сторожа `scripts/watch-journal.sh`
 - `test_doc_links_in_code.py` — ссылки на документы в комментариях кода ведут на существующие файлы
