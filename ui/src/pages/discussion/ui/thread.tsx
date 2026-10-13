@@ -109,6 +109,11 @@ function Item({ address, entry, highlighted, isAnswered, actual, replyOpen, onRe
         </span>
       ) : null}
       <AuthorName author={entry.author} />
+      {entry.type === 'answer' && entry.payload.relayed_from != null ? (
+        <span data-relayed-from="" className="italic">
+          {t('thread.relayedFrom', { name: entry.payload.relayed_from })}
+        </span>
+      ) : null}
       <RelativeTime value={entry.created_at} />
       <CopyEntryLink owner={owner} no={entry.no} />
     </header>

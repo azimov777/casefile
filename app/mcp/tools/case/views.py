@@ -121,6 +121,7 @@ class AnswerFactsView(BaseModel):
     question_no: int | None
     outcome: AnswerOutcomeSchema | None
     replaced_by: int | None
+    relayed_from: str | None = None
 
 
 class VerdictFactsView(BaseModel):
@@ -244,6 +245,7 @@ def facts(value: EntryFacts) -> FactsView:
                 question_no=value.question_no,
                 outcome=value.outcome,
                 replaced_by=value.replaced_by,
+                relayed_from=value.relayed_from,
             )
         case VerdictFacts():
             return VerdictFactsView(

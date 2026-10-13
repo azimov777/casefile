@@ -357,6 +357,11 @@ date as `not_before`; `search_tasks` returns it in `fields`. It is not a deadlin
 **A question addressed to you** gets `answer(key=<discussion address or task key>,
 question_no=…, body=…)` where it was asked.
 
+**The human answered you outside the tracker** — in the chat or aloud. File their words as
+the answer and say whose they are:
+`answer(key="TRK~7", question_no=2, relayed_from="<their participant name>", body="<their words, as said>")`.
+Put your own reading of those words into the conclusion, not into the answer.
+
 **Your own question went stale** before anyone answered it — the decision came elsewhere, or a
 newer question asks it better: `answer(key="TRK~7", question_no=…, outcome="withdrawn", body="<why>")`,
 or `outcome="replaced", replaced_by=<number of the new question>`. It leaves the inbox and stays

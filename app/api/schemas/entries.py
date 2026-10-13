@@ -201,6 +201,11 @@ class AnswerFactsRead(_EntryFactsBase):
         examples=[None],
         description="Number of the question that replaced it; set only with `replaced`",
     )
+    relayed_from: str | None = Field(
+        default=None,
+        examples=[None],
+        description="Human whose words an agent carried into the answer; `null` otherwise",
+    )
 
 
 class VerdictFactsRead(_EntryFactsBase):
@@ -585,6 +590,10 @@ class AnswerPayload(BaseModel):
         description=_ANSWER_OUTCOME_DESCRIPTION,
     )
     replaced_by: int | None = Field(ge=1, examples=[None], description=_REPLACED_BY_DESCRIPTION)
+    relayed_from: str | None = Field(
+        examples=[None],
+        description="Human whose words an agent carried into the answer; `null` otherwise",
+    )
 
 
 class VerdictPayload(BaseModel):

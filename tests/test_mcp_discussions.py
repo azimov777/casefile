@@ -11,13 +11,16 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.case import EntryType
 from app.domain.errors import QuestionNotATaskEntryError
+from app.domain.participants import ParticipantKind
 from app.services import case as case_service
+from app.services import participants as participants_service
 from app.services import tasks as tasks_service
-from app.services.auth import Actor
+from app.services.auth import TRACKER_ACTOR, Actor
 from conftest import Connect, call, make_task, refuse, without_empty_standing
 
 QUESTION = "Хранить ли дела отменённых задач вечно?"
@@ -412,3 +415,84 @@ async def test_a_repeated_add_entry_returns_the_same_body_and_files_one_entry(
     assert first == second
     assert first["title"] == "X"
     assert [item["no"] for item in case["items"]] == [first["no"]]
+
+
+async def test_an_agent_files_an_answer_relayed_from_a_human(
+    mcp_session: Connect, shared_secret: str, owner: Participant, open_task: Task
+) -> None:
+    """TRK-711: ответ агента со слов человека хранит имя в нагрузке и отдаёт его при
+    чтении и в описи; ответ без аргумента читается с `null`; автор записи остаётся агентом."""
+    async with mcp_session(shared_secret, label="claude") as session:
+        asked = await call(session, "ask", key=open_task.key, addressees=["owner"], title=QUESTION)
+        address = asked["discussion"]
+        relayed = await call(
+            session,
+            "answer",
+            key=address,
+            question_no=asked["no"],
+            relayed_from="Owner",
+            body="Вечно, сказал в чате",
+        )
+        own = await call(
+            session, "answer", key=address, question_no=asked["no"], body="Дополню сам"
+        )
+        case = await call(session, "read_project_entries", key=address, types=["answer"])
+        package = await call(session, "get_task", key=open_task.key)
+
+    assert relayed["title"] == own["title"]
+    by_no = {item["no"]: item for item in case["items"]}
+    assert by_no[relayed["no"]]["payload"]["relayed_from"] == "owner"
+    assert by_no[own["no"]]["payload"]["relayed_from"] is None
+    assert by_no[relayed["no"]]["author"] == {"kind": "agent", "signature": "claude"}
+    (discussion,) = package["discussions"]
+    assert discussion["status"] == "open"
+
+
+async def test_relayed_from_is_refused_for_the_four_wrong_cases(
+    mcp_session: Connect,
+    shared_secret: str,
+    task_secret: str,
+    owner: Participant,
+    db_session: AsyncSession,
+    open_task: Task,
+) -> None:
+    """TRK-711: неизвестное имя, имя агента, исход `withdrawn` и автор-человек — каждое
+    `entry_fields_invalid` с полем `relayed_from`."""
+    await participants_service.register_participant(
+        db_session, actor=TRACKER_ACTOR, kind=ParticipantKind.AGENT, name="helper"
+    )
+    async with mcp_session(shared_secret, label="claude") as session:
+        asked = await call(session, "ask", key=open_task.key, addressees=["owner"], title=QUESTION)
+        address, no = asked["discussion"], asked["no"]
+        unknown = await refuse(
+            session, "answer", key=address, question_no=no, relayed_from="nobody", body="x"
+        )
+        agent = await refuse(
+            session, "answer", key=address, question_no=no, relayed_from="helper", body="x"
+        )
+        withdrawn = await refuse(
+            session,
+            "answer",
+            key=address,
+            question_no=no,
+            relayed_from="owner",
+            outcome="withdrawn",
+            body="устарел",
+        )
+    async with mcp_session(task_secret) as session:
+        by_human = await refuse(
+            session, "answer", key=address, question_no=no, relayed_from="owner", body="x"
+        )
+    async with mcp_session(shared_secret, label="claude") as session:
+        case = await call(session, "read_project_entries", key=address, types=["answer"])
+
+    for text, reason in (
+        (unknown, "unknown_participant"),
+        (agent, "not_a_human"),
+        (withdrawn, "not_allowed"),
+        (by_human, "author_is_human"),
+    ):
+        assert "entry_fields_invalid" in text, text
+        assert "relayed_from" in text, text
+        assert reason in text, text
+    assert case["items"] == []

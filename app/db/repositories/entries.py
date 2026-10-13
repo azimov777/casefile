@@ -1669,6 +1669,7 @@ def _read_facts(entry_type: EntryType, raw: Any) -> EntryFacts:
                 question_no=values.get("question_no"),
                 outcome=answer_outcome(values),
                 replaced_by=values.get("replaced_by"),
+                relayed_from=values.get("relayed_from"),
             )
         case EntryType.VERDICT:
             return VerdictFacts(

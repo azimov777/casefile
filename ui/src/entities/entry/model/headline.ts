@@ -533,6 +533,7 @@ export function factsOfEntry(entry: Entry): EntryFacts {
         question_no: entry.payload.question_no,
         outcome: answerOutcome(entry.payload.outcome),
         replaced_by: entry.payload.replaced_by ?? null,
+        relayed_from: entry.payload.relayed_from ?? null,
       };
     case 'verdict':
       /*

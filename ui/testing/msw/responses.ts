@@ -330,7 +330,12 @@ export function answerEntry(no: number, taskKey: string, questionNo: number, bod
     type: 'answer',
     // Исход и замена приходят в каждом ответе REST (TRK-552): у ответа по существу это
     // `answered` и пустая замена.
-    payload: { question_no: questionNo, outcome: 'answered', replaced_by: null },
+    payload: {
+      question_no: questionNo,
+      outcome: 'answered',
+      replaced_by: null,
+      relayed_from: null,
+    },
   };
 }
 
@@ -353,6 +358,7 @@ export function withdrawalEntry(
       question_no: questionNo,
       outcome: replacedBy === null ? 'withdrawn' : 'replaced',
       replaced_by: replacedBy,
+      relayed_from: null,
     },
   };
 }
@@ -486,7 +492,11 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
     case 'question':
       return questionEntry(no, taskKey);
     case 'answer':
-      return { ...base, type, payload: { question_no: 1, outcome: 'answered', replaced_by: null } };
+      return {
+        ...base,
+        type,
+        payload: { question_no: 1, outcome: 'answered', replaced_by: null, relayed_from: null },
+      };
     case 'verdict':
       return verdictEntry(no, taskKey);
     case 'status_changed':
@@ -728,7 +738,34 @@ export function discussionAnswer(address: string, no: number, questionNo: number
     ...discussionEntryBase(address, no, '', 'Храним вечно: дело неизменяемо.'),
     author: { kind: 'human', signature: 'owner' },
     type: 'answer',
-    payload: { question_no: questionNo, outcome: 'answered', replaced_by: null },
+    payload: {
+      question_no: questionNo,
+      outcome: 'answered',
+      replaced_by: null,
+      relayed_from: null,
+    },
+  };
+}
+
+/**
+ * Ответ агента со слов человека (TRK-711): автор — агент, в нагрузке — имя того, чьи слова
+ * он перенёс из чата.
+ */
+export function relayedDiscussionAnswer(
+  address: string,
+  no: number,
+  questionNo: number,
+  relayedFrom: string,
+): Entry {
+  return {
+    ...discussionEntryBase(address, no, '', 'Вечно, сказал в чате.'),
+    type: 'answer',
+    payload: {
+      question_no: questionNo,
+      outcome: 'answered',
+      replaced_by: null,
+      relayed_from: relayedFrom,
+    },
   };
 }
 

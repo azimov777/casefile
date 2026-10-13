@@ -293,7 +293,12 @@ def test_an_answer_without_an_outcome_is_answered_and_carries_both_keys() -> Non
     """
     draft = build_entry(CONTEXT, type=EntryType.ANSWER, body="", payload={"question_no": 7})
 
-    assert draft.payload == {"question_no": 7, "outcome": "answered", "replaced_by": None}
+    assert draft.payload == {
+        "question_no": 7,
+        "outcome": "answered",
+        "replaced_by": None,
+        "relayed_from": None,
+    }
     assert draft.title == "Answer to TRK-1#7"
 
 
@@ -309,6 +314,7 @@ def test_an_answer_filed_before_outcomes_is_read_as_answered() -> None:
         "question_no": 7,
         "outcome": "answered",
         "replaced_by": None,
+        "relayed_from": None,
     }
     assert stored == {"question_no": 7}
 
@@ -316,9 +322,10 @@ def test_an_answer_filed_before_outcomes_is_read_as_answered() -> None:
 @pytest.mark.parametrize(
     "stored",
     [
-        {"question_no": 7, "outcome": "answered", "replaced_by": None},
-        {"question_no": 7, "outcome": "withdrawn", "replaced_by": None},
-        {"question_no": 7, "outcome": "replaced", "replaced_by": 12},
+        {"question_no": 7, "outcome": "answered", "replaced_by": None, "relayed_from": None},
+        {"question_no": 7, "outcome": "answered", "replaced_by": None, "relayed_from": "owner"},
+        {"question_no": 7, "outcome": "withdrawn", "replaced_by": None, "relayed_from": None},
+        {"question_no": 7, "outcome": "replaced", "replaced_by": 12, "relayed_from": None},
     ],
 )
 def test_an_answer_with_an_outcome_is_read_as_it_was_filed(stored: dict[str, Any]) -> None:
@@ -341,7 +348,12 @@ def test_a_withdrawal_names_its_outcome_in_the_title() -> None:
         payload={"question_no": 7, "outcome": "withdrawn"},
     )
 
-    assert draft.payload == {"question_no": 7, "outcome": "withdrawn", "replaced_by": None}
+    assert draft.payload == {
+        "question_no": 7,
+        "outcome": "withdrawn",
+        "replaced_by": None,
+        "relayed_from": None,
+    }
     assert draft.title == "Answer to TRK-1#7: withdrawn"
 
 
@@ -353,7 +365,12 @@ def test_a_replacement_names_the_question_that_replaced_it() -> None:
         payload={"question_no": 7, "outcome": "replaced", "replaced_by": 12},
     )
 
-    assert draft.payload == {"question_no": 7, "outcome": "replaced", "replaced_by": 12}
+    assert draft.payload == {
+        "question_no": 7,
+        "outcome": "replaced",
+        "replaced_by": 12,
+        "relayed_from": None,
+    }
     assert draft.title == "Answer to TRK-1#7: replaced by TRK-1#12"
 
 
@@ -558,3 +575,42 @@ def test_a_title_is_one_line() -> None:
 def test_a_summary_title_falls_back_to_the_whole_text_when_it_has_no_line() -> None:
     """Текст из одних переводов строки формально непуст, а заголовку нужно хоть что-то."""
     assert summary_title("\n\n") == ""
+
+
+# --- Ответ со слов человека (TRK-711) --------------------------------------------------
+
+
+def test_an_answer_relayed_from_a_human_carries_the_canonical_name() -> None:
+    """Имя приводится к каноническому виду реестра; ключ лежит в нагрузке всегда."""
+    draft = build_entry(
+        CONTEXT,
+        type=EntryType.ANSWER,
+        body="да",
+        payload={"question_no": 7, "relayed_from": "  Owner "},
+    )
+
+    assert draft.payload["relayed_from"] == "owner"
+
+
+@pytest.mark.parametrize("outcome", ["withdrawn", "replaced"])
+def test_relayed_from_is_refused_with_an_outcome_other_than_answered(outcome: str) -> None:
+    """Снятие и замена — слова самого агента: чьих-то слов в них нет."""
+    payload: dict[str, Any] = {"question_no": 7, "outcome": outcome, "relayed_from": "owner"}
+    if outcome == "replaced":
+        payload["replaced_by"] = 9
+
+    with pytest.raises(EntryFieldsInvalidError) as raised:
+        build_entry(CONTEXT, type=EntryType.ANSWER, body="почему", payload=payload)
+
+    assert "relayed_from" in str(raised.value.details)
+
+
+@pytest.mark.parametrize("value", [5, "  "])
+def test_relayed_from_takes_only_a_non_empty_string(value: Any) -> None:
+    with pytest.raises(EntryFieldsInvalidError):
+        build_entry(
+            CONTEXT,
+            type=EntryType.ANSWER,
+            body="да",
+            payload={"question_no": 7, "relayed_from": value},
+        )
