@@ -304,6 +304,13 @@ outcome are attached to it. The rules:
 4. **One fork, one question.** After the earlier answers state the single choice, then
    your recommendation with the reason. A second fork is a second question: in the same
    discussion if it is the same topic (`ask(key="TRK~7", …)`), in a new one if not.
+   When the fork has two to eight named options, put them in `options` as
+   `{label, text}` pairs with short labels (`A`, `B`) instead of listing them in the
+   body: the human picks one in the interface and the answer arrives as `choice` with
+   that label, so nothing is left to interpret. Free text stays possible beside it.
+   To answer a question that has options, pass `choice` to `answer`:
+   `ask(key="TRK-42", addressees=["owner"], title="Keep v1?", options=[{"label": "A", "text": "Keep one more month"}, {"label": "B", "text": "Remove now"}])`,
+   then `answer(key="TRK~7", question_no=1, choice="A")`.
 5. **Name a changed decision.** If the human's new answer replaces an earlier one, say so
    in the question or the conclusion directly ("you chose A in TRK~3#5, now B"), and put
    the old decision in `superseded` of the conclusion.

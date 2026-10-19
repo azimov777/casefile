@@ -78,6 +78,18 @@ RelayedFromArg = Annotated[
     ),
 ]
 
+ChoiceArg = Annotated[
+    str | None,
+    Field(
+        description=(
+            "Label of one option of the question, as its `options` give it; accepted with "
+            "`answered` only. A label the question does not offer is refused with "
+            "`entry_fields_invalid`, `reason: not_an_option`, a question without options "
+            "with `reason: question_has_no_options`. The body may stay empty"
+        )
+    ),
+]
+
 
 def register(tools: Toolset) -> None:
     """Объявляет `answer`."""
@@ -91,6 +103,7 @@ def register(tools: Toolset) -> None:
         outcome: AnswerOutcomeArg = AnswerOutcome.ANSWERED,
         replaced_by: ReplacedByArg = None,
         relayed_from: RelayedFromArg = None,
+        choice: ChoiceArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedDiscussionEntryView:
         """Answers a question of a discussion or of a task's case, or closes it unanswered
@@ -119,6 +132,7 @@ def register(tools: Toolset) -> None:
                         outcome=outcome,
                         replaced_by=replaced_by,
                         relayed_from=relayed_from,
+                        choice=choice,
                     )
                     return appended_discussion_entry(entry, discussion=discussion.address)
 
@@ -136,6 +150,7 @@ def register(tools: Toolset) -> None:
                         outcome=outcome,
                         replaced_by=replaced_by,
                         relayed_from=relayed_from,
+                        choice=choice,
                     )
                     return appended_discussion_entry(entry, task_key=task.key)
 
@@ -148,6 +163,7 @@ def register(tools: Toolset) -> None:
                     "outcome": outcome,
                     "replaced_by": replaced_by,
                     **({"relayed_from": relayed_from} if relayed_from is not None else {}),
+                    **({"choice": choice} if choice is not None else {}),
                 },
                 build=append,
             )

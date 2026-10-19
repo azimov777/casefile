@@ -496,3 +496,76 @@ async def test_relayed_from_is_refused_for_the_four_wrong_cases(
         assert "relayed_from" in text, text
         assert reason in text, text
     assert case["items"] == []
+
+
+OPTIONS = [
+    {"label": "A", "text": "Хранить вечно"},
+    {"label": "B", "text": "Удалять через год"},
+]
+
+
+async def test_ask_takes_options_and_answer_takes_choice(
+    mcp_session: Connect, shared_secret: str, open_task: Task
+) -> None:
+    """TRK-719: `ask(options=…)` кладёт варианты в нагрузку вопроса, `answer(choice=…)` — метку
+    в нагрузку ответа с пустым телом; обе схемы объявляют аргументы необязательными."""
+    async with mcp_session(shared_secret, label="claude") as session:
+        declared = {tool.name: tool for tool in (await session.list_tools()).tools}
+        asked = await call(
+            session,
+            "ask",
+            key=open_task.key,
+            addressees=["owner"],
+            title=QUESTION,
+            options=OPTIONS,
+        )
+        address = asked["discussion"]
+        answered = await call(session, "answer", key=address, question_no=asked["no"], choice="A")
+        case = await call(session, "read_project_entries", key=address)
+
+    for name, argument in (("ask", "options"), ("answer", "choice")):
+        schema = declared[name].input_schema
+        assert argument in schema["properties"]
+        assert argument not in schema.get("required", [])
+    by_no = {item["no"]: item for item in case["items"]}
+    assert by_no[asked["no"]]["payload"]["options"] == OPTIONS
+    assert by_no[answered["no"]]["payload"]["choice"] == "A"
+    assert by_no[answered["no"]]["body"] == ""
+
+
+async def test_options_and_choice_are_refused_when_malformed(
+    mcp_session: Connect, shared_secret: str, open_task: Task
+) -> None:
+    """TRK-719: одна пара, метка вне вариантов и выбор у вопроса без вариантов — отказы
+    `entry_fields_invalid` с полем и причиной."""
+    key = open_task.key
+    async with mcp_session(shared_secret, label="claude") as session:
+        one = await refuse(
+            session,
+            "ask",
+            key=key,
+            addressees=["owner"],
+            title=QUESTION,
+            options=OPTIONS[:1],
+        )
+        asked = await call(
+            session,
+            "ask",
+            key=key,
+            addressees=["owner"],
+            title=QUESTION,
+            options=OPTIONS,
+        )
+        plain = await call(
+            session, "ask", key=asked["discussion"], addressees=["owner"], title="Без вариантов"
+        )
+        outside = await refuse(
+            session, "answer", key=asked["discussion"], question_no=asked["no"], choice="Z"
+        )
+        free = await refuse(
+            session, "answer", key=asked["discussion"], question_no=plain["no"], choice="A"
+        )
+
+    assert "entry_fields_invalid" in one and "options" in one, one
+    assert "not_an_option" in outside, outside
+    assert "question_has_no_options" in free, free
