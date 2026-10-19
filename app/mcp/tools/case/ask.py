@@ -6,8 +6,14 @@
 
 from typing import Annotated
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
+from app.domain.case import (
+    MAX_OPTION_LABEL_LENGTH,
+    MAX_OPTION_TEXT_LENGTH,
+    MAX_QUESTION_OPTIONS,
+    MIN_QUESTION_OPTIONS,
+)
 from app.domain.discussions import is_discussion_address
 from app.mcp.arguments import IdempotencyKeyArg
 from app.mcp.idempotency import Once
@@ -42,6 +48,36 @@ AddresseesArg = Annotated[
 ]
 
 
+class QuestionOption(BaseModel):
+    """One answer option of a question: a short label and the text it stands for."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(
+        description=(
+            f"Short mark of the option, up to {MAX_OPTION_LABEL_LENGTH} characters, unique "
+            "in the question ignoring case; an `answer` names it in `choice`"
+        )
+    )
+    text: str = Field(
+        description=f"What the option means, up to {MAX_OPTION_TEXT_LENGTH} characters"
+    )
+
+
+OptionsArg = Annotated[
+    list[QuestionOption] | None,
+    Field(
+        description=(
+            f"Answer options of a question with a fork, {MIN_QUESTION_OPTIONS} to "
+            f"{MAX_QUESTION_OPTIONS} pairs. The addressee picks one in the interface or "
+            "in an `answer` with `choice`; free text stays possible beside it. A question "
+            "without options takes a free answer. A malformed list is refused with "
+            "`entry_fields_invalid`, `field: options`"
+        )
+    ),
+]
+
+
 def register(tools: Toolset) -> None:
     """Объявляет `ask`."""
     runtime = tools.runtime
@@ -52,6 +88,7 @@ def register(tools: Toolset) -> None:
         addressees: AddresseesArg,
         title: EntryTitleArg,
         body: EntryBodyArg = "",
+        options: OptionsArg = None,
         refs: EntryRefsArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedDiscussionEntryView:
@@ -72,6 +109,7 @@ def register(tools: Toolset) -> None:
         What the cases of the parent, its ancestors and sibling tasks already record is
         readable through `get_task` and `read_entries`, without a question.
         """
+        option_pairs = [item.model_dump() for item in options] if options is not None else None
         async with runtime.call() as (session, actor):
             # Владелец разрешается до занятия ключа идемпотентности: отклонённый до работы
             # вызов не должен его тратить.
@@ -87,6 +125,7 @@ def register(tools: Toolset) -> None:
                         addressees=addressees,
                         title=title,
                         body=body,
+                        options=option_pairs,
                         refs=refs or (),
                     )
                     return appended_discussion_entry(entry, discussion=discussion.address)
@@ -103,6 +142,7 @@ def register(tools: Toolset) -> None:
                         addressees=addressees,
                         title=title,
                         body=body,
+                        options=option_pairs,
                         refs=refs or (),
                     )
                     return appended_discussion_entry(
@@ -117,6 +157,7 @@ def register(tools: Toolset) -> None:
                     "title": title,
                     "body": body,
                     "refs": refs,
+                    **({"options": option_pairs} if option_pairs is not None else {}),
                 },
                 build=append,
             )

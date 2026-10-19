@@ -464,3 +464,21 @@ async def test_every_title_argument_names_its_length_limit(tools: list[Tool]) ->
         assert f"up to {MAX_ENTRY_TITLE_LENGTH} characters" in text
     for text in task_titles:
         assert f"up to {MAX_TITLE_LENGTH} characters" in text
+
+
+async def test_options_and_choice_describe_the_argument_and_stay_within_the_grammar(
+    tools: list[Tool],
+) -> None:
+    """TRK-719: у `options` и `choice` есть описание с границами и отказом; приказ в описании
+    нового аргумента ловит тот же детектор, что и обзорная проверка 4."""
+    by_name = {tool.name: tool for tool in tools}
+    options = by_name["ask"].input_schema["properties"]["options"]
+    choice = by_name["answer"].input_schema["properties"]["choice"]
+    texts = [unwrapped(item) for _, item in model_reads(by_name["ask"]) if "option" in item]
+
+    assert "2 to 8" in json.dumps(options)
+    assert "not_an_option" in choice["description"]
+    assert texts
+    for text in (*texts, choice["description"]):
+        assert not IMPERATIVE.search(text) and not PRESCRIBING.search(text), text
+    assert IMPERATIVE.search("Use options for every question. Put labels short.")

@@ -760,6 +760,7 @@ async def answer(
     outcome: Any = None,
     replaced_by: Any = None,
     relayed_from: Any = None,
+    choice: Any = None,
     refs: Any = (),
     action_id: uuid.UUID | None = None,
 ) -> Entry:
@@ -786,6 +787,7 @@ async def answer(
             "outcome": outcome,
             "replaced_by": replaced_by,
             "relayed_from": relayed_from,
+            "choice": choice,
         },
         action_id=action_id,
     )
