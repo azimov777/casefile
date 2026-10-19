@@ -707,9 +707,11 @@ async def test_search_tasks_returns_the_same_rows_as_rest(
     """
     fields = ["title", "status", "features"]
     async with mcp_session(task_secret) as session:
-        from_mcp = await call(session, "search_tasks", project=["TRK"], fields=fields)
+        from_mcp = await call(session, "search_tasks", project=["TRK"], fields=fields, sort=["key"])
 
-    response = await auth_client.get("/api/v1/tasks", params={"project": "TRK", "fields": fields})
+    response = await auth_client.get(
+        "/api/v1/tasks", params={"project": "TRK", "fields": fields, "sort": "key"}
+    )
     assert response.status_code == 200, response.text
 
     assert from_mcp["items"] == response.json()["data"]
@@ -755,9 +757,11 @@ async def test_search_tasks_names_the_parent_and_leaves_it_out_when_not_asked(
 
     fields = ["key", "parent"]
     async with mcp_session(task_secret) as session:
-        asked = await call(session, "search_tasks", project=["TRK"], fields=fields)
-        narrow = await call(session, "search_tasks", project=["TRK"], fields=["key", "title"])
-        default = await call(session, "search_tasks", project=["TRK"])
+        asked = await call(session, "search_tasks", project=["TRK"], fields=fields, sort=["key"])
+        narrow = await call(
+            session, "search_tasks", project=["TRK"], fields=["key", "title"], sort=["key"]
+        )
+        default = await call(session, "search_tasks", project=["TRK"], sort=["key"])
         wrong_name = await refuse(session, "search_tasks", fields=["key", "parents"])
 
     assert asked["items"] == [
@@ -769,7 +773,9 @@ async def test_search_tasks_names_the_parent_and_leaves_it_out_when_not_asked(
     assert "search_field_unknown" in wrong_name
     assert '"parent"' in wrong_name
 
-    response = await auth_client.get("/api/v1/tasks", params={"project": "TRK", "fields": fields})
+    response = await auth_client.get(
+        "/api/v1/tasks", params={"project": "TRK", "fields": fields, "sort": "key"}
+    )
     assert response.status_code == 200, response.text
     assert asked["items"] == response.json()["data"]
 
@@ -800,9 +806,13 @@ async def test_search_tasks_selects_the_whole_subtree_with_under_and_rest_agrees
     root, *below = (task.key for task in chain)
 
     async with mcp_session(task_secret) as session:
-        by_argument = await call(session, "search_tasks", under=[root], fields=["key"])
-        by_query = await call(session, "search_tasks", query=f"under: {root}", fields=["key"])
-        children = await call(session, "search_tasks", parent=[root], fields=["key"])
+        by_argument = await call(
+            session, "search_tasks", under=[root], fields=["key"], sort=["key"]
+        )
+        by_query = await call(
+            session, "search_tasks", query=f"under: {root}", fields=["key"], sort=["key"]
+        )
+        children = await call(session, "search_tasks", parent=[root], fields=["key"], sort=["key"])
         missing = await refuse(session, "search_tasks", under=["TRK-404"])
 
     assert [item["key"] for item in by_argument["items"]] == below
@@ -810,7 +820,9 @@ async def test_search_tasks_selects_the_whole_subtree_with_under_and_rest_agrees
     assert [item["key"] for item in children["items"]] == below[:1]
     assert "search_value_invalid" in missing
 
-    response = await auth_client.get("/api/v1/tasks", params={"under": root, "fields": "key"})
+    response = await auth_client.get(
+        "/api/v1/tasks", params={"under": root, "fields": "key", "sort": "key"}
+    )
     assert response.status_code == 200, response.text
     assert by_argument["items"] == response.json()["data"]
 

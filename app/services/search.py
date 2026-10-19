@@ -56,6 +56,7 @@ from app.domain.fields import FieldProblem
 from app.domain.query_language import parse_query, parse_sort_terms, parse_structured_value
 from app.domain.search import (
     AREA_FIELD,
+    DEFAULT_SORT_DESCENDING,
     DEFAULT_SORT_KEY,
     MANDATORY_FIELD,
     MAX_CONDITIONS,
@@ -717,14 +718,14 @@ def _value_rejected(
 
 
 def _resolve_sort(terms: Sequence[SortTerm]) -> tuple[ResolvedSort, ...]:
-    """Ключи сортировки. Без явного порядка — по ключу задачи, по возрастанию.
+    """Ключи сортировки. Без явного порядка — `-changed_at`: сначала свежие.
 
     Умолчание одно на весь проект и объявлено в домене: два разных умолчания на один и
     тот же список означали бы, что переход с одного вызова на другой молча меняет
     выдачу.
     """
     if not terms:
-        return (ResolvedSort(key=DEFAULT_SORT_KEY),)
+        return (ResolvedSort(key=DEFAULT_SORT_KEY, descending=DEFAULT_SORT_DESCENDING),)
     resolved: list[ResolvedSort] = []
     for term in terms:
         try:

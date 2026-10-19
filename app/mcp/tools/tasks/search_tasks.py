@@ -94,7 +94,12 @@ SortArg = Annotated[
     Field(
         description=(
             "Sort order, most significant key first; a leading `-` sorts descending. "
-            "Allowed: " + ", ".join(f"`{name}`" for name in sortable_names())
+            "Allowed: "
+            + ", ".join(f"`{name}`" for name in sortable_names())
+            + ". Left out, it is `-changed_at`: the latest touched first (the later of "
+            "`updated_at` and `last_entry_at`), long untouched last. A task changed "
+            "between two pages jumps to the front and is missed by a full walk: walk "
+            'everything with `sort=["key"]`'
         ),
         examples=[["-updated_at"]],
     ),
@@ -447,9 +452,10 @@ def register(tools: Toolset) -> None:
         projects that are not archived. A task of an archived project is found only when
         the search names it with `=` or `in`: its project in `project`, the task itself in
         `key`, its parent in `parent` or a root of its subtree in `under`. Rows are
-        ordered by `sort`, by key when it is left out. A long text is cut at the
-        installation limit and marked by `<field>_truncated` and `<field>_length`; one
-        task in full, with its case and links, is returned by `get_task`.
+        ordered by `sort`, latest touched first (`-changed_at`) when it is left out. A long
+        text is cut at the installation limit and marked by `<field>_truncated` and
+        `<field>_length`; one task in full, with its case and links, is returned by
+        `get_task`.
 
         An unknown field, operator or value is refused with `search_field_unknown`,
         `search_operator_not_supported` or `search_value_invalid`, the allowed values

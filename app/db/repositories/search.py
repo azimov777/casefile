@@ -695,6 +695,9 @@ def _expressions(key: SortKey) -> tuple[ColumnElement[Any], ...]:
             return (_priority_rank(),)
         case SortKey.LAST_ENTRY_AT:
             return (_last_entry_at_column(),)
+        case SortKey.CHANGED_AT:
+            # `GREATEST` пропускает NULL: у задачи без записей берётся `updated_at`.
+            return (func.greatest(Task.updated_at, _last_entry_at_column()),)
 
 
 def _order_by(keys: Sequence[tuple[ColumnElement[Any], bool]]) -> list[Any]:

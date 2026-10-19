@@ -76,7 +76,10 @@ _QUERY_DESCRIPTION = (
 _SORT_DESCRIPTION = (
     "Sort keys, most significant first. A leading `-` sorts descending: `-updated_at`. "
     "Sortable: " + ", ".join(f"`{name}`" for name in sortable_names()) + ". `key` orders "
-    "by project and task number, so `TRK-10` follows `TRK-2`. The result is always "
+    "by project and task number, so `TRK-10` follows `TRK-2`; `changed_at` is the later of "
+    "`updated_at` and `last_entry_at`. Left out, the order is `-changed_at`: the latest "
+    "touched first. A task changed between two pages jumps to the front and a full walk "
+    "misses it: walk everything with `sort=key`. The result is always "
     "tie-broken by task id, so paging stays stable while tasks are being created"
 )
 _FIELDS_DESCRIPTION = (
