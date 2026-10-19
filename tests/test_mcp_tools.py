@@ -1620,12 +1620,14 @@ async def test_a_withdrawn_question_leaves_the_package_and_stays_in_the_case(
             "outcome": "withdrawn",
             "replaced_by": None,
             "relayed_from": None,
+            "choice": None,
         },
         {
             "question_no": stale["no"],
             "outcome": "replaced",
             "replaced_by": fresh["no"],
             "relayed_from": None,
+            "choice": None,
         },
     ]
     assert "entry_fields_invalid" in twice
@@ -1688,12 +1690,14 @@ async def test_an_answer_filed_before_outcomes_reads_the_same_through_mcp_and_re
         "outcome": "answered",
         "replaced_by": None,
         "relayed_from": None,
+        "choice": None,
     }
     assert from_mcp["items"][1]["payload"] == {
         "question_no": new_question["no"],
         "outcome": "answered",
         "replaced_by": None,
         "relayed_from": None,
+        "choice": None,
     }
     # Опись читала ответ так всегда: все три двери сходятся на одном исходе.
     index = {line["no"]: line["facts"] for line in package["index"]}

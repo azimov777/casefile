@@ -1988,6 +1988,12 @@ export interface components {
              * @example null
              */
             relayed_from?: string | null;
+            /**
+             * Choice
+             * @description Label of the option chosen from the question's options; `null` otherwise
+             * @example null
+             */
+            choice?: string | null;
         };
         /**
          * AnswerFilingPayload
@@ -2017,6 +2023,12 @@ export interface components {
              * @example null
              */
             replaced_by?: number | null;
+            /**
+             * Choice
+             * @description Label of one of the question's options, as the question gave it; accepted only with `answered` and only on a question that has options. The body may then be empty
+             * @example null
+             */
+            choice?: string | null;
         };
         /**
          * AnswerOutcome
@@ -2065,6 +2077,12 @@ export interface components {
              * @example null
              */
             relayed_from: string | null;
+            /**
+             * Choice
+             * @description Label of the option chosen from the question's options; `null` otherwise
+             * @example null
+             */
+            choice: string | null;
         };
         /**
          * AnsweredQuestionRead
@@ -6097,6 +6115,33 @@ export interface components {
              * @description Whether the question holds the work
              */
             blocking?: boolean | null;
+            /**
+             * Options
+             * @description Labels of the answer options in the question's order; `null` without options
+             * @example [
+             *       "A",
+             *       "B"
+             *     ]
+             */
+            options?: string[] | null;
+        };
+        /**
+         * QuestionOptionPayload
+         * @description Один вариант ответа: короткая метка и текст.
+         */
+        QuestionOptionPayload: {
+            /**
+             * Label
+             * @description Short label, unique within the question; the answer names it in `choice`
+             * @example A
+             */
+            label: string;
+            /**
+             * Text
+             * @description What this option means
+             * @example Keep the v1 endpoint for one more month
+             */
+            text: string;
         };
         /**
          * QuestionOrder
@@ -6127,6 +6172,11 @@ export interface components {
              * @example true
              */
             blocking: boolean;
+            /**
+             * Options
+             * @description Answer options, 2 to 8 pairs of label and text; `null` for a question without options. A free-text answer stays possible
+             */
+            options?: components["schemas"]["QuestionOptionPayload"][] | null;
         };
         /**
          * ReleaseRead

@@ -112,6 +112,7 @@ class QuestionFactsView(BaseModel):
     type: Literal[EntryType.QUESTION]
     addressees: list[str] | None
     blocking: bool | None
+    options: list[str] | None = None
 
 
 class AnswerFactsView(BaseModel):
@@ -122,6 +123,7 @@ class AnswerFactsView(BaseModel):
     outcome: AnswerOutcomeSchema | None
     replaced_by: int | None
     relayed_from: str | None = None
+    choice: str | None = None
 
 
 class VerdictFactsView(BaseModel):
@@ -238,6 +240,7 @@ def facts(value: EntryFacts) -> FactsView:
                 type=value.type,
                 addressees=None if value.addressees is None else list(value.addressees),
                 blocking=value.blocking,
+                options=None if value.options is None else list(value.options),
             )
         case AnswerFacts():
             return AnswerFactsView(
@@ -246,6 +249,7 @@ def facts(value: EntryFacts) -> FactsView:
                 outcome=value.outcome,
                 replaced_by=value.replaced_by,
                 relayed_from=value.relayed_from,
+                choice=value.choice,
             )
         case VerdictFacts():
             return VerdictFactsView(

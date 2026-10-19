@@ -236,6 +236,7 @@ async def test_an_answer_without_an_outcome_is_filed_as_answered(
         "outcome": "answered",
         "replaced_by": None,
         "relayed_from": None,
+        "choice": None,
     }
     assert entry.title == f"Answer to TRK-1#{stale}"
 
@@ -292,6 +293,7 @@ async def test_a_replaced_question_names_the_question_that_replaced_it(
         "outcome": "replaced",
         "replaced_by": fresh,
         "relayed_from": None,
+        "choice": None,
     }
     assert replacement.title == f"Answer to TRK-1#{stale}: replaced by TRK-1#{fresh}"
     assert await _features(db_session, task_actor) == (1, 0)

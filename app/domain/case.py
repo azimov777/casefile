@@ -377,6 +377,16 @@ MAX_REF_LENGTH = 2_000
 #: ответа ни от кого.
 MAX_ADDRESSEES = 20
 
+#: Вариантов ответа у вопроса от двух до восьми: один — не выбор, а длинный список —
+#: уже не развилка, и такой вопрос надо разбить (TRK-718; макет TRK-710#9).
+MIN_QUESTION_OPTIONS = 2
+MAX_QUESTION_OPTIONS = 8
+
+#: Метка варианта — короткий знак вроде `A` или `да`, его же присылает ответ в `choice`;
+#: текст варианта — фраза в одну-две строки, не абзац.
+MAX_OPTION_LABEL_LENGTH = 32
+MAX_OPTION_TEXT_LENGTH = 500
+
 #: Поле нагрузки решения и заметки дела проекта или области: номера записей того же типа
 #: и того же дела, которые новая запись заменяет (TRK#89; TRK#57, раздел 5). Им
 #: же называется аргумент `add_project_entry`.
@@ -552,11 +562,16 @@ class LinkFacts:
 
 @dataclass(frozen=True, slots=True)
 class QuestionFacts:
-    """`question`: кому адресовано и держит ли работу."""
+    """`question`: кому адресовано, держит ли работу и есть ли варианты ответа.
+
+    `options` — метки вариантов в порядке вопроса; `None` у вопроса без вариантов и у
+    вопроса, заданного до их появления (TRK-718).
+    """
 
     type: Literal[EntryType.QUESTION] = EntryType.QUESTION
     addressees: tuple[str, ...] | None = None
     blocking: bool | None = None
+    options: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -572,6 +587,7 @@ class AnswerFacts:
     outcome: AnswerOutcome | None = None
     replaced_by: int | None = None
     relayed_from: str | None = None
+    choice: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1201,9 +1217,10 @@ def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str,
     подставлял умолчание полем модели, а MCP отдавал нагрузку как лежит, агент и человек
     читали один и тот же ответ по-разному (TRK-563).
 
-    Так читаются четыре типа. Ответ, подшитый до появления исходов (`question_no` и ничего
+    Так читаются пять типов. Ответ, подшитый до появления исходов (`question_no` и ничего
     более), читается как `answered` без заменившего вопроса (TRK-563); ответ, подшитый до
-    пометки «со слов человека», — с `relayed_from: null` (TRK-711). Решение и заметка
+    пометки «со слов человека», — с `relayed_from: null` (TRK-711), до выбора варианта — с
+    `choice: null`, вопрос до вариантов ответа — с `options: null` (TRK-718). Решение и заметка
     без `supersedes` — запись задачи, запись области до TRK-658, решение проекта до
     замены (TRK-554) и заметка проекта до TRK-656 — ничего не заменяют; без `draft_for` —
     любая, кроме черновика дела задачи (TRK-659), — не черновик. Правка раздела
@@ -1217,6 +1234,9 @@ def read_payload(entry_type: EntryType, payload: Mapping[str, Any]) -> dict[str,
         data["outcome"] = answer_outcome(payload).value
         data.setdefault("replaced_by", None)
         data.setdefault("relayed_from", None)
+        data.setdefault("choice", None)
+    elif entry_type is EntryType.QUESTION:
+        data.setdefault("options", None)
     elif entry_type in REPLACEABLE_ENTRY_TYPES:
         data.setdefault(SUPERSEDES_FIELD, [])
         data.setdefault(DRAFT_FIELD, None)
@@ -1490,8 +1510,8 @@ def _summary_part(value: Any) -> str:
 def _question_payload(
     raw: dict[str, Any], context: EntryContext, problems: FieldProblems
 ) -> dict[str, Any]:
-    """Адресаты; признак `blocking` кладёт трекер. Существование адресатов проверяет
-    сценарий.
+    """Адресаты и необязательные варианты ответа; признак `blocking` кладёт трекер.
+    Существование адресатов проверяет сценарий.
 
     Вопрос бывает только в деле обсуждения (`build_entry` отвергает его в деле задачи), и
     признак у него не выбирают (решение `TRK#51`, п. 2): любой вопрос обсуждения держит
@@ -1500,12 +1520,59 @@ def _question_payload(
     любом деле, и прежние вопросы дела задачи читаются тем же разбором.
     """
     del context
-    _reject_extra(raw, ("addressees",), problems)
+    _reject_extra(raw, ("addressees", "options"), problems)
     payload: dict[str, Any] = {}
     with problems.field("addressees"):
         payload["addressees"] = _addressees(raw.get("addressees"))
     payload["blocking"] = True
+    with problems.field("options"):
+        payload["options"] = _options(raw.get("options"))
     return payload
+
+
+def _options(value: Any) -> list[dict[str, str]] | None:
+    """Варианты ответа: список пар `{label, text}`, от двух до восьми.
+
+    Метка короткая, непустая и уникальная без учёта регистра — по ней ответ называет
+    выбранный вариант (`choice`), и `A` с `a` в одном вопросе спутали бы человека. Текст
+    непустой. Лишний ключ пары отвергается, а не выбрасывается молча. Нет значения — у
+    вопроса нет вариантов, и в нагрузку идёт `null`.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        raise FieldProblem("not_a_list")
+    if not MIN_QUESTION_OPTIONS <= len(value) <= MAX_QUESTION_OPTIONS:
+        raise FieldProblem(
+            "out_of_range", min=MIN_QUESTION_OPTIONS, max=MAX_QUESTION_OPTIONS, got=len(value)
+        )
+    options: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for index, item in enumerate(value, start=1):
+        if not isinstance(item, Mapping):
+            raise FieldProblem("not_an_object", index=index)
+        extra = sorted(set(item) - {"label", "text"})
+        if extra:
+            raise FieldProblem("not_allowed", index=index, keys=extra, allowed=["label", "text"])
+        label, text = item.get("label"), item.get("text")
+        if not isinstance(label, str) or not isinstance(text, str):
+            raise FieldProblem("not_a_string", index=index)
+        label, text = label.strip(), text.strip()
+        if not label or not text:
+            raise FieldProblem("empty_item", index=index)
+        if len(label) > MAX_OPTION_LABEL_LENGTH:
+            raise FieldProblem(
+                "label_too_long", index=index, max=MAX_OPTION_LABEL_LENGTH, got=len(label)
+            )
+        if len(text) > MAX_OPTION_TEXT_LENGTH:
+            raise FieldProblem(
+                "text_too_long", index=index, max=MAX_OPTION_TEXT_LENGTH, got=len(text)
+            )
+        if label.casefold() in seen:
+            raise FieldProblem("duplicate_label", index=index, label=label)
+        seen.add(label.casefold())
+        options.append({"label": label, "text": text})
+    return options
 
 
 def _conclusion_payload(
@@ -1559,7 +1626,9 @@ def _answer_payload(
     пустыми, — по той же причине, что `task` у резолюции: форма записи одна на все
     интерфейсы.
     """
-    _reject_extra(raw, ("question_no", "outcome", "replaced_by", "relayed_from"), problems)
+    _reject_extra(
+        raw, ("question_no", "outcome", "replaced_by", "relayed_from", "choice"), problems
+    )
     payload: dict[str, Any] = {}
     with problems.field("question_no"):
         payload["question_no"] = _entry_number(raw.get("question_no"))
@@ -1582,7 +1651,32 @@ def _answer_payload(
 
     with problems.field("relayed_from"):
         payload["relayed_from"] = _relayed_from(raw.get("relayed_from"), outcome)
+
+    with problems.field("choice"):
+        payload["choice"] = _choice(raw.get("choice"), outcome)
     return payload
+
+
+def _choice(value: Any, outcome: AnswerOutcome | None) -> str | None:
+    """Метка выбранного варианта — только в ответе по существу.
+
+    Здесь форма: непустая строка и исход `answered`. Что метка есть среди вариантов
+    вопроса, проверяет сценарий — ему нужен сам вопрос.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise FieldProblem("not_a_string")
+    label = value.strip()
+    if not label:
+        raise FieldProblem("empty")
+    if outcome is not AnswerOutcome.ANSWERED:
+        raise FieldProblem(
+            "not_allowed",
+            only_with=AnswerOutcome.ANSWERED.value,
+            got=outcome.value if outcome else None,
+        )
+    return label
 
 
 def _relayed_from(value: Any, outcome: AnswerOutcome | None) -> str | None:

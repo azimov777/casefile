@@ -76,7 +76,7 @@ async def test_ask_about_a_task_opens_a_discussion_and_attaches_the_task(
         "Сколько?",
         address,
     )
-    assert question["payload"] == {"addressees": ["owner"], "blocking": True}
+    assert question["payload"] == {"addressees": ["owner"], "blocking": True, "options": None}
     assert [item["type"] for item in task_case["items"]][-1] == "attached"
     assert "question" not in {item["type"] for item in task_case["items"]}
     assert task_case["items"][-1]["title"] == f"Attached to discussion {address}"

@@ -1261,13 +1261,14 @@ async def ask_in_discussion(
     addressees: Any,
     title: Any,
     body: Any = "",
+    options: Any = None,
     refs: Any = (),
 ) -> Entry:
     """Вопрос участникам в существующем обсуждении (`TRK#51`, п. 6).
 
     Признака `blocking` нет: любой вопрос обсуждения держит привязанные задачи, и в
-    нагрузку его кладёт домен. Первый вопрос по задаче заводит обсуждение сам —
-    `discussions.ask_about_task`.
+    нагрузку его кладёт домен. `options` — необязательные варианты ответа (TRK-718).
+    Первый вопрос по задаче заводит обсуждение сам — `discussions.ask_about_task`.
     """
     return await append_discussion_entry(
         session,
@@ -1276,7 +1277,7 @@ async def ask_in_discussion(
         type=EntryType.QUESTION,
         title=title,
         body=body,
-        payload={"addressees": addressees},
+        payload={"addressees": addressees, "options": options},
         refs=refs,
     )
 
@@ -1291,6 +1292,7 @@ async def answer_in_discussion(
     outcome: Any = None,
     replaced_by: Any = None,
     relayed_from: Any = None,
+    choice: Any = None,
     refs: Any = (),
 ) -> Entry:
     """Ответ на вопрос **этого** обсуждения, его снятие или замена — правила те же, что у
@@ -1306,6 +1308,7 @@ async def answer_in_discussion(
             "outcome": outcome,
             "replaced_by": replaced_by,
             "relayed_from": relayed_from,
+            "choice": choice,
         },
         refs=refs,
     )
@@ -1843,6 +1846,8 @@ async def _check_question_no(
                 no=question_no,
                 answer_no=answered_by,
             )
+    if question is not None and question.type is EntryType.QUESTION:
+        _check_choice(draft, question, problems)
 
     replaced_by = draft.payload.get("replaced_by")
     if replaced_by is None:
@@ -1858,6 +1863,24 @@ async def _check_question_no(
             no=replaced_by,
             got=replacement.type.value,
         )
+
+
+def _check_choice(draft: EntryDraft, question: Entry, problems: FieldProblems) -> None:
+    """`choice` ответа — метка одного из вариантов вопроса (TRK-718).
+
+    Вопрос без вариантов выбора не принимает вовсе: метке не с чем сравниться, и ответ с
+    ней был бы данными, которых никто не предлагал. Метка сравнивается точно, как её
+    прислал вопрос: домен убрал из обеих только крайние пробелы.
+    """
+    choice = draft.payload.get("choice")
+    if choice is None:
+        return
+    options = question.payload.get("options") or []
+    labels = [option["label"] for option in options]
+    if not labels:
+        problems.add("choice", "question_has_no_options", no=question.no)
+    elif choice not in labels:
+        problems.add("choice", "not_an_option", no=question.no, got=choice, allowed=labels)
 
 
 async def _check_discussion_question_no(
@@ -1891,6 +1914,8 @@ async def _check_discussion_question_no(
                 no=question_no,
                 answer_no=answered_by,
             )
+    if question is not None and question.type is EntryType.QUESTION:
+        _check_choice(draft, question, problems)
     replaced_by = draft.payload.get("replaced_by")
     if replaced_by is None:
         return

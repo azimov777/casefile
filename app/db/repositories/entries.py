@@ -1663,6 +1663,7 @@ def _read_facts(entry_type: EntryType, raw: Any) -> EntryFacts:
             return QuestionFacts(
                 addressees=None if addressees is None else tuple(str(n) for n in addressees),
                 blocking=values.get("blocking"),
+                options=_option_labels(values.get("options")),
             )
         case EntryType.ANSWER:
             return AnswerFacts(
@@ -1670,6 +1671,7 @@ def _read_facts(entry_type: EntryType, raw: Any) -> EntryFacts:
                 outcome=answer_outcome(values),
                 replaced_by=values.get("replaced_by"),
                 relayed_from=values.get("relayed_from"),
+                choice=values.get("choice"),
             )
         case EntryType.VERDICT:
             return VerdictFacts(
@@ -1727,6 +1729,13 @@ def _numbers_of(
     if checks is None:
         return None
     return tuple(item.check_no for item in checks if item.outcome is outcome)
+
+
+def _option_labels(options: Any) -> tuple[str, ...] | None:
+    """Метки вариантов ответа из нагрузки вопроса; вопрос без вариантов — `None`."""
+    if not options:
+        return None
+    return tuple(str(option["label"]) for option in options)
 
 
 def _as_enum(enum: Any, value: Any) -> Any:
