@@ -127,6 +127,22 @@ filed twice. If you sent no key, read the case before you repeat
 (`read_entries(key="TRK-42", after_no=<the last number you saw>)`): a blind repeat files a
 second entry.
 
+**Refer backward, never forward.** An entry cannot name its own number, nor the number of
+an entry you have not filed yet, and a number you guess is wrong when your own summary or
+verdict takes it in between. Order the calls so that every reference points at something
+that already exists:
+
+- File the entry you refer to first, take its `no` from the result of the call, then file
+  the entry that cites it in `refs` (`TRK-42#7`, `TRK#58`).
+- File the task before the entry or question that names its key: `create_task` first,
+  then the text with the key it returned.
+- Leave your own number out of the body of an entry. Name the entry by its title; a reader
+  finds a decision from the task that cites it, with `search_tasks(decision=["TRK#58"])`.
+- File nothing else between the call whose result gives a number and the call that uses it.
+
+If a reference already went out wrong, do not wait for a way to edit it: an entry is not
+edited. File a new entry that says which reference was wrong and gives the right one.
+
 ### Knowledge that outlives the task
 
 What you learn or choose may bind other tasks: a rule others must follow, a fact about how
