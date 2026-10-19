@@ -89,7 +89,7 @@ x-app-service: &app-service
 # Ревизия службы `updater`: по ней `updater-renew` узнаёт обновлятор прежнего выпуска.
 # Это хеш определения `updater` без самой метки; тест сверяет его и называет верное
 # значение, когда служба поменялась (`tests/test_auto_update.py`).
-x-updater-revision: &updater-revision "a5be5648d537"
+x-updater-revision: &updater-revision "d01ee1349d71"
 
 services:
   db:
@@ -286,6 +286,15 @@ services:
   # проверка здоровья — ждёт тишины или пропускает. Установщик дожидается конца её
   # проверки (`/tmp/checking` в контейнере) и на своё время её останавливает (TRK-131).
   #
+  # Порты: на Docker Desktop (`docker info` отвечает `Docker Desktop`) служба на старте, после
+  # затишья, и в каждой проверке после обновления стучится в опубликованные порты `mcp`
+  # (`/health`) и `ui` (`/`, `Host: localhost`) через `host.docker.internal` — тем путём,
+  # каким идёт клиент с хоста. Здоровая служба, чей порт не ответил (пустой ответ, сброс),
+  # перезапускается `docker restart` — один раз за проверку; не помогло — строка в лог до
+  # следующей проверки. Идёт и при `CASEFILE_AUTO_UPDATE=false` (на старте), и при
+  # `CASEFILE_UPDATE_INTERVAL=0`. Порт на другом адресе, чем петля и все адреса, и любая
+  # другая платформа пропускаются строкой в лог (TRK-723, `TRK/docker#60`).
+  #
   # `pull`, а не отдельный запрос к манифесту: `pull` неизменного тега и есть запрос
   # манифеста, а образ всё равно нужен локально — достать из него этот файл. Раз в час два
   # образа — далеко от лимитов анонимного ghcr.io. Проверки идут не по часам, а от старта
@@ -317,6 +326,9 @@ services:
       COMPOSE_FILE: docker-compose.prod.yml
       CASEFILE_AUTO_UPDATE: ${CASEFILE_AUTO_UPDATE:-true}
       CASEFILE_UPDATE_INTERVAL: ${CASEFILE_UPDATE_INTERVAL:-1}
+      # Порт `mcp` внутри сети: по нему `docker compose port` находит порт хоста. Тот же
+      # `${…:-8100}`, что и у службы `mcp` (TRK/docker#22).
+      TRACKER_MCP_PORT: ${TRACKER_MCP_PORT:-8100}
     # По этой метке `updater-renew` узнаёт обновлятор прежнего выпуска.
     labels:
       casefile.updater.revision: *updater-revision
@@ -703,6 +715,100 @@ services:
           done
         }
 
+        # Ответил ли по HTTP адрес: любой код — ответ, пустой ответ и сброс — нет. Иначе
+        # служба, которой чем-то не угодил заголовок, перезапускалась бы зря.
+        answers() {
+          wget -S -q -O /dev/null -T 5 "$$@" 2>&1 | grep -q 'HTTP/'
+        }
+
+        # Порт хоста, куда опубликован порт службы, если он на петле или на всех адресах:
+        # только тогда `host.docker.internal` приведёт к тому же пробросу. Код 2 — порт
+        # опубликован на другом адресе, и судить о нём отсюда нельзя.
+        published_port() {
+          mapped=$$(docker compose port "$$1" "$$2" 2>/dev/null | head -n 1)
+          [ -n "$$mapped" ] || return 1
+          case "$${mapped%:*}" in
+            127.0.0.1 | 0.0.0.0 | :: | '[::]') echo "$${mapped##*:}" ;;
+            *) return 2 ;;
+          esac
+        }
+
+        # Адрес службы с хоста, тем же путём, каким к ней идёт клиент: через проброс Docker.
+        # У `ui` заголовок `Host` — `localhost`: имя `host.docker.internal` его nginx
+        # отвергает кодом 421.
+        reaches() {
+          case "$$1" in
+            ui) answers --header 'Host: localhost' "http://host.docker.internal:$$2/" ;;
+            *) answers "http://host.docker.internal:$$2/health" ;;
+          esac
+        }
+
+        # Перезапуск одной службы, чей порт не отвечает. Один раз за проверку: ждёт здоровья
+        # службы и несколько раз пробует порт — проброс встаёт на секунды позже здоровья.
+        heal() {
+          container=$$(docker compose ps -q "$$1")
+          log "port $$2 of $$1 does not answer through the Docker proxy; restarting $$1"
+          if ! docker restart "$$container" >/dev/null; then
+            log "could not restart $$1 (port $$2)"
+            return 0
+          fi
+          i=0
+          while [ "$$i" -lt 36 ]; do
+            [ "$$(docker inspect -f '{{.State.Health.Status}}' "$$container")" != healthy ] || break
+            sleep 5
+            i=$$((i + 1))
+          done
+          i=0
+          while [ "$$i" -lt 3 ]; do
+            sleep 5
+            if reaches "$$1" "$$2"; then
+              log "$$1 restarted, port $$2 answers"
+              return 0
+            fi
+            i=$$((i + 1))
+          done
+          log "port $$2 of $$1 still does not answer after a restart; leaving it until the next check"
+        }
+
+        # Проверка опубликованных портов `mcp` и `ui` (TRK-723): после перезапуска Docker
+        # Desktop проброс бывает повисшим при здоровой службе, а её проверка здоровья идёт
+        # изнутри и поломки не видит. Только на Docker Desktop: на других хост не виден по
+        # `host.docker.internal`. Не ходит, пока контур поднимает другой compose, и трогает
+        # лишь здоровую службу.
+        ports() {
+          engine=$$(docker info --format '{{.OperatingSystem}}' 2>/dev/null)
+          if [ "$$engine" != "Docker Desktop" ]; then
+            [ -n "$$ports_skipped" ] || log "published ports are not checked here (not Docker Desktop)"
+            ports_skipped=1
+            return 0
+          fi
+          if ! quiet; then
+            log "another docker compose is still starting this installation; skipping the port check"
+            return 0
+          fi
+          for entry in "mcp $${TRACKER_MCP_PORT:-8100}" "ui 80"; do
+            set -- $$entry
+            published=$$(published_port "$$1" "$$2")
+            case $$? in
+              0) ;;
+              *)
+                log "cannot tell where the port of $$1 is published; not checking it"
+                continue
+                ;;
+            esac
+            container=$$(docker compose ps -q "$$1")
+            state=
+            [ -z "$$container" ] || state=$$(docker inspect -f '{{.State.Health.Status}}' "$$container")
+            if [ "$$state" != healthy ]; then
+              log "$$1 is not healthy; not checking its port"
+            elif reaches "$$1" "$$published"; then
+              log "port $$published of $$1 answers"
+            else
+              heal "$$1" "$$published"
+            fi
+          done
+        }
+
         # Идёт проверка — в своём `/tmp` лежит файл: по нему установщик ждёт её конца.
         # Процесс `docker` в `docker top` виден не всё время проверки: её ожидания —
         # `sleep`. Остановленный посреди проверки обновлятор оставил бы файл, поэтому на
@@ -710,6 +816,7 @@ services:
         check() {
           touch /tmp/checking
           update
+          ports
           rm -f /tmp/checking
         }
 
@@ -723,6 +830,7 @@ services:
         docker rmi "$$(kept ui:previous)" >/dev/null 2>&1 || true
         if [ "$$CASEFILE_AUTO_UPDATE" = "false" ]; then
           log "auto-update is off (CASEFILE_AUTO_UPDATE=false)"
+          ports
           while :; do sleep 86400 & wait $$!; done
         fi
         check
