@@ -300,6 +300,11 @@ echo "wget $*" >>"$CALLS"
 for url; do :; done
 port=${url##*:}
 port=${port%%/*}
+if [ -s "$SCENE/flaky" ]; then
+  : >"$SCENE/flaky"
+  echo "wget: download timed out" >&2
+  exit 1
+fi
 if grep -qx "$port" "$SCENE/silent" 2>/dev/null; then
   echo "wget: error getting response" >&2
   exit 1
@@ -1172,3 +1177,14 @@ def test_a_port_published_on_another_address_is_not_judged_from_here(updater: Up
 
     assert "cannot tell where the port of mcp is published; not checking it" in out
     assert not updater.called("restart ")
+
+
+def test_one_missed_probe_does_not_restart_a_healthy_service(updater: Updater) -> None:
+    """Первая проба порта не ответила (машина под нагрузкой), вторая ответила — без `restart`."""
+    updater.set(engine=DESKTOP, flaky="once\n")
+
+    out = updater.run("updater", "ports\n")
+
+    assert not updater.called("restart ")
+    assert "port 8100 of mcp answers" in out
+    assert "restarting" not in out

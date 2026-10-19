@@ -89,7 +89,7 @@ x-app-service: &app-service
 # Ревизия службы `updater`: по ней `updater-renew` узнаёт обновлятор прежнего выпуска.
 # Это хеш определения `updater` без самой метки; тест сверяет его и называет верное
 # значение, когда служба поменялась (`tests/test_auto_update.py`).
-x-updater-revision: &updater-revision "d01ee1349d71"
+x-updater-revision: &updater-revision "ca382d084c27"
 
 services:
   db:
@@ -743,6 +743,19 @@ services:
           esac
         }
 
+        # Порт не ответил ни на одну из трёх проб с паузой в 5 с: одна неудача — не повод
+        # перезапускать, под нагрузкой машины ответ `/health` за 5 с не гарантирован, а
+        # перезапуск `mcp` рвёт сессии всех агентов.
+        reaches_often() {
+          n=0
+          while [ "$$n" -lt 3 ]; do
+            [ "$$n" -eq 0 ] || sleep 5
+            ! reaches "$$1" "$$2" || return 0
+            n=$$((n + 1))
+          done
+          return 1
+        }
+
         # Перезапуск одной службы, чей порт не отвечает. Один раз за проверку: ждёт здоровья
         # службы и несколько раз пробует порт — проброс встаёт на секунды позже здоровья.
         heal() {
@@ -801,7 +814,7 @@ services:
             [ -z "$$container" ] || state=$$(docker inspect -f '{{.State.Health.Status}}' "$$container")
             if [ "$$state" != healthy ]; then
               log "$$1 is not healthy; not checking its port"
-            elif reaches "$$1" "$$published"; then
+            elif reaches_often "$$1" "$$published"; then
               log "port $$published of $$1 answers"
             else
               heal "$$1" "$$published"
