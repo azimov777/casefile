@@ -131,7 +131,7 @@
 | `attribute_value_too_long` | Attribute value is too long | Значение атрибута длиннее предела (`app/domain/attributes.py`). |
 | `current_password_mismatch` | Current password does not match | Смена своего пароля прислала неверный прежний пароль. |
 | `cursor_with_offset` | Page is addressed either by cursor or by offset, not by both | Страница адресована сразу двумя способами: и курсором, и смещением. |
-| `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. Снять (`withdrawn`) или заменить (`replaced`) можно только вопрос, на который ещё не ответили: у отвеченного это `already_answered`. |
+| `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. Снять (`withdrawn`) или заменить (`replaced`) можно только вопрос, на который ещё не ответили: у отвеченного это `already_answered`. Ответ с `choice`, которой нет среди вариантов вопроса, — `not_an_option`; у вопроса без вариантов — `question_has_no_options`. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
 | `invalid_area_key` | Area key is invalid | Адрес новой области не `ПРОЕКТ/ключ` или ключ не по шаблону. |
 | `invalid_attribute_name` | Attribute name is invalid | Имя атрибута не соответствует шаблону. |

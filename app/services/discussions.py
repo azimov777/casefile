@@ -237,6 +237,7 @@ async def ask_about_task(
     addressees: Any,
     title: Any,
     body: Any = "",
+    options: Any = None,
     refs: Any = (),
 ) -> DiscussionOpening:
     """Вопрос по задаче: заводит обсуждение этим вопросом в проекте задачи и привязывает к
@@ -254,6 +255,7 @@ async def ask_about_task(
         body=body,
         refs=refs,
         addressees=addressees,
+        options=options,
         tasks=[task],
     )
 
@@ -268,6 +270,7 @@ async def open_discussion(
     body: Any = "",
     refs: Any = (),
     addressees: Any = None,
+    options: Any = None,
     tasks: Sequence[Task] = (),
 ) -> DiscussionOpening:
     """Заводит обсуждение первой записью — запиской или вопросом — и привязывает задачи
@@ -283,7 +286,9 @@ async def open_discussion(
     подшивка: `created`, первая запись, привязки. Отказ любой подшивки откатывает всё
     действие, и номер, посчитанный `max + 1`, не сгорает.
     """
-    payload = {"addressees": addressees} if opening == EntryType.QUESTION else None
+    payload = (
+        {"addressees": addressees, "options": options} if opening == EntryType.QUESTION else None
+    )
     if opening not in OPENING_ENTRY_TYPES:
         problems = FieldProblems()
         problems.add(

@@ -11119,6 +11119,21 @@
             "examples": [
               null
             ]
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice",
+            "description": "Label of the option chosen from the question's options; `null` otherwise",
+            "examples": [
+              null
+            ]
           }
         },
         "type": "object",
@@ -11165,6 +11180,22 @@
             ],
             "title": "Replaced By",
             "description": "Number of a later `question` entry of the same case that replaces this one; required with `replaced` and not accepted with any other outcome",
+            "examples": [
+              null
+            ]
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice",
+            "description": "Label of one of the question's options, as the question gave it; accepted only with `answered` and only on a question that has options. The body may then be empty",
             "examples": [
               null
             ]
@@ -11236,6 +11267,21 @@
             "examples": [
               null
             ]
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice",
+            "description": "Label of the option chosen from the question's options; `null` otherwise",
+            "examples": [
+              null
+            ]
           }
         },
         "additionalProperties": false,
@@ -11244,7 +11290,8 @@
           "question_no",
           "outcome",
           "replaced_by",
-          "relayed_from"
+          "relayed_from",
+          "choice"
         ],
         "title": "AnswerPayload",
         "description": "Ответ, как его **читают**: исход есть всегда.\n\nТрекер кладёт `outcome` и `replaced_by` в нагрузку каждого нового ответа. Ответ,\nподшитый до появления исхода, этих ключей не несёт; значения «тогда» — `answered` и\n`null` — подставляет не эта модель, а `read_payload` (`app/domain/case.py`), одно\nправило на REST и на MCP. Поэтому у полей нет умолчаний: модель только подтверждает,\nчто правило отработало, а не повторяет его."
@@ -18262,6 +18309,27 @@
             ],
             "title": "Blocking",
             "description": "Whether the question holds the work"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options",
+            "description": "Labels of the answer options in the question's order; `null` without options",
+            "examples": [
+              [
+                "A",
+                "B"
+              ]
+            ]
           }
         },
         "type": "object",
@@ -18270,6 +18338,38 @@
         ],
         "title": "QuestionFactsRead",
         "description": "Вопрос: кому адресован и держит ли работу."
+      },
+      "QuestionOptionPayload": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Label",
+            "description": "Short label, unique within the question; the answer names it in `choice`",
+            "examples": [
+              "A"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text",
+            "description": "What this option means",
+            "examples": [
+              "Keep the v1 endpoint for one more month"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "label",
+          "text"
+        ],
+        "title": "QuestionOptionPayload",
+        "description": "Один вариант ответа: короткая метка и текст."
       },
       "QuestionOrder": {
         "type": "string",
@@ -18304,6 +18404,23 @@
             "examples": [
               true
             ]
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/QuestionOptionPayload"
+                },
+                "type": "array",
+                "maxItems": 8,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options",
+            "description": "Answer options, 2 to 8 pairs of label and text; `null` for a question without options. A free-text answer stays possible"
           }
         },
         "additionalProperties": false,

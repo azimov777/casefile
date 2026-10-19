@@ -252,7 +252,7 @@ def test_addressees_are_canonicalised_and_deduplicated() -> None:
         payload={"addressees": ["Owner", "owner", " OWNER "]},
     )
 
-    assert draft.payload == {"addressees": ["owner"], "blocking": True}
+    assert draft.payload == {"addressees": ["owner"], "blocking": True, "options": None}
 
 
 def test_a_verdict_names_the_allowed_range_of_check_numbers() -> None:
@@ -298,6 +298,7 @@ def test_an_answer_without_an_outcome_is_answered_and_carries_both_keys() -> Non
         "outcome": "answered",
         "replaced_by": None,
         "relayed_from": None,
+        "choice": None,
     }
     assert draft.title == "Answer to TRK-1#7"
 
@@ -315,6 +316,7 @@ def test_an_answer_filed_before_outcomes_is_read_as_answered() -> None:
         "outcome": "answered",
         "replaced_by": None,
         "relayed_from": None,
+        "choice": None,
     }
     assert stored == {"question_no": 7}
 
@@ -322,10 +324,34 @@ def test_an_answer_filed_before_outcomes_is_read_as_answered() -> None:
 @pytest.mark.parametrize(
     "stored",
     [
-        {"question_no": 7, "outcome": "answered", "replaced_by": None, "relayed_from": None},
-        {"question_no": 7, "outcome": "answered", "replaced_by": None, "relayed_from": "owner"},
-        {"question_no": 7, "outcome": "withdrawn", "replaced_by": None, "relayed_from": None},
-        {"question_no": 7, "outcome": "replaced", "replaced_by": 12, "relayed_from": None},
+        {
+            "question_no": 7,
+            "outcome": "answered",
+            "replaced_by": None,
+            "relayed_from": None,
+            "choice": None,
+        },
+        {
+            "question_no": 7,
+            "outcome": "answered",
+            "replaced_by": None,
+            "relayed_from": "owner",
+            "choice": "A",
+        },
+        {
+            "question_no": 7,
+            "outcome": "withdrawn",
+            "replaced_by": None,
+            "relayed_from": None,
+            "choice": None,
+        },
+        {
+            "question_no": 7,
+            "outcome": "replaced",
+            "replaced_by": 12,
+            "relayed_from": None,
+            "choice": None,
+        },
     ],
 )
 def test_an_answer_with_an_outcome_is_read_as_it_was_filed(stored: dict[str, Any]) -> None:
@@ -333,11 +359,19 @@ def test_an_answer_with_an_outcome_is_read_as_it_was_filed(stored: dict[str, Any
 
 
 def test_the_payload_of_other_types_is_read_as_it_lies() -> None:
-    """Правило чтения заведено для ответа; чужую нагрузку оно не дополняет."""
+    """Правило чтения заведено для ответа и вопроса; чужую нагрузку оно не дополняет."""
+    stored = {"query": "x"}
+
+    assert read_payload(EntryType.SUMMARY, stored) == stored
+    assert read_payload(EntryType.NOTE, {}) == {}
+
+
+def test_a_question_filed_before_options_is_read_without_them() -> None:
+    """Вопрос без ключа `options` читается с `options: null`; в базе ничего не меняется."""
     stored = {"addressees": ["owner"], "blocking": True}
 
-    assert read_payload(EntryType.QUESTION, stored) == stored
-    assert read_payload(EntryType.QUESTION, {}) == {}
+    assert read_payload(EntryType.QUESTION, stored) == {**stored, "options": None}
+    assert stored == {"addressees": ["owner"], "blocking": True}
 
 
 def test_a_withdrawal_names_its_outcome_in_the_title() -> None:
@@ -353,6 +387,7 @@ def test_a_withdrawal_names_its_outcome_in_the_title() -> None:
         "outcome": "withdrawn",
         "replaced_by": None,
         "relayed_from": None,
+        "choice": None,
     }
     assert draft.title == "Answer to TRK-1#7: withdrawn"
 
@@ -370,6 +405,7 @@ def test_a_replacement_names_the_question_that_replaced_it() -> None:
         "outcome": "replaced",
         "replaced_by": 12,
         "relayed_from": None,
+        "choice": None,
     }
     assert draft.title == "Answer to TRK-1#7: replaced by TRK-1#12"
 

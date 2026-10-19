@@ -335,6 +335,7 @@ export function answerEntry(no: number, taskKey: string, questionNo: number, bod
       outcome: 'answered',
       replaced_by: null,
       relayed_from: null,
+      choice: null,
     },
   };
 }
@@ -359,6 +360,7 @@ export function withdrawalEntry(
       outcome: replacedBy === null ? 'withdrawn' : 'replaced',
       replaced_by: replacedBy,
       relayed_from: null,
+      choice: null,
     },
   };
 }
@@ -495,7 +497,13 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
       return {
         ...base,
         type,
-        payload: { question_no: 1, outcome: 'answered', replaced_by: null, relayed_from: null },
+        payload: {
+          question_no: 1,
+          outcome: 'answered',
+          replaced_by: null,
+          relayed_from: null,
+          choice: null,
+        },
       };
     case 'verdict':
       return verdictEntry(no, taskKey);
@@ -743,6 +751,7 @@ export function discussionAnswer(address: string, no: number, questionNo: number
       outcome: 'answered',
       replaced_by: null,
       relayed_from: null,
+      choice: null,
     },
   };
 }
@@ -765,6 +774,7 @@ export function relayedDiscussionAnswer(
       outcome: 'answered',
       replaced_by: null,
       relayed_from: relayedFrom,
+      choice: null,
     },
   };
 }

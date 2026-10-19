@@ -185,7 +185,7 @@ async def test_a_discussion_is_numbered_inside_its_project_and_read_by_its_addre
     created, question = await _entries(db_session, first)
     assert (created.type, created.no, created.title) == (EntryType.CREATED, 1, "Discussion created")
     assert (question.type, question.no, question.title) == (EntryType.QUESTION, 2, first.title)
-    assert question.payload == {"addressees": ["owner"], "blocking": True}
+    assert question.payload == {"addressees": ["owner"], "blocking": True, "options": None}
     assert (created.discussion_id, created.task_id, created.project_id) == (first.id, None, None)
 
 
