@@ -682,6 +682,10 @@ def sort_keys(terms: Sequence[ResolvedSort]) -> list[tuple[ColumnElement[Any], b
     for term in terms:
         for expression in _expressions(term.key):
             keys.append((expression, term.descending))
+        if term.key is SortKey.CHANGED_AT:
+            # Равное время решает ключ задачи по возрастанию в обе стороны: список
+            # задач, тронутых в одно мгновение, не зависит от часов (TRK-726).
+            keys.extend((tie, False) for tie in (Project.key, TASK_NUMBER))
     return keys
 
 

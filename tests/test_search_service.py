@@ -1157,6 +1157,18 @@ async def test_the_default_order_puts_the_latest_touched_first(
     ]
 
 
+async def test_equal_changed_at_falls_back_to_the_task_key_ascending_both_ways(
+    db_session: AsyncSession, task_actor: Actor, project: Project
+) -> None:
+    """В одной транзакции у задач одно время: равные `changed_at` идут по ключу, возрастая."""
+    made = [await make(db_session, task_actor, project, f"задача {number}") for number in range(11)]
+    expected = [task.key for task in made]
+
+    assert await keys(db_session, task_actor, limit=200) == expected
+    assert await keys(db_session, task_actor, sort=["-changed_at"], limit=200) == expected
+    assert await keys(db_session, task_actor, sort=["changed_at"], limit=200) == expected
+
+
 async def test_walking_every_page_without_sort_returns_each_task_once_with_equal_times(
     db_session: AsyncSession, task_actor: Actor, project: Project
 ) -> None:
