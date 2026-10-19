@@ -74,7 +74,7 @@ async def _archive(session: AsyncSession, world: World, actor: Actor) -> None:
 
 
 async def _keys(session: AsyncSession, actor: Actor, query: str | None = None) -> list[str]:
-    found = await search_service.search_tasks(session, actor=actor, query=query)
+    found = await search_service.search_tasks(session, actor=actor, query=query, sort=["key"])
     return [item.task.key for item in found.page.items]
 
 
@@ -150,6 +150,7 @@ async def test_structured_filter_and_total_follow_the_same_rule(
         db_session,
         actor=task_actor,
         structured=[StructuredTerm(name="project", values=["TRK"])],
+        sort=["key"],
         with_total=True,
     )
     negated = await search_service.search_tasks(
@@ -250,8 +251,8 @@ async def test_rest_hides_the_archive_by_default(auth_client: AsyncClient, world
     card = await auth_client.get("/api/v1/projects/TRK")
     bootstrap = await auth_client.get("/api/v1/bootstrap")
     full_bootstrap = await auth_client.get("/api/v1/bootstrap", params={"include_archived": True})
-    tasks = await auth_client.get("/api/v1/tasks")
-    by_project = await auth_client.get("/api/v1/tasks", params={"project": "TRK"})
+    tasks = await auth_client.get("/api/v1/tasks", params={"sort": "key"})
+    by_project = await auth_client.get("/api/v1/tasks", params={"project": "TRK", "sort": "key"})
     by_key = await auth_client.get("/api/v1/tasks", params={"query": "key: TRK-1"})
     by_parent = await auth_client.get("/api/v1/tasks", params={"parent": "OPS-1"})
     questions = await auth_client.get("/api/v1/questions")
@@ -292,8 +293,10 @@ async def test_mcp_hides_the_archive_by_default(
         listed = await call(session, "list_projects")
         everything = await call(session, "list_projects", include_archived=True)
         card = await call(session, "get_project", key="TRK")
-        found = await call(session, "search_tasks", fields=["key"])
-        by_project = await call(session, "search_tasks", query="project: TRK", fields=["key"])
+        found = await call(session, "search_tasks", fields=["key"], sort=["key"])
+        by_project = await call(
+            session, "search_tasks", query="project: TRK", fields=["key"], sort=["key"]
+        )
         by_key = await call(session, "search_tasks", key=["TRK-1"], fields=["key"])
         by_parent = await call(session, "search_tasks", parent=["OPS-1"], fields=["key"])
         tail = await call(session, "wait_journal", after=0, task="TRK-1")

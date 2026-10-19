@@ -46,8 +46,12 @@ async def make(
 
 
 async def listed(client: AsyncClient, **params: Any) -> list[dict[str, Any]]:
-    """Данные страницы. Оболочка проверяется здесь же: она одна на весь API."""
-    response = await client.get("/api/v1/tasks", params=params)
+    """Данные страницы. Оболочка проверяется здесь же: она одна на весь API.
+
+    Порядок по умолчанию — свежие впереди, в одной транзакции теста времена равны, а
+    проверки здесь о составе выдачи: поэтому, если порядок не назван, берётся `key`.
+    """
+    response = await client.get("/api/v1/tasks", params={"sort": "key", **params})
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -143,11 +147,12 @@ async def test_an_insertion_between_pages_neither_duplicates_nor_loses_tasks(
         await make(db_session, task_actor, project, f"задача {number}") for number in range(6)
     ]
 
-    first = await auth_client.get("/api/v1/tasks", params={"limit": 3})
+    first = await auth_client.get("/api/v1/tasks", params={"limit": 3, "sort": "key"})
     assert first.status_code == 200
     await make(db_session, task_actor, project, "вставленная посреди обхода")
     second = await auth_client.get(
-        "/api/v1/tasks", params={"limit": 3, "cursor": first.json()["meta"]["next_cursor"]}
+        "/api/v1/tasks",
+        params={"limit": 3, "sort": "key", "cursor": first.json()["meta"]["next_cursor"]},
     )
     assert second.status_code == 200
 
@@ -386,6 +391,7 @@ async def test_an_unknown_sort_key_answers_with_the_allowed_ones(
 
     assert response.status_code == 422
     assert response.json()["error"]["details"]["allowed"] == [
+        "changed_at",
         "key",
         "last_entry_at",
         "priority",
@@ -939,7 +945,9 @@ async def test_the_answer_without_the_new_parameters_is_the_former_one(
     """
     made = [await make(db_session, task_actor, project, f"задача {number}") for number in range(4)]
 
-    response = await auth_client.get("/api/v1/tasks", params={"limit": 2, "fields": "key"})
+    response = await auth_client.get(
+        "/api/v1/tasks", params={"limit": 2, "fields": "key", "sort": "key"}
+    )
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -950,7 +958,7 @@ async def test_the_answer_without_the_new_parameters_is_the_former_one(
 
     tail = await auth_client.get(
         "/api/v1/tasks",
-        params={"limit": 2, "fields": "key", "cursor": body["meta"]["next_cursor"]},
+        params={"limit": 2, "fields": "key", "sort": "key", "cursor": body["meta"]["next_cursor"]},
     )
 
     assert tail.json()["data"] == [{"key": made[2].key}, {"key": made[3].key}]

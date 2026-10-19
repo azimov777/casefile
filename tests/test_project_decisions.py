@@ -345,7 +345,9 @@ async def test_the_tasks_done_under_a_superseded_decision_are_found_by_it(
     without = await _task(db_session, project, main_actor, "Без решений", [])
 
     async def keys(**search: Any) -> list[str]:
-        outcome = await search_service.search_tasks(db_session, actor=main_actor, **search)
+        outcome = await search_service.search_tasks(
+            db_session, actor=main_actor, sort=["key"], **search
+        )
         return [found.task.key for found in outcome.page.items]
 
     by_query = await keys(query=f"decision: TRK#{old}")

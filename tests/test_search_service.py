@@ -17,6 +17,7 @@ from app.db.models.link import Link
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.pagination import CursorWithOffsetError, InvalidPageOffsetError
+from app.domain.case import EntryType
 from app.domain.errors import (
     SearchFieldUnknownError,
     SearchOperatorNotSupportedError,
@@ -718,8 +719,8 @@ async def test_a_page_with_parents_costs_the_same_queries_whatever_its_size(
             )
             await db_session.flush()
 
-    assert await _page_selects(db_session, task_actor, limit=1) == (1, 0)
-    assert await _page_selects(db_session, task_actor, limit=50) == (1, 48)
+    assert await _page_selects(db_session, task_actor, limit=1, sort=["key"]) == (1, 0)
+    assert await _page_selects(db_session, task_actor, limit=50, sort=["key"]) == (1, 48)
 
     by_parent = f"parent: {program.key}"
     one = await _page_selects(db_session, task_actor, query=by_parent, limit=1)
@@ -1110,9 +1111,89 @@ async def test_the_default_order_puts_the_tenth_task_after_the_second(
         await make(db_session, task_actor, project, f"задача {number}") for number in range(1, 12)
     ]
 
-    found = await keys(db_session, task_actor, limit=200)
+    found = await keys(db_session, task_actor, limit=200, sort=["key"])
 
     assert found == [task.key for task in made]
+
+
+async def test_the_default_order_puts_the_latest_touched_first(
+    db_session: AsyncSession, task_actor: Actor, project: Project
+) -> None:
+    """Без `sort` — `-changed_at`: позднее из `updated_at` и `last_entry_at` (TRK-726).
+
+    Три задачи заведены в порядке, обратном ожидаемой выдаче, чтобы порядок по ключу
+    краснел. Времена правятся запросом (`now()` в тесте один на транзакцию, `TRK/db#35`):
+    у `recent_card` правка карточки позже всех, но записей нет; у `recent_entry` карточка
+    давно, зато запись в деле стоит на времени начала транзакции — позже правки
+    `recent_card` на час; `stale` не трогали.
+    По одному `updated_at` порядок был бы другим (`recent_card` первой), по одному
+    `last_entry_at` — тоже (`stale` и `recent_card` без значения лежали бы в конце).
+    """
+    stale = await make(db_session, task_actor, project, "давно не тронутая")
+    recent_entry = await make(db_session, task_actor, project, "запись в деле только что")
+    recent_card = await make(db_session, task_actor, project, "правленная последней")
+    await case_service.add_entry(
+        db_session, recent_entry, actor=task_actor, type=EntryType.NOTE, title="Заметка"
+    )
+    for task, updated in (
+        (stale, "-20 days"),
+        (recent_entry, "-10 days"),
+        (recent_card, "-1 hour"),
+    ):
+        await db_session.execute(
+            update(Task)
+            .where(Task.id == task.id)
+            .values(updated_at=text(f"now() + interval '{updated}'"))
+        )
+
+    expected = [recent_entry.key, recent_card.key, stale.key]
+    assert await keys(db_session, task_actor) == expected
+    assert await keys(db_session, task_actor, sort=["-changed_at"]) == expected
+    assert await keys(db_session, task_actor, sort=["changed_at"]) == expected[::-1]
+    assert await keys(db_session, task_actor, sort=["key"]) == [
+        stale.key,
+        recent_entry.key,
+        recent_card.key,
+    ]
+
+
+async def test_equal_changed_at_falls_back_to_the_task_key_ascending_both_ways(
+    db_session: AsyncSession, task_actor: Actor, project: Project
+) -> None:
+    """В одной транзакции у задач одно время: равные `changed_at` идут по ключу, возрастая."""
+    made = [await make(db_session, task_actor, project, f"задача {number}") for number in range(11)]
+    expected = [task.key for task in made]
+
+    assert await keys(db_session, task_actor, limit=200) == expected
+    assert await keys(db_session, task_actor, sort=["-changed_at"], limit=200) == expected
+    assert await keys(db_session, task_actor, sort=["changed_at"], limit=200) == expected
+
+
+async def test_walking_every_page_without_sort_returns_each_task_once_with_equal_times(
+    db_session: AsyncSession, task_actor: Actor, project: Project
+) -> None:
+    """Обход при `limit=2`: все пять задач ровно по разу, хотя `changed_at` у них равен.
+
+    В одной транзакции теста `now()` один, поэтому у всех задач `updated_at` совпадает, а
+    записи в деле двух из них дают второе общее время: границу страницы держит тайбрейкер.
+    """
+    made = [await make(db_session, task_actor, project, f"задача {number}") for number in range(5)]
+    for task in made[:2]:
+        await case_service.add_entry(
+            db_session, task, actor=task_actor, type=EntryType.NOTE, title="Заметка"
+        )
+
+    seen: list[str] = []
+    cursor: str | None = None
+    while True:
+        found = await service.search_tasks(db_session, actor=task_actor, limit=2, cursor=cursor)
+        seen.extend(item.task.key for item in found.page.items)
+        if found.page.next_cursor is None:
+            break
+        cursor = found.page.next_cursor
+
+    assert sorted(seen) == sorted(task.key for task in made)
+    assert len(seen) == len(set(seen))
 
 
 async def test_an_insertion_between_pages_neither_duplicates_nor_loses_tasks(
@@ -1127,10 +1208,10 @@ async def test_an_insertion_between_pages_neither_duplicates_nor_loses_tasks(
         await make(db_session, task_actor, project, f"задача {number}") for number in range(6)
     ]
 
-    first = await service.search_tasks(db_session, actor=task_actor, limit=3)
+    first = await service.search_tasks(db_session, actor=task_actor, limit=3, sort=["key"])
     await make(db_session, task_actor, project, "вставленная посреди обхода")
     second = await service.search_tasks(
-        db_session, actor=task_actor, limit=3, cursor=first.page.next_cursor
+        db_session, actor=task_actor, limit=3, sort=["key"], cursor=first.page.next_cursor
     )
 
     seen = [found.task.key for found in first.page.items + second.page.items]
@@ -1157,7 +1238,7 @@ async def test_paging_holds_whether_or_not_the_features_were_asked_for(
         cursor: str | None = None
         while True:
             outcome = await service.search_tasks(
-                db_session, actor=task_actor, fields=fields, limit=2, cursor=cursor
+                db_session, actor=task_actor, fields=fields, limit=2, sort=["key"], cursor=cursor
             )
             seen.extend(found.task.key for found in outcome.page.items)
             cursor = outcome.page.next_cursor
@@ -1197,7 +1278,7 @@ async def test_a_cursor_from_another_order_is_refused(
     """Смена `sort` посреди обхода — не «начать сначала», а испорченный курсор."""
     for number in range(3):
         await make(db_session, task_actor, project, f"задача {number}")
-    page = await service.search_tasks(db_session, actor=task_actor, limit=1)
+    page = await service.search_tasks(db_session, actor=task_actor, limit=1, sort=["key"])
 
     with pytest.raises(Exception, match="cursor"):
         await service.search_tasks(
@@ -1330,7 +1411,13 @@ async def test_an_unknown_sort_key_lists_the_allowed_ones(
         await service.search_tasks(db_session, actor=task_actor, sort=["created_at"])
 
     assert raised.value.details["reason"] == "not_sortable"
-    assert raised.value.details["allowed"] == ["key", "last_entry_at", "priority", "updated_at"]
+    assert raised.value.details["allowed"] == [
+        "changed_at",
+        "key",
+        "last_entry_at",
+        "priority",
+        "updated_at",
+    ]
 
 
 async def test_an_unselectable_field_is_refused(
@@ -1422,7 +1509,9 @@ async def test_the_offset_lands_on_the_same_rows_the_walk_reaches(
     """Смещение — второй адрес той же страницы: порядок один, отбор один, строки те же."""
     made = [await make(db_session, task_actor, project, f"задача {number}") for number in range(7)]
 
-    outcome = await service.search_tasks(db_session, actor=task_actor, limit=3, offset=3)
+    outcome = await service.search_tasks(
+        db_session, actor=task_actor, limit=3, offset=3, sort=["key"]
+    )
 
     assert [found.task.key for found in outcome.page.items] == [task.key for task in made[3:6]]
     assert outcome.page.next_cursor is not None

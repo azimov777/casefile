@@ -69,7 +69,7 @@ async def _field_changes(session: AsyncSession, actor: Actor, task: Task) -> lis
 
 
 async def _keys(session: AsyncSession, actor: Actor, **kwargs: Any) -> list[str]:
-    outcome = await search_service.search_tasks(session, actor=actor, **kwargs)
+    outcome = await search_service.search_tasks(session, actor=actor, **{"sort": ["key"], **kwargs})
     return [found.task.key for found in outcome.page.items]
 
 
@@ -411,8 +411,12 @@ async def test_the_row_carries_the_area_only_when_asked(
     await _new(db_session, main_actor, project, "Внутри x", area="TRK/x")
     await _new(db_session, main_actor, project, "Без")
 
-    narrow = await search_service.search_tasks(db_session, actor=main_actor, fields=["key"])
-    asked = await search_service.search_tasks(db_session, actor=main_actor, fields=["key", "area"])
+    narrow = await search_service.search_tasks(
+        db_session, actor=main_actor, fields=["key"], sort=["key"]
+    )
+    asked = await search_service.search_tasks(
+        db_session, actor=main_actor, fields=["key", "area"], sort=["key"]
+    )
 
     assert [found.area for found in narrow.page.items] == [None, None]
     values = [found.area.value for found in asked.page.items if found.area]
