@@ -51,8 +51,12 @@ from app.domain.case import (
     MAX_ADDRESSEES,
     MAX_ENTRY_BODY_LENGTH,
     MAX_ENTRY_TITLE_LENGTH,
+    MAX_OPTION_LABEL_LENGTH,
+    MAX_OPTION_TEXT_LENGTH,
+    MAX_QUESTION_OPTIONS,
     MAX_REFS,
     MAX_SUMMARY_PART_LENGTH,
+    MIN_QUESTION_OPTIONS,
     OUTCOME_WITH_CONTINUATION,
     OUTCOME_WITH_REPLACEMENT,
     AnswerOutcome,
@@ -180,6 +184,11 @@ class QuestionFactsRead(_EntryFactsBase):
         default=None, description=f"Who is asked, at most {MAX_ADDRESSEES} names"
     )
     blocking: bool | None = Field(default=None, description="Whether the question holds the work")
+    options: list[str] | None = Field(
+        default=None,
+        examples=[["A", "B"]],
+        description="Labels of the answer options in the question's order; `null` without options",
+    )
 
 
 class AnswerFactsRead(_EntryFactsBase):
@@ -205,6 +214,11 @@ class AnswerFactsRead(_EntryFactsBase):
         default=None,
         examples=[None],
         description="Human whose words an agent carried into the answer; `null` otherwise",
+    )
+    choice: str | None = Field(
+        default=None,
+        examples=[None],
+        description="Label of the option chosen from the question's options; `null` otherwise",
     )
 
 
@@ -473,6 +487,25 @@ class SummaryPayload(SummaryPartsPayload):
         return data
 
 
+class QuestionOptionPayload(BaseModel):
+    """Один вариант ответа: короткая метка и текст."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(
+        min_length=1,
+        max_length=MAX_OPTION_LABEL_LENGTH,
+        examples=["A"],
+        description="Short label, unique within the question; the answer names it in `choice`",
+    )
+    text: str = Field(
+        min_length=1,
+        max_length=MAX_OPTION_TEXT_LENGTH,
+        examples=["Keep the v1 endpoint for one more month"],
+        description="What this option means",
+    )
+
+
 class QuestionPayload(BaseModel):
     """Вопрос участникам реестра."""
 
@@ -495,6 +528,16 @@ class QuestionPayload(BaseModel):
             "attached to it"
         ),
     )
+    options: list[QuestionOptionPayload] | None = Field(
+        default=None,
+        min_length=MIN_QUESTION_OPTIONS,
+        max_length=MAX_QUESTION_OPTIONS,
+        description=(
+            "Answer options, "
+            f"{MIN_QUESTION_OPTIONS} to {MAX_QUESTION_OPTIONS} pairs of label and text; "
+            "`null` for a question without options. A free-text answer stays possible"
+        ),
+    )
 
 
 _ANSWER_OUTCOME_DESCRIPTION = (
@@ -502,6 +545,10 @@ _ANSWER_OUTCOME_DESCRIPTION = (
     "withdrawn as stale; `replaced` — replaced by the question in `replaced_by`. "
     "`withdrawn` and `replaced` need a reason in the body and are accepted only while the "
     "question has no answer yet: an answered question stays with its answer"
+)
+_CHOICE_DESCRIPTION = (
+    "Label of one of the question's options, as the question gave it; accepted only with "
+    "`answered` and only on a question that has options. The body may then be empty"
 )
 _REPLACED_BY_DESCRIPTION = (
     "Number of a later `question` entry of the same case that replaces this one; required "
@@ -566,6 +613,9 @@ class AnswerFilingPayload(BaseModel):
     replaced_by: int | None = Field(
         default=None, ge=1, examples=[None], description=_REPLACED_BY_DESCRIPTION
     )
+    choice: str | None = Field(
+        default=None, min_length=1, examples=[None], description=_CHOICE_DESCRIPTION
+    )
 
 
 class AnswerPayload(BaseModel):
@@ -593,6 +643,10 @@ class AnswerPayload(BaseModel):
     relayed_from: str | None = Field(
         examples=[None],
         description="Human whose words an agent carried into the answer; `null` otherwise",
+    )
+    choice: str | None = Field(
+        examples=[None],
+        description="Label of the option chosen from the question's options; `null` otherwise",
     )
 
 

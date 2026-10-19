@@ -491,6 +491,7 @@ async def test_an_answer_filed_before_outcomes_reads_as_answered(
         "outcome": "answered",
         "replaced_by": None,
         "relayed_from": None,
+        "choice": None,
     }
     data = await package(auth_client, "TRK-1")
     facts = {line["no"]: line["facts"] for line in data["index"]}
@@ -500,6 +501,7 @@ async def test_an_answer_filed_before_outcomes_reads_as_answered(
         "outcome": "answered",
         "replaced_by": None,
         "relayed_from": None,
+        "choice": None,
     }
     assert data["features"]["open_questions"] == 0
     error = await refuse(
