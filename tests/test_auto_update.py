@@ -234,6 +234,9 @@ case "$*" in
     cat >"$SCENE/restored"
     exit "$(cat "$SCENE/restore" 2>/dev/null || echo 0)" ;;
   "compose stop "*) exit 0 ;;
+  "info --format "*) cat "$SCENE/engine" 2>/dev/null ;;
+  "compose port "*) cat "$SCENE/bind-$3" 2>/dev/null || echo "127.0.0.1:$4" ;;
+  "restart "*) [ ! -s "$SCENE/heals" ] || : >"$SCENE/silent" ;;
   "run --rm --pull never --network none --entrypoint alembic "*)
     [ ! -s "$SCENE/heads-fails" ] || { echo "FAILED to import migrations" >&2; exit 1; }
     echo "$(cat "$SCENE/head") (head)" ;;
@@ -290,6 +293,31 @@ esac
 """
 
 
+#: Подставной `wget`: порт из `$SCENE/silent` отвечает пустым ответом, остальные — 200;
+#: порт из `$SCENE/refuses` — кодом 421 (ответ есть, служба жива).
+FAKE_WGET = r"""#!/bin/sh
+echo "wget $*" >>"$CALLS"
+for url; do :; done
+port=${url##*:}
+port=${port%%/*}
+if [ -s "$SCENE/flaky" ]; then
+  : >"$SCENE/flaky"
+  echo "wget: download timed out" >&2
+  exit 1
+fi
+if grep -qx "$port" "$SCENE/silent" 2>/dev/null; then
+  echo "wget: error getting response" >&2
+  exit 1
+fi
+if grep -qx "$port" "$SCENE/refuses" 2>/dev/null; then
+  echo "  HTTP/1.1 421 Misdirected Request" >&2
+  echo "wget: server returned error: HTTP/1.1 421 Misdirected Request" >&2
+  exit 1
+fi
+echo "  HTTP/1.1 200 OK" >&2
+"""
+
+
 class Updater:
     """Каталог установки, подставной `docker` на `PATH` и запуск сценария службы."""
 
@@ -302,6 +330,9 @@ class Updater:
         docker = bin_dir / "docker"
         docker.write_text(FAKE_DOCKER, encoding="utf-8")
         docker.chmod(docker.stat().st_mode | stat.S_IEXEC)
+        wget = bin_dir / "wget"
+        wget.write_text(FAKE_WGET, encoding="utf-8")
+        wget.chmod(wget.stat().st_mode | stat.S_IEXEC)
         self.project = root / "project"
         self.project.mkdir()
         #: Том со снимком: каталог `/snapshot` обновлятора.
@@ -1006,3 +1037,154 @@ def test_a_database_without_the_version_table_is_updated_without_a_snapshot(
     assert not updater.called("compose exec -T db sh -c pg_dump")
     assert updater.called(UP)
     assert "updated to 0.2.0" in out
+
+
+# --- Проверка опубликованных портов (TRK-723) ------------------------------------------
+
+DESKTOP = "Docker Desktop\n"
+
+
+def _loop() -> str:
+    """Хвост сценария службы `updater` — от `trap` и до конца."""
+    script = _script("updater")
+    return script[script.index("trap 'exit 0' TERM INT") :]
+
+
+def test_a_port_that_does_not_answer_restarts_only_its_service(updater: Updater) -> None:
+    """(а) Порт `mcp` молчит — один `docker restart` контейнера `mcp`, `ui` не тронут."""
+    updater.set(engine=DESKTOP, silent="8100\n", heals="yes\n")
+
+    out = updater.run("updater", "ports\n")
+
+    assert updater.called("restart ") == ["restart container-mcp"]
+    assert "port 8100 of mcp does not answer through the Docker proxy; restarting mcp" in out
+    assert "mcp restarted, port 8100 answers" in out
+    assert "restarting ui" not in out
+    assert not updater.called("compose up")
+
+
+def test_ports_that_answer_restart_nothing(updater: Updater) -> None:
+    """(б) Оба порта ответили — ни одного `docker restart`; проверка шла тем же путём, что
+    клиент: `host.docker.internal`, у `ui` — `Host: localhost`."""
+    updater.set(engine=DESKTOP)
+
+    out = updater.run("updater", "ports\n", TRACKER_MCP_PORT="8100")
+
+    assert not updater.called("restart ")
+    assert "port 8100 of mcp answers" in out
+    assert "port 80 of ui answers" in out
+    wgets = updater.called("wget ")
+    assert any(w.endswith("http://host.docker.internal:8100/health") for w in wgets)
+    assert any(
+        "--header Host: localhost" in w and w.endswith("http://host.docker.internal:80/")
+        for w in wgets
+    )
+
+
+def test_a_port_that_still_does_not_answer_after_a_restart_is_not_restarted_again(
+    updater: Updater,
+) -> None:
+    """(в) Перезапуск не помог — второго `docker restart` нет, в логе служба и порт."""
+    updater.set(engine=DESKTOP, silent="8100\n")
+
+    out = updater.run("updater", "ports\n")
+
+    assert updater.called("restart ") == ["restart container-mcp"]
+    assert "port 8100 of mcp still does not answer after a restart" in out
+
+
+def test_ports_are_not_checked_outside_docker_desktop(updater: Updater) -> None:
+    """(г) Не Docker Desktop — ни запроса к портам, ни `docker restart`, строка о пропуске."""
+    updater.set(engine="Ubuntu 24.04\n", silent="8100\n")
+
+    out = updater.run("updater", "ports\n")
+
+    assert "published ports are not checked here (not Docker Desktop)" in out
+    assert not updater.called("wget ")
+    assert not updater.called("restart ")
+
+
+def test_ports_are_checked_at_the_start_with_auto_update_off(updater: Updater) -> None:
+    """(д) `CASEFILE_AUTO_UPDATE=false` — проверка портов на старте идёт до сна службы."""
+    updater.set(engine=DESKTOP, silent="8100\n", heals="yes\n")
+    loop = _loop().replace("while :; do sleep 86400 & wait $!; done", "exit 0", 1)
+
+    out = updater.run("updater", loop, CASEFILE_AUTO_UPDATE="false")
+
+    assert "auto-update is off" in out
+    assert updater.called("restart ") == ["restart container-mcp"]
+    assert not updater.called("compose pull")
+
+
+def test_ports_are_checked_after_every_periodic_update(updater: Updater) -> None:
+    """Проверка портов — часть `check`, после `update`, и при `CASEFILE_UPDATE_INTERVAL=0`."""
+    updater.set(engine=DESKTOP, silent="8100\n", heals="yes\n")
+    loop = _loop().replace("while :; do sleep 86400 & wait $!; done", "exit 0")
+
+    out = updater.run("updater", loop, CASEFILE_UPDATE_INTERVAL="0")
+
+    assert "periodic checks are off" in out
+    assert updater.called("compose pull")
+    assert updater.called("restart ") == ["restart container-mcp"]
+    check = _script("updater").split("check() {")[1].split("}")[0]
+    body = [line.strip() for line in check.splitlines()]
+    assert body.index("update") < body.index("ports")
+
+
+def test_ports_are_not_checked_while_another_compose_starts_the_installation(
+    updater: Updater,
+) -> None:
+    """(е) Контур занят — проверка портов не идёт: ни запроса, ни перезапуска."""
+    updater.set(
+        engine=DESKTOP,
+        silent="8100\n",
+        heals="yes\n",
+        containers="agent-token True Up 1 second\n",
+    )
+
+    out = updater.run("updater", "ports\n")
+
+    assert "still starting this installation; skipping the port check" in out
+    assert not updater.called("wget ")
+    assert not updater.called("restart ")
+
+
+def test_a_service_that_answers_with_an_error_code_is_alive(updater: Updater) -> None:
+    """Любой HTTP-ответ — порт жив; отказ `ui` кодом 421 не повод его перезапускать."""
+    updater.set(engine=DESKTOP, refuses="80\n")
+
+    out = updater.run("updater", "ports\n")
+
+    assert not updater.called("restart ")
+    assert "port 80 of ui answers" in out
+
+
+def test_a_service_that_is_not_healthy_is_not_restarted_for_its_port(updater: Updater) -> None:
+    """Служба в `starting` или `unhealthy` — порт молчит по другой причине: не трогать."""
+    updater.set(engine=DESKTOP, silent="8100\n", health="unhealthy\n")
+
+    out = updater.run("updater", "ports\n")
+
+    assert "mcp is not healthy; not checking its port" in out
+    assert not updater.called("restart ")
+
+
+def test_a_port_published_on_another_address_is_not_judged_from_here(updater: Updater) -> None:
+    """Порт на адресе локальной сети `host.docker.internal` не проверить: не гадать."""
+    updater.set(engine=DESKTOP, silent="8100\n", bind_mcp="192.168.1.5:8100\n")
+
+    out = updater.run("updater", "ports\n")
+
+    assert "cannot tell where the port of mcp is published; not checking it" in out
+    assert not updater.called("restart ")
+
+
+def test_one_missed_probe_does_not_restart_a_healthy_service(updater: Updater) -> None:
+    """Первая проба порта не ответила (машина под нагрузкой), вторая ответила — без `restart`."""
+    updater.set(engine=DESKTOP, flaky="once\n")
+
+    out = updater.run("updater", "ports\n")
+
+    assert not updater.called("restart ")
+    assert "port 8100 of mcp answers" in out
+    assert "restarting" not in out

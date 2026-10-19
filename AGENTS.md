@@ -56,7 +56,7 @@ MCP-сервер для агентов; в `ui/` — интерфейс чело
 - `docker-compose.yml` — контур разработки, используется по умолчанию
 - `docker-compose.prod.yml` — продакшен-контур: установка Casefile целиком из готовых образов ghcr.io,
   ключи в именованных томах, обновлятор на канал выпусков `stable` раз в час с откатом упавшего выпуска
-  и его замена `updater-renew`, адрес публикации `CASEFILE_BIND` и режим входа интерфейса; едет и в образе выпуска
+  и его замена `updater-renew`, перезапуск `mcp`/`ui` с неотвечающим портом хоста на Docker Desktop, адрес публикации `CASEFILE_BIND` и режим входа интерфейса; едет и в образе выпуска
 - `gemini-extension.json` — расширение Casefile для Gemini CLI: имя, версия выпуска, коннектор MCP `httpUrl` на адрес по умолчанию без токена; скил Gemini находит сам в `skills/`; ставится `gemini extensions install https://github.com/azimov777/casefile`, галерея geminicli.com берёт репозиторий по теме `gemini-cli-extension` (её ставит владелец); файл едет и в ветку `plugin`
 - `glama.json` — метаданные карточки Glama (`$schema` и `maintainers`), закрепляет владение
   каталожной записью за `azimov777`
