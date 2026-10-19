@@ -13,6 +13,7 @@ export {
   type DiscussionDetail,
   type DiscussionEntry,
   type DiscussionListParams,
+  type DiscussionOption,
   type DiscussionStatus,
   type DiscussionTask,
   type DiscussionTurn,

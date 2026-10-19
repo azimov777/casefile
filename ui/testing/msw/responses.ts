@@ -732,18 +732,25 @@ export function discussionQuestion(
   address: string,
   no: number,
   body = 'Хранение стоит денег.',
+  options: { label: string; text: string }[] | null = null,
 ): Entry {
   return {
     ...discussionEntryBase(address, no, 'Хранить вечно или год?', body),
     type: 'question',
-    payload: { addressees: ['owner'], blocking: true },
+    payload: { addressees: ['owner'], blocking: true, options },
   };
 }
 
 /** Ответ человека в обсуждении. */
-export function discussionAnswer(address: string, no: number, questionNo: number): Entry {
+export function discussionAnswer(
+  address: string,
+  no: number,
+  questionNo: number,
+  choice: string | null = null,
+  body = 'Храним вечно: дело неизменяемо.',
+): Entry {
   return {
-    ...discussionEntryBase(address, no, '', 'Храним вечно: дело неизменяемо.'),
+    ...discussionEntryBase(address, no, '', body),
     author: { kind: 'human', signature: 'owner' },
     type: 'answer',
     payload: {
@@ -751,7 +758,7 @@ export function discussionAnswer(address: string, no: number, questionNo: number
       outcome: 'answered',
       replaced_by: null,
       relayed_from: null,
-      choice: null,
+      choice,
     },
   };
 }

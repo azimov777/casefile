@@ -23,6 +23,9 @@ export type DiscussionTask = components['schemas']['DiscussionTaskRead'];
 /** Последний итог обсуждения: что решено, что заменено, что открыто. */
 export type Conclusion = components['schemas']['ConclusionEntryRead'];
 
+/** Вариант ответа, который агент приложил к вопросу: метка и текст (`QuestionOptionPayload`). */
+export type DiscussionOption = components['schemas']['QuestionOptionPayload'];
+
 export type DiscussionTurn = components['schemas']['DiscussionTurn'];
 export type DiscussionStatus = components['schemas']['DiscussionStatus'];
 

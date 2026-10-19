@@ -25,6 +25,8 @@ export interface ReplyInput {
   address: string;
   questionNo: number;
   body: string;
+  /** Метка выбранного варианта вопроса; без неё ответ — один свободный текст. */
+  choice?: string;
   /** Ключ повтора: тот же на каждой попытке отправить этот ответ. */
   idempotencyKey: string;
 }
@@ -33,11 +35,24 @@ export interface ReplyInput {
 export function useReply() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ address, questionNo, body, idempotencyKey }: ReplyInput): Promise<Entry> =>
+    mutationFn: ({
+      address,
+      questionNo,
+      body,
+      choice,
+      idempotencyKey,
+    }: ReplyInput): Promise<Entry> =>
       unwrap(
         apiClient.POST('/api/v1/discussions/{discussion}/entries', {
           params: { path: { discussion: address }, header: { 'Idempotency-Key': idempotencyKey } },
-          body: { type: 'answer', body, payload: { question_no: questionNo } },
+          body: {
+            type: 'answer',
+            body,
+            payload: {
+              question_no: questionNo,
+              ...(choice === undefined ? {} : { choice }),
+            },
+          },
         }),
       ),
     onSuccess: (_entry, { address }) => refresh(queryClient, address),

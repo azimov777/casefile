@@ -58,6 +58,7 @@ export const discussions = {
     waiting: 'waiting for an answer',
     addressees: 'To:',
     relayedFrom: 'relayed from {{name}}',
+    chosen: 'Chosen: {{label}}',
     details: 'Details',
     conclusionActual: 'current conclusion',
     conclusionPrior: 'earlier conclusion',
@@ -71,6 +72,10 @@ export const discussions = {
     pending: 'Sending…',
     empty: 'An empty answer cannot be sent: the agent needs text, not the fact of a click.',
     placeholder: 'Markdown. References such as TRK-42, TRK~7 and TRK~7#3 become links.',
+    optionsLegend: 'Choose an option',
+    optionsField: 'Explanation or your own answer (optional when an option is chosen)',
+    clearChoice: 'Clear choice',
+    emptyWithOptions: 'Choose an option or write an answer: an empty answer cannot be sent.',
   },
 
   note: {
