@@ -563,3 +563,59 @@ export async function layoutSettled(node: Locator): Promise<void> {
   }
   throw new Error(`раскладка узла не улеглась за ${ROUNDS} раундов ожидания`);
 }
+
+/**
+ * Вопрос агента с вариантами ответа. Ручки REST у него нет — вопросы в REST не подшиваются
+ * (TRK#53), — `options` задаёт сервис, который зовёт инструмент MCP `ask`, и сценарий
+ * вызывает его так же, как `grantAccess`. Обсуждение заводится в проекте без привязок:
+ * чужие сценарии, считающие привязанные задачи, его не замечают. Печатает адрес.
+ */
+const ASK_WITH_OPTIONS = `
+import asyncio, json, sys
+from app.db.repositories import ParticipantRepository
+from app.db.session import dispose_engine, session_scope
+from app.domain.case import EntryType
+from app.services import discussions, projects
+from app.services.auth import Actor
+
+async def main(agent, project, title, body, options):
+    async with session_scope() as session:
+        robot = await ParticipantRepository(session).get_by_name(agent)
+        opened = await discussions.open_discussion(
+            session,
+            actor=Actor(author=robot.author, participant=robot),
+            project=await projects.get_project(session, project),
+            title=title,
+            opening=EntryType.QUESTION,
+            body=body,
+            addressees=['owner'],
+            options=json.loads(options),
+        )
+        print(opened.discussion.address)
+    await dispose_engine()
+
+asyncio.run(main(*sys.argv[1:6]))
+`;
+
+export interface QuestionWithOptions {
+  agent?: string;
+  project?: string;
+  title: string;
+  body?: string;
+  options: { label: string; text: string }[];
+}
+
+/** Заводит обсуждение вопросом с вариантами ответа от имени агента; возвращает адрес. */
+export function askWithOptions({
+  agent = 'demo_agent',
+  project = 'DEMO',
+  title,
+  body = '',
+  options,
+}: QuestionWithOptions): string {
+  const out = compose([
+    ...['run', '--rm', '--no-deps', 'api'],
+    ...['python', '-c', ASK_WITH_OPTIONS, agent, project, title, body, JSON.stringify(options)],
+  ]);
+  return out.trim().split('\n').pop() ?? '';
+}

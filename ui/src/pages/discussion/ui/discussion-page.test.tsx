@@ -181,6 +181,139 @@ describe('экран обсуждения', () => {
     expect(sent[0]?.key).not.toBeNull();
   });
 
+  describe('варианты ответа (TRK-720)', () => {
+    const OPTIONS = [
+      { label: '1', text: 'Хранить вечно' },
+      { label: '2', text: 'Хранить год' },
+    ];
+
+    function withOptions() {
+      server.use(
+        http.get(PATH, () => data(discussionDetail(ADDRESS))),
+        http.get(`${PATH}/entries`, () =>
+          collection([discussionQuestion(ADDRESS, 2, 'Хранение стоит денег.', OPTIONS)]),
+        ),
+        http.post(`${PATH}/entries`, async ({ request }) => {
+          await remember(request);
+          return data(discussionAnswer(ADDRESS, 3, 2, '2', ''), 201);
+        }),
+      );
+    }
+
+    it('у вопроса с вариантами видны карточки; выбор без текста шлёт choice', async () => {
+      withOptions();
+      const user = userEvent.setup();
+      renderApp(`/discussions/${ADDRESS}`);
+
+      await user.click(
+        await screen.findByRole('button', { name: say.discussions('reply.open', { no: 2 }) }),
+      );
+      const group = screen.getByRole('radiogroup', {
+        name: say.discussions('reply.optionsLegend'),
+      });
+      expect(within(group).getAllByRole('radio')).toHaveLength(2);
+      expect(within(group).getByText('Хранить год')).toBeInTheDocument();
+
+      await user.click(within(group).getByRole('radio', { name: /Хранить год/ }));
+      await user.click(screen.getByRole('button', { name: say.discussions('reply.submit') }));
+
+      await waitFor(() => expect(sent).toHaveLength(1));
+      expect(sent[0]?.body).toEqual({
+        type: 'answer',
+        body: '',
+        payload: { question_no: 2, choice: '2' },
+      });
+    });
+
+    it('без выбора и без текста отправить нельзя; текст без выбора уходит без choice', async () => {
+      withOptions();
+      const user = userEvent.setup();
+      renderApp(`/discussions/${ADDRESS}`);
+
+      await user.click(
+        await screen.findByRole('button', { name: say.discussions('reply.open', { no: 2 }) }),
+      );
+      await user.click(screen.getByRole('button', { name: say.discussions('reply.submit') }));
+      expect(
+        await screen.findByText(say.discussions('reply.emptyWithOptions')),
+      ).toBeInTheDocument();
+      expect(sent).toHaveLength(0);
+
+      await user.type(
+        screen.getByRole('textbox', { name: say.discussions('reply.optionsField') }),
+        'Свой вариант',
+      );
+      await user.click(screen.getByRole('button', { name: say.discussions('reply.submit') }));
+
+      await waitFor(() => expect(sent).toHaveLength(1));
+      expect(sent[0]?.body).toEqual({
+        type: 'answer',
+        body: 'Свой вариант',
+        payload: { question_no: 2 },
+      });
+    });
+
+    it('«Снять выбор» возвращает ответ к одному тексту', async () => {
+      withOptions();
+      const user = userEvent.setup();
+      renderApp(`/discussions/${ADDRESS}`);
+
+      await user.click(
+        await screen.findByRole('button', { name: say.discussions('reply.open', { no: 2 }) }),
+      );
+      await user.click(screen.getByRole('radio', { name: /Хранить вечно/ }));
+      await user.click(screen.getByRole('button', { name: say.discussions('reply.clearChoice') }));
+      expect(screen.getByRole('radio', { name: /Хранить вечно/ })).not.toBeChecked();
+      expect(
+        screen.getByRole('button', { name: say.discussions('reply.clearChoice') }),
+      ).toBeDisabled();
+    });
+
+    it('у вопроса без вариантов карточек нет', async () => {
+      openDiscussion();
+      const user = userEvent.setup();
+      renderApp(`/discussions/${ADDRESS}`);
+
+      await user.click(
+        await screen.findByRole('button', { name: say.discussions('reply.open', { no: 2 }) }),
+      );
+      expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+      expect(
+        screen.getByRole('textbox', { name: say.discussions('reply.fieldLabel') }),
+      ).toBeInTheDocument();
+    });
+
+    it('запись ответа показывает выбранную метку, текст варианта и приписку', async () => {
+      server.use(
+        http.get(PATH, () => data(discussionDetail(ADDRESS, { turn: 'agent', open_questions: 0 }))),
+        http.get(`${PATH}/entries`, () =>
+          collection([
+            discussionQuestion(ADDRESS, 2, 'Хранение стоит денег.', OPTIONS),
+            discussionAnswer(ADDRESS, 3, 2, '2', 'Но не дольше.'),
+            discussionAnswer(ADDRESS, 4, 2, '1', ''),
+          ]),
+        ),
+      );
+      renderApp(`/discussions/${ADDRESS}`);
+
+      const thread = await screen.findByRole('list', { name: say.discussions('thread.label') });
+      const first = await within(thread).findByRole('article', { name: `${ADDRESS}#3` });
+      expect(
+        within(first).getByText(say.discussions('thread.chosen', { label: '2' })),
+      ).toBeVisible();
+      expect(within(first).getByText('Хранить год')).toBeVisible();
+      expect(within(first).getByText('Но не дольше.')).toBeVisible();
+
+      // Ответ без слов: только выбор.
+      const second = within(thread).getByRole('article', { name: `${ADDRESS}#4` });
+      expect(
+        within(second).getByText(say.discussions('thread.chosen', { label: '1' })),
+      ).toBeVisible();
+      expect(within(second).getByText('Хранить вечно')).toBeVisible();
+    });
+  });
+
   it('вопрос с ответом не просит ответа и называется отвеченным', async () => {
     server.use(
       http.get(PATH, () => data(discussionDetail(ADDRESS, { turn: 'agent', open_questions: 0 }))),

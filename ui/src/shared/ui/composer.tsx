@@ -17,6 +17,13 @@ interface ComposerProps {
   pendingLabel: string;
   /** Чем упрекнуть за пустое поле. У ответа и у замечания причина разная. */
   emptyProblem: string;
+  /**
+   * Пустой текст допустим: ответ выбором несёт смысл без слов. Упрёк за пустоту тогда
+   * не нужен, а `onSubmit` получает пустую строку.
+   */
+  allowEmpty?: boolean;
+  /** Что стоит над полем текста и не меняет высоту формы под кнопками (варианты ответа). */
+  lead?: ReactNode;
   placeholder?: string;
   /** Замечание бэкенда к полю `body`, если оно пришло. */
   problem?: string;
@@ -67,6 +74,8 @@ export function Composer({
   submitLabel,
   pendingLabel,
   emptyProblem,
+  allowEmpty = false,
+  lead,
   placeholder,
   problem,
   isPending = false,
@@ -103,7 +112,7 @@ export function Composer({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (draft.body.trim() === '') {
+    if (draft.body.trim() === '' && !allowEmpty) {
       setEmptyBody(true);
       return;
     }
@@ -152,7 +161,7 @@ export function Composer({
     onCancel?.();
   }
 
-  const shown = emptyBody ? emptyProblem : problem;
+  const shown = emptyBody && !allowEmpty ? emptyProblem : problem;
 
   return (
     <form
@@ -160,6 +169,8 @@ export function Composer({
       onSubmit={(event) => void submit(event)}
       aria-label={label}
     >
+      {lead}
+
       <div className="flex flex-col gap-1">
         <label className={LABEL} htmlFor={bodyId}>
           {fieldLabel}

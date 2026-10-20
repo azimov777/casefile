@@ -11,7 +11,7 @@ import {
   factsOfEntry,
   isServiceEntry,
 } from '@/entities/entry';
-import type { DiscussionEntry } from '@/entities/discussion';
+import type { DiscussionEntry, DiscussionOption } from '@/entities/discussion';
 import { ReplyForm } from '@/features/manage-discussion';
 import { cn, discussionHref } from '@/shared/lib';
 import { Badge, Button, Markdown, RelativeTime } from '@/shared/ui';
@@ -46,6 +46,14 @@ export function Thread({ address, entries, canReply, highlightedNo, conclusionNo
     if (entry.type === 'answer') answered.add(entry.payload.question_no);
   }
 
+  // Варианты каждого вопроса: запись ответа с выбором называет текст варианта из вопроса.
+  const optionsOf = new Map<number, DiscussionOption[]>();
+  for (const entry of entries) {
+    if (entry.type === 'question' && entry.payload.options != null) {
+      optionsOf.set(entry.no, entry.payload.options);
+    }
+  }
+
   if (entries.length === 0) return <p className="m-0 text-muted italic">{t('thread.empty')}</p>;
 
   return (
@@ -58,6 +66,18 @@ export function Thread({ address, entries, canReply, highlightedNo, conclusionNo
             highlighted={highlightedNo === entry.no}
             isAnswered={entry.type === 'question' && answered.has(entry.no)}
             actual={entry.type === 'conclusion' && entry.no === conclusionNo}
+            options={entry.type === 'question' ? (entry.payload.options ?? null) : null}
+            chosen={
+              entry.type === 'answer' && entry.payload.choice != null
+                ? {
+                    label: entry.payload.choice,
+                    text:
+                      optionsOf
+                        .get(entry.payload.question_no)
+                        ?.find((option) => option.label === entry.payload.choice)?.text ?? null,
+                  }
+                : null
+            }
             replyOpen={replyingTo === entry.no}
             onReply={canReply ? (open) => setReplyingTo(open ? entry.no : null) : undefined}
           />
@@ -74,11 +94,25 @@ interface ItemProps {
   isAnswered: boolean;
   actual: boolean;
   replyOpen: boolean;
+  /** Варианты вопроса: форма ответа покажет их карточками. */
+  options: DiscussionOption[] | null;
+  /** Выбранный в ответе вариант: метка и текст из вопроса (`null` — вопрос старый или текста нет). */
+  chosen: { label: string; text: string | null } | null;
   /** Нет — отвечать нельзя (закрыто или нет прав). */
   onReply?: (open: boolean) => void;
 }
 
-function Item({ address, entry, highlighted, isAnswered, actual, replyOpen, onReply }: ItemProps) {
+function Item({
+  address,
+  entry,
+  highlighted,
+  isAnswered,
+  actual,
+  replyOpen,
+  options,
+  chosen,
+  onReply,
+}: ItemProps) {
   const { t } = useTranslation('discussions');
   const { t: brick } = useTranslation('ui');
   const ref = useRef<HTMLElement>(null);
@@ -151,10 +185,21 @@ function Item({ address, entry, highlighted, isAnswered, actual, replyOpen, onRe
       )}
     >
       {meta}
-      <Content entry={entry} highlighted={highlighted} isAnswered={isAnswered} actual={actual} />
+      <Content
+        entry={entry}
+        highlighted={highlighted}
+        isAnswered={isAnswered}
+        actual={actual}
+        chosen={chosen}
+      />
       {entry.type === 'question' && onReply !== undefined && !isAnswered ? (
         replyOpen ? (
-          <ReplyForm address={address} questionNo={entry.no} onCancel={() => onReply(false)} />
+          <ReplyForm
+            address={address}
+            questionNo={entry.no}
+            options={options}
+            onCancel={() => onReply(false)}
+          />
         ) : (
           <div>
             <Button onClick={() => onReply(true)}>{t('reply.open', { no: entry.no })}</Button>
@@ -170,11 +215,13 @@ function Content({
   highlighted,
   isAnswered,
   actual,
+  chosen,
 }: {
   entry: DiscussionEntry;
   highlighted: boolean;
   isAnswered: boolean;
   actual: boolean;
+  chosen: ItemProps['chosen'];
 }) {
   const { t } = useTranslation('discussions');
 
@@ -205,7 +252,24 @@ function Content({
       );
 
     case 'answer':
-      return <Prose body={entry.body} />;
+      return (
+        <>
+          {chosen === null ? null : (
+            <p
+              data-choice={chosen.label}
+              className="m-0 flex flex-wrap items-baseline gap-x-2 gap-y-1"
+            >
+              <strong className="rounded-mark border border-accent bg-surface px-2 whitespace-nowrap text-accent">
+                {t('thread.chosen', { label: chosen.label })}
+              </strong>
+              {chosen.text === null ? null : (
+                <span className="min-w-0 wrap-anywhere">{chosen.text}</span>
+              )}
+            </p>
+          )}
+          {entry.body.trim() === '' ? null : <Prose body={entry.body} />}
+        </>
+      );
 
     case 'note':
       return (

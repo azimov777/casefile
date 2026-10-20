@@ -62,6 +62,7 @@ export const discussions = {
     waiting: 'ждёт ответа',
     addressees: 'Кому:',
     relayedFrom: 'со слов {{name}}',
+    chosen: 'Выбрано: {{label}}',
     details: 'Подробности',
     conclusionActual: 'актуальный итог',
     conclusionPrior: 'прежний итог',
@@ -75,6 +76,10 @@ export const discussions = {
     pending: 'Отправляем…',
     empty: 'Пустой ответ отправить нельзя: агенту нужен текст, а не факт нажатия кнопки.',
     placeholder: 'Markdown. Ссылки вида TRK-42, TRK~7 и TRK~7#3 станут ссылками.',
+    optionsLegend: 'Выберите вариант',
+    optionsField: 'Пояснение или свой ответ (необязательно, если выбран вариант)',
+    clearChoice: 'Снять выбор',
+    emptyWithOptions: 'Выберите вариант или напишите ответ: пустой ответ отправить нельзя.',
   },
 
   note: {
