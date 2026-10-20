@@ -48,7 +48,7 @@ test('ответ выбором: карточки на телефоне, выб�
   await silenceJournal(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/discussions/${address}`);
-  await page.getByRole('button', { name: 'Ответить на #1' }).click();
+  await page.getByRole('button', { name: 'Ответить на #2' }).click();
   await fontsReady(page);
 
   const group = page.getByRole('radiogroup', { name: 'Выберите вариант' });
@@ -58,9 +58,10 @@ test('ответ выбором: карточки на телефоне, выб�
   // Телефон: без прокрутки вбок, карточка на всю ширину группы и не ниже 44 px.
   const widths = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth,
-    inner: window.innerWidth,
+    // Ширина без полосы прокрутки: `innerWidth` её включает, и на 390 px они расходятся на её толщину.
+    client: document.documentElement.clientWidth,
   }));
-  expect(widths.scroll).toBe(widths.inner);
+  expect(widths.scroll).toBe(widths.client);
   const groupBox = await group.boundingBox();
   for (let index = 0; index < 3; index += 1) {
     const box = await cards.nth(index).boundingBox();
@@ -110,7 +111,7 @@ test('ответ одним выбором, без слов', async ({ page, req
 
   await silenceJournal(page);
   await page.goto(`/discussions/${address}`);
-  await page.getByRole('button', { name: 'Ответить на #1' }).click();
+  await page.getByRole('button', { name: 'Ответить на #2' }).click();
   await page.getByRole('radio', { name: /Замер не нужен/ }).check();
   await page.getByRole('button', { name: 'Ответить', exact: true }).click();
 
