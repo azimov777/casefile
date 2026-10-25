@@ -71,6 +71,8 @@ export const errors = {
   idempotency_key_reused: 'Ключ повтора уже использован другим запросом.',
   installation_not_empty:
     'Принять архив может только установка без проектов — принимайте в свежую.',
+  installation_setting_invalid: 'Значение не подходит под правила этой настройки.',
+  installation_setting_not_found: 'Такой настройки установки нет.',
   internal_error: 'Внутренняя ошибка сервера.',
   invalid_actor_label: 'Метка временного агента не соответствует шаблону.',
   invalid_area_key: 'Ключ области — только строчная латиница, цифры и дефис внутри.',
