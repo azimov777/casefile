@@ -1,7 +1,7 @@
 """files
 
 Revision ID: 2d73da764c90
-Revises: 3b9f4d192289
+Revises: 39d463eb6de9
 Create Date: 2026-10-25 20:28:25.985524+00:00
 
 Файлы в ядре (TRK-734; слово владельца TRK~8#4, итог TRK~8#5).
@@ -23,7 +23,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "2d73da764c90"
-down_revision: str | None = "3b9f4d192289"
+down_revision: str | None = "39d463eb6de9"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
