@@ -56,6 +56,10 @@ export const errors = {
   discussion_task_not_found: 'This task is not attached to the discussion.',
   entry_fields_invalid: 'The entry did not pass validation.',
   entry_not_found: 'This task has no entry with that number.',
+  file_deleted: 'The file was deleted: only its tombstone remains.',
+  file_fields_invalid: 'The file name or type is invalid.',
+  file_not_found: 'There is no such file.',
+  file_too_large: 'The file is larger than this installation allows.',
   finding_not_in_force:
     'This project finding has been superseded: supersede the one that replaced it.',
   human_token_not_allowed:

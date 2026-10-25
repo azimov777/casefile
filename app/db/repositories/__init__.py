@@ -5,6 +5,7 @@ from app.db.repositories.areas import AreaRepository
 from app.db.repositories.attributes import AttributeRepository
 from app.db.repositories.discussions import DiscussionRepository
 from app.db.repositories.entries import EntryRepository
+from app.db.repositories.files import FileRepository
 from app.db.repositories.idempotency import IdempotencyRepository
 from app.db.repositories.links import LinkRepository
 from app.db.repositories.oauth import OAuthRepository
@@ -20,6 +21,7 @@ __all__ = [
     "AttributeRepository",
     "DiscussionRepository",
     "EntryRepository",
+    "FileRepository",
     "IdempotencyRepository",
     "LinkRepository",
     "OAuthRepository",

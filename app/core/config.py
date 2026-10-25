@@ -135,6 +135,18 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Файлы ------------------------------------------------------------------------
+    file_max_bytes: int = Field(
+        default=25 * 1024 * 1024,
+        ge=1,
+        description=(
+            "Largest size in bytes of one stored file. A larger upload or replacement is "
+            "refused with `file_too_large` and the limit in `details`. The bytes live in "
+            "the database and travel inside the installation archive, so the limit also "
+            "bounds the memory one upload and one archive row take"
+        ),
+    )
+
     # Токен транспорта stdio (`python -m app.mcp --stdio`). У сообщения stdio нет HTTP-запроса,
     # а значит, и заголовка `Authorization`: процесс представляется одним токеном на всё время
     # жизни. В HTTP не читается вовсе — там токен приходит с каждым запросом. `SecretStr` — по
