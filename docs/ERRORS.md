@@ -51,6 +51,7 @@
 | Код | Сообщение | Когда возникает |
 |---|---|---|
 | `account_not_found` | Account not found | Учётной записи с таким идентификатором или почтой нет. |
+| `area_link_not_found` | Area link not found | Связи между этими областями в этом направлении нет. |
 | `area_not_found` | Area not found | Области с таким адресом нет: проект есть, ключа в нём нет (TRK#57). |
 | `attribute_not_found` | Attribute not found | Атрибута с таким именем (без учёта регистра) у проекта или области нет. |
 | `discussion_not_found` | Discussion not found | Обсуждения с таким адресом нет: проект есть, номера в нём нет (решение `TRK#51`). |
@@ -78,6 +79,7 @@
 | `archive_revision_unknown` | The archive comes from a newer Casefile; update this installation first | Ревизии схемы архива приёмник не знает: архив снят более новым Casefile. |
 | `area_archived` | Area is archived: its card, attributes and case are frozen | Область в архиве: карточка, атрибуты и дело заморожены (TRK#57). |
 | `area_key_taken` | Area key is already taken in this project | Ключ области уже занят в этом проекте: ключи уникальны без учёта регистра. |
+| `area_link_exists` | Area link already exists | Область-источник уже ссылается на эту область-цель. |
 | `area_not_archived` | Area is not archived | Восстанавливать нечего: область не в архиве. |
 | `assignee_mismatch` | Task is assigned to someone else | Вход в `in_progress` не от исполнителя задачи. |
 | `assignee_required` | Task has no assignee | Вход в `in_progress` у задачи без исполнителя. |
@@ -124,6 +126,9 @@
 | `archive_format_unsupported` | This is not an installation archive this Casefile can read | Документ — не архив установки этой раскладки: чужой `format` или `format_version`. |
 | `archive_invalid` | The installation archive is malformed | Архив противоречит сам себе или схеме своей ревизии. |
 | `area_description_too_long` | Area description is too long | Описание области длиннее предела (`app/domain/areas.py`); не обрезается. |
+| `area_link_reason_required` | An area link requires a reason | Причина связи областей пуста после обрезки пробелов. |
+| `area_link_reason_too_long` | The area link reason is too long | Причина связи областей длиннее предела (`MAX_AREA_LINK_REASON_LENGTH`); не обрезается. |
+| `area_link_self_not_allowed` | An area cannot be linked to itself | Связь области с самой собой запрещена (`app/domain/area_links.py`). |
 | `area_project_mismatch` | Area belongs to another project than the task | Область другого проекта: задаче подходит область её собственного проекта. |
 | `area_reason_required` | Archiving or restoring an area requires a reason | Архивирование и восстановление области требуют непустой причины `reason`. |
 | `area_required` | A task needs an area: name one of the project's areas | У новой задачи области нет, а она обязательна; снять область у задачи нельзя. |
