@@ -221,6 +221,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 **Discussions**
 - `add_conclusion` — files a discussion's conclusion: what is decided, superseded and still open
 - `close_discussion` — closes a discussion with its final conclusion, in one transaction
+- `list_discussions` — lists discussions with filters by project, status, turn and attached task: address, title, status, turn, open questions, closing time
 
 **Links**
 - `link` — links two tasks and files `link_added` in both cases, or attaches a task to a discussion
