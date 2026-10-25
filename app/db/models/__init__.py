@@ -13,6 +13,7 @@ from app.db.models.attribute import AreaAttribute, ProjectAttribute
 from app.db.models.author import CreatedByMixin, created_by_columns
 from app.db.models.discussion import Discussion, DiscussionTask
 from app.db.models.entry import Entry
+from app.db.models.file import EntryFile, File, FileContent
 from app.db.models.idempotency import IdempotencyKey
 from app.db.models.link import Link
 from app.db.models.oauth import OAuthClient, OAuthCode, OAuthRefreshToken
@@ -32,6 +33,9 @@ __all__ = [
     "Discussion",
     "DiscussionTask",
     "Entry",
+    "EntryFile",
+    "File",
+    "FileContent",
     "IdempotencyKey",
     "Link",
     "OAuthClient",

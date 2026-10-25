@@ -1133,3 +1133,51 @@ class InstallationNotEmptyError(ConflictError):
 
     code = "installation_not_empty"
     message = "Only an installation without projects can take an archive"
+
+
+# --- Файлы (TRK-734) ----------------------------------------------------------------
+
+
+class TrackerFileNotFoundError(NotFoundError):
+    """Файла с таким идентификатором в установке нет.
+
+    Название не `FileNotFoundError`: так зовётся исключение самого Python.
+    """
+
+    code = "file_not_found"
+    message = "File not found"
+
+
+class FileFieldsInvalidError(ValidationError):
+    """Имя или тип файла не проходят проверку; замечания — в `details.fields`.
+
+    Причины: `required`, `too_long`, `not_text`, `bad_characters` (имя с управляющими
+    символами или разделителем пути), `not_a_mime_type`. Список файлов записи проверяет
+    запись: его замечания приходят кодом `entry_fields_invalid`, поле `files` (причины
+    `not_a_list`, `too_many` с пределом в `max`, `not_an_id`, `duplicate`).
+    """
+
+    code = "file_fields_invalid"
+    message = "File name or type is invalid"
+
+
+class FileTooLargeError(ValidationError):
+    """Файл больше предела установки `TRACKER_FILE_MAX_BYTES`.
+
+    `details.size` — присланный размер, `details.max_bytes` — предел. Файл не
+    сохраняется и не обрезается.
+    """
+
+    code = "file_too_large"
+    message = "File is larger than this installation allows"
+
+
+class FileDeletedError(ConflictError):
+    """Файл удалён: от него осталось надгробие, байтов нет.
+
+    Заменить такой файл, выдать его байты или приложить к новой записи нельзя; чтение
+    карточки работает и показывает, кто и когда его удалил.
+    """
+
+    code = "file_deleted"
+    message = "File was deleted: only its tombstone remains"

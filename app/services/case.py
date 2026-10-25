@@ -154,6 +154,7 @@ from app.domain.tasks import (
     checks_without_verdict,
 )
 from app.services import decisions as decisions_service
+from app.services import files as files_service
 from app.services import freeze
 from app.services import participants as participants_service
 from app.services.auth import Actor
@@ -626,10 +627,14 @@ async def append_entry(
     body: Any = "",
     payload: dict[str, Any] | None = None,
     refs: Any = (),
+    files: Any = (),
     closing: bool = False,
     action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Подшивает запись агента: форма проверяется доменом, существование — здесь.
+
+    `files` — идентификаторы файлов, которые запись прикладывает (TRK-734): вложения
+    задаются только при создании записи, потому что запись неизменяема (TRK#127).
 
     Единственная точка входа для всех типов записей агента в деле задачи. Обёртки ниже
     (`add_summary`, `answer`, `add_verdict`, `add_entry`) существуют ради инструментов MCP,
@@ -655,6 +660,7 @@ async def append_entry(
         payload=payload,
         refs=refs,
     )
+    file_ids = await _attachments(session, files, key=task.key)
     await lock_changes(session)
     await _ensure_targets_exist(session, task, draft, actor=actor)
     if draft.type is EntryType.ACCEPTANCE:
@@ -668,6 +674,7 @@ async def append_entry(
         body=draft.body,
         payload=draft.payload,
         refs=draft.refs,
+        file_ids=file_ids,
         action_id=action_id,
     )
 
@@ -857,6 +864,7 @@ async def add_entry(
     title: Any,
     body: Any = "",
     refs: Any = (),
+    files: Any = (),
     draft_for: Any = None,
     action_id: uuid.UUID | None = None,
 ) -> Entry:
@@ -875,6 +883,7 @@ async def add_entry(
         title=title,
         body=body,
         refs=refs,
+        files=files,
         payload=None if draft_for is None else {DRAFT_FIELD: draft_for},
         action_id=action_id,
     )
@@ -892,6 +901,7 @@ async def append_project_entry(
     title: Any,
     body: Any = "",
     refs: Any = (),
+    files: Any = (),
     supersedes: Any = None,
 ) -> Entry:
     """Подшивает запись агента в дело проекта или области: `note`, `decision`, `finding`,
@@ -924,6 +934,7 @@ async def append_project_entry(
     problems = FieldProblems()
     await _check_refs(session, project, draft, problems)
     problems.raise_as(EntryFieldsInvalidError, key=owner_name(project))
+    file_ids = await _attachments(session, files, key=owner_name(project))
     await decisions_service.check_superseded(
         session, project, draft.type, superseded_numbers(draft.payload)
     )
@@ -936,6 +947,7 @@ async def append_project_entry(
         body=draft.body,
         payload=draft.payload,
         refs=draft.refs,
+        file_ids=file_ids,
     )
 
 
@@ -1187,6 +1199,7 @@ async def append_discussion_entry(
     body: Any = "",
     payload: dict[str, Any] | None = None,
     refs: Any = (),
+    files: Any = (),
     action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Подшивает запись в дело обсуждения: вопрос, ответ, заметку или итог (`TRK#51`, п. 2).
@@ -1212,6 +1225,7 @@ async def append_discussion_entry(
     await _check_discussion_question_no(session, discussion, draft, problems)
     await _check_refs(session, discussion, draft, problems)
     problems.raise_as(EntryFieldsInvalidError, key=discussion.address)
+    file_ids = await _attachments(session, files, key=discussion.address)
     return await _append(
         session,
         discussion,
@@ -1221,6 +1235,7 @@ async def append_discussion_entry(
         body=draft.body,
         payload=draft.payload,
         refs=draft.refs,
+        file_ids=file_ids,
         action_id=action_id,
     )
 
@@ -1325,6 +1340,7 @@ async def add_discussion_entry(
     title: Any,
     body: Any = "",
     refs: Any = (),
+    files: Any = (),
     supersedes: Any = None,
 ) -> Entry:
     """Запись без нагрузки в дело обсуждения по его адресу — путь `add_project_entry`.
@@ -1339,7 +1355,7 @@ async def add_discussion_entry(
         problems.add(SUPERSEDES_FIELD, "not_allowed", allowed_in=["project_case", "area_case"])
         problems.raise_as(EntryFieldsInvalidError, key=discussion.address)
     return await append_discussion_entry(
-        session, discussion, actor=actor, type=type, title=title, body=body, refs=refs
+        session, discussion, actor=actor, type=type, title=title, body=body, refs=refs, files=files
     )
 
 
@@ -2111,6 +2127,16 @@ def _ref_text(ref: TrackerRef) -> str:
     return ref.key
 
 
+async def _attachments(session: AsyncSession, files: Any, *, key: str) -> list[uuid.UUID]:
+    """Вложения новой записи: форма списка (`entry_fields_invalid`, поле `files`), затем
+    существование и неудалённость каждого файла (`file_not_found`, `file_deleted`)."""
+    problems = FieldProblems()
+    file_ids = files_service.file_ids_problem(problems, files)
+    problems.raise_as(EntryFieldsInvalidError, key=key)
+    await files_service.require_attachable(session, file_ids)
+    return file_ids
+
+
 async def _append(
     session: AsyncSession,
     owner: Task | Project | Area | Discussion,
@@ -2121,9 +2147,13 @@ async def _append(
     payload: dict[str, Any] | None = None,
     body: str = "",
     refs: Sequence[str] = (),
+    file_ids: Sequence[uuid.UUID] = (),
     action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Подшивает запись: номер в деле выдаётся под блокировкой строки владельца.
+
+    `file_ids` — уже проверенные вызывающим файлы (`_attachments`): вложения ложатся
+    строками `entry_files` сразу за записью, в той же транзакции.
 
     Владелец — задача, проект, область или обсуждение (TRK#128; решение
     `TRK#51`): одна точка подшивки на все дела, иначе у дела проекта была бы своя очередь,
@@ -2192,6 +2222,7 @@ async def _append(
         **created_by_columns(actor.author),
     )
     await repository.add(entry)
+    await files_service.attach_files(session, entry, file_ids)
     await journal_wakeup.announce(session, entry.seq)
     return entry
 
