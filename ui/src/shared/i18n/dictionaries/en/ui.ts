@@ -510,6 +510,9 @@ export const ui = {
     acceptTitle: 'Accepted without rework',
     return: 'Return for rework',
     closedBy: 'Closed by:',
+    returnedTitle: 'Remark filed',
+    returnedText:
+      'The remark is in the case and clears the “Closed not in full” warning, which is why the panel is gone. The agent will resolve it next and answer in the case of the task.',
   },
 
   /**
