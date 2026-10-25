@@ -1771,3 +1771,68 @@ async def test_the_withdrawal_rolls_back_without_touching_the_case_and_reapplies
     assert [tuple(row) for row in await _task_entries(migration_engine)] == [
         tuple(row) for row in once
     ]
+
+
+# --- Связь областей `see_also` (TRK-732) --------------------------------------------------
+
+#: Ревизия связи областей и ревизия перед ней.
+AREA_LINKS_REVISION = "39d463eb6de9"
+AREA_LINKS_PREVIOUS = WITHDRAW_QUESTIONS_REVISION
+
+_INSERT_AREAS = text(
+    "INSERT INTO areas (project_id, key, title, created_by_kind, created_by_signature) "
+    "SELECT id, k, k, 'agent', 'claude' FROM projects, "
+    "(VALUES ('one'), ('two'), ('three')) AS v(k) "
+    "WHERE projects.key = 'OLD'"
+)
+_INSERT_AREA_LINK = text(
+    "INSERT INTO area_links (source_area_id, target_area_id, reason, created_by_kind, "
+    "created_by_signature) SELECT s.id, t.id, :reason, 'agent', 'claude' "
+    "FROM areas s, areas t WHERE s.key = :source AND t.key = :target"
+)
+
+
+async def _area_links_table_exists(engine: AsyncEngine) -> bool:
+    async with engine.connect() as connection:
+        return bool(await connection.scalar(text("SELECT to_regclass('area_links') IS NOT NULL")))
+
+
+async def test_the_area_links_table_guards_pairs_and_comes_off_on_rollback(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """После подъёма таблица есть: вторая строка той же пары и связь с собой отвергаются
+    базой, обратная пара проходит; после `downgrade -1` таблицы нет, подъём идёт снова."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, AREA_LINKS_PREVIOUS)
+    assert not await _area_links_table_exists(migration_engine)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+        await connection.execute(_INSERT_AREAS)
+
+    await migrate(url, AREA_LINKS_REVISION)
+    assert await _area_links_table_exists(migration_engine)
+    async with migration_engine.begin() as connection:
+        for source, target in (("one", "two"), ("two", "one")):
+            await connection.execute(
+                _INSERT_AREA_LINK, {"reason": "читать", "source": source, "target": target}
+            )
+    with pytest.raises(Exception, match="uq_area_links_source_area_id_target_area_id"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                _INSERT_AREA_LINK, {"reason": "ещё", "source": "one", "target": "two"}
+            )
+    with pytest.raises(Exception, match="ck_area_links_no_self_link"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                _INSERT_AREA_LINK, {"reason": "self", "source": "one", "target": "one"}
+            )
+    with pytest.raises(Exception, match="ck_area_links_reason_length"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                _INSERT_AREA_LINK, {"reason": "", "source": "one", "target": "three"}
+            )
+
+    await migrate(url, AREA_LINKS_PREVIOUS, down=True)
+    assert not await _area_links_table_exists(migration_engine)
+    await migrate(url, AREA_LINKS_REVISION)
+    assert await _area_links_table_exists(migration_engine)

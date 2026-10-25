@@ -675,6 +675,48 @@ class LinkNotFoundError(NotFoundError):
     message = "Link not found"
 
 
+class AreaLinkSelfError(ValidationError):
+    """Связь области с самой собой запрещена (`app/domain/area_links.py`)."""
+
+    code = "area_link_self_not_allowed"
+    message = "An area cannot be linked to itself"
+
+
+class AreaLinkExistsError(ConflictError):
+    """Область-источник уже ссылается на эту область-цель.
+
+    Направленная пара уникальна: `A → B` и `B → A` — две разные связи, повтором считается
+    только та же пара в том же направлении. Ловится ещё и уникальным ограничением базы.
+    """
+
+    code = "area_link_exists"
+    message = "Area link already exists"
+
+
+class AreaLinkNotFoundError(NotFoundError):
+    """Связи между этими областями в этом направлении нет.
+
+    Отдельный код, а не `area_not_found`: обе области существуют, нет именно связи.
+    """
+
+    code = "area_link_not_found"
+    message = "Area link not found"
+
+
+class AreaLinkReasonRequiredError(ValidationError):
+    """Причина связи областей пуста после обрезки пробелов."""
+
+    code = "area_link_reason_required"
+    message = "An area link requires a reason"
+
+
+class AreaLinkReasonTooLongError(ValidationError):
+    """Причина связи областей длиннее предела (`MAX_AREA_LINK_REASON_LENGTH`); не обрезается."""
+
+    code = "area_link_reason_too_long"
+    message = "The area link reason is too long"
+
+
 class LinkCycleError(ConflictError):
     """Связь замкнула бы кольцо в иерархии или в блокировках.
 

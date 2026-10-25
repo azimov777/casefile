@@ -21,6 +21,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import archive as store
+from app.db.models.area_link import AreaLink
 from app.db.models.entry import Entry
 from app.db.models.link import Link
 from app.db.models.oauth import OAuthClient, OAuthCode, OAuthRefreshToken
@@ -323,6 +324,56 @@ async def test_a_fresh_installation_takes_the_archive_whole(
         {"name": store.SCRATCH_SCHEMA},
     )
     assert left == 0
+
+
+async def test_an_area_link_travels_with_its_reason_and_author(
+    auth_client: AsyncClient, db_session: AsyncSession, main_actor: Actor
+) -> None:
+    """Связь двух областей уезжает в архив и принимается обратно на пустую установку
+    с той же причиной, направлением и автором (TRK-732)."""
+    await populate(auth_client)
+    second = await auth_client.post("/api/v1/projects/TRK/areas", json={"key": "ui", "title": "UI"})
+    assert second.status_code == 201, second.text
+    core = await areas_service.get_area(db_session, "TRK/core")
+    other = await areas_service.get_area(db_session, "TRK/ui")
+    db_session.add(
+        AreaLink(
+            source_area_id=core.id,
+            target_area_id=other.id,
+            reason="Читать контракт интерфейса",
+            created_by_kind=main_actor.author.kind,
+            created_by_signature=main_actor.author.signature,
+        )
+    )
+    await db_session.flush()
+    archive = (await auth_client.get(ARCHIVE)).json()["data"]
+    assert len(table(archive, "area_links")["rows"]) == 1
+
+    await wipe(db_session)
+    target_ui, _ = await fresh_installation(db_session)
+    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=bearer(target_ui))
+    assert response.status_code == 200, response.text
+
+    db_session.expire_all()
+    restored = (await db_session.scalars(select(AreaLink))).unique().all()
+    assert [
+        (
+            item.source.address,
+            item.target.address,
+            item.reason,
+            item.created_by_kind,
+            item.created_by_signature,
+        )
+        for item in restored
+    ] == [
+        (
+            "TRK/core",
+            "TRK/ui",
+            "Читать контракт интерфейса",
+            main_actor.author.kind,
+            main_actor.author.signature,
+        )
+    ]
 
 
 async def test_a_moved_task_comes_in_with_its_previous_keys(
