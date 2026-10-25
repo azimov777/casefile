@@ -18,7 +18,9 @@ from app.domain.case import EntryType
 from app.domain.errors import QuestionNotATaskEntryError
 from app.domain.participants import ParticipantKind
 from app.services import case as case_service
+from app.services import discussions as discussions_service
 from app.services import participants as participants_service
+from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import TRACKER_ACTOR, Actor
 from conftest import Connect, call, make_task, refuse, without_empty_standing
@@ -569,3 +571,88 @@ async def test_options_and_choice_are_refused_when_malformed(
     assert "entry_fields_invalid" in one and "options" in one, one
     assert "not_an_option" in outside, outside
     assert "question_has_no_options" in free, free
+
+
+async def test_list_discussions_filters_by_status_turn_task_and_project(
+    mcp_session: Connect,
+    db_session: AsyncSession,
+    main_secret: str,
+    main_actor: Actor,
+    open_task: Task,
+) -> None:
+    """Обзорная проверка 1: `list_discussions` отбирает по статусу, ходу, задаче и проекту,
+    отдаёт узкую строку, страницами; неизвестный проект и задача — отказ, не пустая выдача."""
+    key = open_task.key
+    other = await projects_service.create_project(
+        db_session, actor=main_actor, key="OPS", title="Другой"
+    )
+    await discussions_service.create_discussion(
+        db_session, actor=main_actor, project=other, title="Без задач", opening=EntryType.NOTE
+    )
+    async with mcp_session(main_secret) as session:
+        waiting = await call(session, "ask", key=key, addressees=["owner"], title="Ждёт человека")
+        replied = await call(session, "ask", key=key, addressees=["owner"], title="Ждёт агента")
+        answered = await call(
+            session, "answer", key=replied["discussion"], question_no=replied["no"], body="Да"
+        )
+        done = await call(session, "ask", key=key, addressees=["owner"], title="Закрыто")
+        await call(session, "answer", key=done["discussion"], question_no=done["no"], body="Да")
+        await call(
+            session,
+            "close_discussion",
+            key=done["discussion"],
+            decided=f"Да ({done['discussion']}#{answered['no']})",
+            superseded="ничего",
+            open="ничего",
+        )
+
+        everything = await call(session, "list_discussions")
+        opened = await call(session, "list_discussions", status="open")
+        closed = await call(session, "list_discussions", status="closed")
+        agents = await call(session, "list_discussions", turn="agent")
+        humans = await call(session, "list_discussions", turn="human", project="TRK")
+        of_task = await call(session, "list_discussions", task=key)
+        of_project = await call(session, "list_discussions", project="OPS")
+        first = await call(session, "list_discussions", limit=2)
+        second = await call(session, "list_discussions", limit=2, cursor=first["next_cursor"])
+        no_project = await refuse(session, "list_discussions", project="NOPE")
+        no_task = await refuse(session, "list_discussions", task="TRK-999")
+        bad_turn = await refuse(session, "list_discussions", turn="nobody")
+
+    def addresses(listed: dict) -> list[str]:
+        return [item["address"] for item in listed["items"]]
+
+    # Порядок между проектами в тесте не проверяется: время в одной транзакции теста общее.
+    assert sorted(addresses(everything)) == ["OPS~1", "TRK~1", "TRK~2", "TRK~3"]
+    assert [a for a in addresses(everything) if a.startswith("TRK")] == [
+        "TRK~1",
+        "TRK~2",
+        "TRK~3",
+    ], "oldest first"
+    assert sorted(addresses(opened)) == ["OPS~1", waiting["discussion"], replied["discussion"]]
+    assert addresses(closed) == [done["discussion"]]
+    # Записка человека без задач (`OPS~1`) — ход агента: так находится обсуждение без задач.
+    assert addresses(agents) == ["OPS~1", replied["discussion"]]
+    assert addresses(humans) == [waiting["discussion"]]
+    assert sorted(addresses(of_task)) == sorted(
+        [waiting["discussion"], replied["discussion"], done["discussion"]]
+    )
+    assert addresses(of_project) == ["OPS~1"]
+    row = next(item for item in of_task["items"] if item["address"] == waiting["discussion"])
+    assert row == {
+        "address": waiting["discussion"],
+        "title": "Ждёт человека",
+        "status": "open",
+        "turn": "human",
+        "open_questions": 1,
+        "closed_at": None,
+    }
+    (finished,) = closed["items"]
+    assert (finished["turn"], finished["open_questions"]) == (None, 0)
+    assert finished["closed_at"] is not None
+    assert len(first["items"]) == 2 and first["next_cursor"] is not None
+    assert addresses(first) + addresses(second) == addresses(everything)
+    assert second["next_cursor"] is None
+    assert "project_not_found" in no_project, no_project
+    assert "task_not_found" in no_task, no_task
+    assert "nobody" in bad_turn, bad_turn

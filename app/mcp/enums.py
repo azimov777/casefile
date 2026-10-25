@@ -24,6 +24,7 @@ from pydantic import WithJsonSchema
 from app.domain.authors import AuthorKind
 from app.domain.case import AnswerOutcome, EntryType, RemarkOutcome, VerdictOutcome
 from app.domain.decisions import DecisionStatus
+from app.domain.discussions import DiscussionStatus, DiscussionTurn
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.tasks import TaskField, TaskPriority, TaskStatus
@@ -67,6 +68,8 @@ DecisionStatusSchema = Annotated[
         "`supersedes`",
     ),
 ]
+DiscussionStatusSchema = Annotated[DiscussionStatus, described(DiscussionStatus, "Status")]
+DiscussionTurnSchema = Annotated[DiscussionTurn, described(DiscussionTurn, "Turn")]
 LinkKindSchema = Annotated[
     LinkKind,
     described(LinkKind, "Link kind, named by the role of the task the link is shown for"),

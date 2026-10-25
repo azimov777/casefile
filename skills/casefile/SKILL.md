@@ -46,7 +46,8 @@ Read before you act, because the case already holds choices you must not redo:
   status, whose turn it is, the open questions and the latest conclusion. The latest
   conclusion and the human's answers and notes set the work together with the sections
   (`state` names the ones filed after the sections were last edited); read a discussion
-  in full with `read_project_entries(key="TRK~7")`;
+  in full with `read_project_entries(key="TRK~7")`; the discussions of a project, whose
+  turn it is — `list_discussions(project="TRK", status="open", turn="agent")`;
 - a reference like `TRK-7#12` in the text is an entry — `read_entries(key="TRK-7", nos=[12])`;
   `TRK~7#3` is an entry of a discussion — `read_project_entries(key="TRK~7", nos=[3])`.
 
