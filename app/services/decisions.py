@@ -72,6 +72,7 @@ from app.domain.errors import (
     TaskFieldsInvalidError,
 )
 from app.domain.fields import FieldProblems
+from app.domain.project_access import is_open
 from app.domain.tasks import TaskField, split_decision_ref
 from app.services.auth import Actor
 
@@ -290,6 +291,13 @@ async def cited_decisions(
     cited: list[CitedDecision] = []
     for ref in refs:
         key, no = split_decision_ref(ref)
+        owner = owners[key]
+        # Решение закрытого агенту проекта задача цитирует (человек или другой агент поставил
+        # ссылку), но его адрес и название вызову не положены: из карточки оно уходит (TRK-753).
+        if not is_open(
+            actor.project_access, (owner if isinstance(owner, Project) else owner.project).id
+        ):
+            continue
         decision = found.get(key, {}).get(no)
         if decision is None:
             raise RuntimeError(f"Task cites {ref}, which is not a decision of a project or area")

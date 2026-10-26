@@ -13,6 +13,7 @@
 ключ, временный агент) ограничений не имеют: для них берут `UNRESTRICTED`.
 """
 
+import re
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -69,3 +70,24 @@ def is_open(access: ProjectAccess, project_id: uuid.UUID) -> bool:
     if access.mode is ProjectAccessMode.ONLY:
         return project_id in access.project_ids
     return True
+
+
+#: Вместо ключа закрытого агенту проекта там, где факт связи показать нужно, а проект назвать
+#: нельзя: связь есть, назвать её сторону вызову не положено (TRK-753).
+CLOSED_PROJECT_LABEL = "[closed project]"
+
+
+def mask_closed_keys(text: str, closed_keys: Iterable[str]) -> str:
+    """Заменяет в строке всё, что называет закрытый проект, меткой `CLOSED_PROJECT_LABEL`.
+
+    Называет проект ключ в любом написании: `TRK`, `TRK-7`, `TRK/core#3`, `TRK~2#1`. Без
+    закрытых ключей строка не меняется.
+    """
+    keys = sorted({key.upper() for key in closed_keys}, key=len, reverse=True)
+    if not keys:
+        return text
+    pattern = re.compile(
+        r"\b(?:" + "|".join(re.escape(key) for key in keys) + r")\b(?:[-/~#][\w-]*)*",
+        re.IGNORECASE,
+    )
+    return pattern.sub(CLOSED_PROJECT_LABEL, text)

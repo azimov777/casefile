@@ -235,9 +235,13 @@ async def test_the_task_package_hides_links_and_discussions_of_a_closed_project(
     package = (await as_agent(client, world).get(f"/api/v1/tasks/{world.open_task.key}")).json()
 
     data = package["data"]
-    # Опись дела - история открытого дела: запись `link_added` называет ключ как факт.
-    shown = {key: data[key] for key in ("links", "parent", "children", "discussions", "decisions")}
+    # Опись тоже: запись `link_added` называет сторону меткой, не ключом (TRK-753).
+    shown = {
+        key: data[key]
+        for key in ("links", "parent", "children", "discussions", "decisions", "index")
+    }
     assert leaks(shown) == [] and leaks(data["state"]["blockers"]) == []
+    assert data["state"]["blockers"] == ["[closed project]"]
     assert data["features"]["blocked"] is True
 
 
