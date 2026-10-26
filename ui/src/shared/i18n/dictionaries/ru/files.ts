@@ -166,4 +166,22 @@ export const files = {
     deleteMatching: 'Удалить все отобранные',
     deleteEverything: 'Удалить все файлы',
   },
+
+  attach: {
+    label: 'Файлы',
+    pick: 'Прикрепить файл',
+    input: 'Выбрать файлы для записи',
+    uploading: 'Загружаю…',
+    remove: 'Убрать {{name}} из записи',
+    removeShort: 'Убрать',
+    full: 'Больше {{max}} файлов к записи не приложить.',
+  },
+
+  entryFiles: {
+    label: 'Файлы записи',
+    hide: 'Скрыть',
+    deleted: 'Файл удалён',
+    deletedBy: 'Удалил {{author}}',
+    deletedByTracker: 'Удалил трекер',
+  },
 };

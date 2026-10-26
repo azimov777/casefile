@@ -1,6 +1,7 @@
 import { cva } from 'class-variance-authority';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { EntryFiles } from '@/entities/file/@x/entry';
 import { Badge, Markdown, TaskText } from '@/shared/ui';
 import type { Entry } from '../api/entries';
 import {
@@ -41,6 +42,20 @@ const REF = 'font-mono text-meta';
  * бэкенд заведёт новый тип.
  */
 export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
+  /*
+   * Файлы записи (TRK-740) стоят под телом любого типа: тело разбирает `TypedBody`, а
+   * файлы к нему не относятся. Все экраны, что рисуют запись (карточка, опись, обсуждение,
+   * разделы задачи), зовут именно `EntryBody`, поэтому вложения видны везде одинаково.
+   */
+  return (
+    <>
+      <TypedBody entry={entry} checks={checks} />
+      <EntryFiles files={entry.files} />
+    </>
+  );
+}
+
+function TypedBody({ entry, checks = [] }: EntryBodyProps) {
   const { t } = useTranslation('ui');
 
   switch (entry.type) {

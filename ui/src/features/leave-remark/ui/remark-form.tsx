@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/shared/api';
 import { errorMessage, fieldReasonText } from '@/shared/errors';
-import { titleFromText } from '@/shared/lib';
+import { AttachmentPicker, useAttachments } from '@/entities/file';
+import { projectOfKey, titleFromText } from '@/shared/lib';
 import { Composer, Receipt } from '@/shared/ui';
 import { remarkDraftKey } from '../model/draft';
 import { useLeaveRemark } from '../model/use-leave-remark';
@@ -36,6 +37,7 @@ interface RemarkFormProps {
  */
 export function RemarkForm({ taskKey, onCancel, onFiled, focusOnMount }: RemarkFormProps) {
   const remark = useLeaveRemark();
+  const attachments = useAttachments(projectOfKey(taskKey));
   const [filed, setFiled] = useState<{ entryNo: number; body: string } | null>(null);
   const fields = remark.error instanceof ApiError ? remark.error.fields : null;
   // Тело важнее заголовка: заголовок выводится из тела, и если не так и то, и другое —
@@ -70,6 +72,8 @@ export function RemarkForm({ taskKey, onCancel, onFiled, focusOnMount }: RemarkF
       isPending={remark.isPending}
       onCancel={onCancel}
       focusOnMount={focusOnMount}
+      attachments={<AttachmentPicker attachments={attachments} />}
+      busy={attachments.uploading}
       failure={
         remark.isError ? (
           <>
@@ -84,7 +88,9 @@ export function RemarkForm({ taskKey, onCancel, onFiled, focusOnMount }: RemarkF
             title: titleFromText(body),
             body,
             idempotencyKey,
+            files: attachments.ids,
           });
+          attachments.reset();
           setFiled({ entryNo: entry.no, body });
           onFiled?.();
           return true;

@@ -153,4 +153,22 @@ export const files = {
     deleteMatching: 'Delete all selected by the filter',
     deleteEverything: 'Delete all files',
   },
+
+  attach: {
+    label: 'Files',
+    pick: 'Attach a file',
+    input: 'Choose files for the entry',
+    uploading: 'Uploading…',
+    remove: 'Remove {{name}} from the entry',
+    removeShort: 'Remove',
+    full: 'No more than {{max}} files can be attached to one entry.',
+  },
+
+  entryFiles: {
+    label: 'Entry files',
+    hide: 'Hide',
+    deleted: 'File deleted',
+    deletedBy: 'Deleted by {{author}}',
+    deletedByTracker: 'Deleted by the tracker',
+  },
 };

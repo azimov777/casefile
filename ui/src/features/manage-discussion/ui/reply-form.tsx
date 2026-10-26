@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { DiscussionOption } from '@/entities/discussion';
 import { ApiError } from '@/shared/api';
 import { errorMessage, fieldReasonText } from '@/shared/errors';
+import { AttachmentPicker, useAttachments } from '@/entities/file';
 import { Composer } from '@/shared/ui';
 import { replyDraftKey } from '../model/draft';
 import { useReply } from '../model/use-discussion-actions';
@@ -31,6 +32,7 @@ export function ReplyForm({
   onCancel: () => void;
 }) {
   const reply = useReply();
+  const attachments = useAttachments(address.split('~')[0] ?? null);
   const [choice, setChoice] = useState<string | null>(null);
   const fields = reply.error instanceof ApiError ? reply.error.fields : null;
   const { t } = useTranslation('discussions');
@@ -54,6 +56,8 @@ export function ReplyForm({
       problem={fields?.body === undefined ? undefined : fieldReasonText(fields.body)}
       isPending={reply.isPending}
       onCancel={onCancel}
+      attachments={<AttachmentPicker attachments={attachments} />}
+      busy={attachments.uploading}
       failure={
         reply.isError ? (
           <>
@@ -68,8 +72,10 @@ export function ReplyForm({
             questionNo,
             body,
             idempotencyKey,
+            files: attachments.ids,
             ...(choice === null ? {} : { choice }),
           });
+          attachments.reset();
           return true;
         } catch {
           return false;

@@ -11,6 +11,8 @@ export interface AnswerInput {
   body: string;
   /** Ключ повтора: тот же на каждой попытке отправить этот ответ. */
   idempotencyKey: string;
+  /** Id загруженных файлов, прикреплённых к ответу. */
+  files?: string[];
 }
 
 /**
@@ -25,14 +27,25 @@ export function useAnswerQuestion() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskKey, questionNo, body, idempotencyKey }: AnswerInput): Promise<Entry> =>
+    mutationFn: ({
+      taskKey,
+      questionNo,
+      body,
+      idempotencyKey,
+      files,
+    }: AnswerInput): Promise<Entry> =>
       unwrap(
         apiClient.POST('/api/v1/tasks/{task_key}/entries', {
           params: {
             path: { task_key: taskKey },
             header: { 'Idempotency-Key': idempotencyKey },
           },
-          body: { type: 'answer', body, payload: { question_no: questionNo } },
+          body: {
+            type: 'answer',
+            body,
+            payload: { question_no: questionNo },
+            ...(files === undefined || files.length === 0 ? {} : { files }),
+          },
         }),
       ),
 
