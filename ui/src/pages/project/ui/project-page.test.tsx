@@ -29,6 +29,7 @@ function projectDetail(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
     ],
     decisions: [],
     areas: [],
+    unconfirmed_decisions: 0,
     ...overrides,
   };
 }
@@ -78,6 +79,8 @@ function decision(no: number, overrides: Partial<ProjectDecision> = {}): Project
     author: { kind: 'agent', signature: 'demo_agent' },
     created_at: '2026-09-01T10:00:00Z',
     status: 'in_force',
+    review_state: 'unconfirmed',
+    review_entry: null,
     supersedes: [],
     superseded_by: null,
     tasks: 0,

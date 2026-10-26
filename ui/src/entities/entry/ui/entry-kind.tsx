@@ -22,6 +22,7 @@ import {
   Plus,
   Repeat,
   Search,
+  ShieldCheck,
   SquarePen,
   StickyNote,
   Tag,
@@ -73,6 +74,7 @@ const KIND_ICON = {
   attribute_removed: Eraser,
   archived: Archive,
   restored: ArchiveRestore,
+  decision_review: ShieldCheck,
 } satisfies Record<EntryType, typeof Check>;
 
 /**
@@ -113,6 +115,7 @@ const KIND_COLOR = {
   attribute_removed: 'text-faint',
   archived: 'text-faint',
   restored: 'text-faint',
+  decision_review: 'text-faint',
 } satisfies Record<EntryType, string>;
 
 interface EntryKindProps {

@@ -31,6 +31,7 @@ function projectDetail(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
     attributes: [{ name: 'repo', value: 'github.com/demo', ...STAMPS }],
     decisions: [],
     areas: [],
+    unconfirmed_decisions: 0,
     ...overrides,
   };
 }

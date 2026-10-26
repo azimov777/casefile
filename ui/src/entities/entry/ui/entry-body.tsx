@@ -293,6 +293,7 @@ function TypedBody({ entry, checks = [] }: EntryBodyProps) {
     case 'remark':
     case 'acceptance':
     case 'note':
+    case 'decision_review':
       return (
         <div className={BLOCK}>
           <Text body={entry.body} />

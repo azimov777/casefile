@@ -56,6 +56,7 @@ const FACTS = {
   attribute_removed: { type: 'attribute_removed', name: 'repo' },
   archived: { type: 'archived' },
   restored: { type: 'restored' },
+  decision_review: { type: 'decision_review' },
   conclusion: { type: 'conclusion' },
   attached: { type: 'attached', task_key: 'DEMO-1', discussion: 'DEMO~1' },
   detached: { type: 'detached', task_key: 'DEMO-1', discussion: 'DEMO~1' },
