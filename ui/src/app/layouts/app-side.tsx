@@ -9,6 +9,7 @@ import {
   KeyRound,
   MessagesSquare,
   Plug,
+  SlidersHorizontal,
   TriangleAlert,
   UserRound,
   Users,
@@ -313,6 +314,15 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
         <NavLink to="/access" onClick={onNavigate} className={sectionLink}>
           <KeyRound className="size-(--ui-mark) shrink-0" aria-hidden="true" />
           {t('app.access')}
+        </NavLink>
+
+        {/*
+         * Настройки установки — значения видят все вошедшие, правит администратор:
+         * решает сам экран по флагу из первого кадра, поэтому пункт виден всем.
+         */}
+        <NavLink to="/settings" onClick={onNavigate} className={sectionLink}>
+          <SlidersHorizontal className="size-(--ui-mark) shrink-0" aria-hidden="true" />
+          {t('app.settings')}
         </NavLink>
 
         {/* Перенос — тоже действие над установкой целиком, и тоже только

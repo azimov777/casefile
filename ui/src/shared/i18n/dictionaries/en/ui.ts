@@ -100,6 +100,7 @@ export const ui = {
     // агента и доступы касаются установки целиком.
     installation: 'Installation',
     connect: 'Connect an agent',
+    settings: 'Settings',
     access: 'Access',
     // Перенос — тоже действие над установкой целиком, и тоже только администратору
     // (UI-135): moving the whole installation elsewhere, not day-to-day access.

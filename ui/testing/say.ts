@@ -18,6 +18,7 @@ export const say = {
   ui: i18n.getFixedT(null, 'ui'),
   login: i18n.getFixedT(null, 'login'),
   moving: i18n.getFixedT(null, 'moving'),
+  settings: i18n.getFixedT(null, 'settings'),
   tasks: i18n.getFixedT(null, 'tasks'),
   task: i18n.getFixedT(null, 'task'),
   case: i18n.getFixedT(null, 'case'),
