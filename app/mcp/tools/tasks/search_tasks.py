@@ -172,8 +172,8 @@ DecisionFilterArg = Annotated[
     Field(
         description=(
             "Decisions `PROJECT#N` or `PROJECT/area#N`: the tasks whose `decisions` field "
-            "names one of them, in any status, also after the decision is superseded. "
-            "`empty()` matches tasks that name no decision. An address that is not a "
+            "names one of them, in any status, also after the decision is superseded, rejected "
+            "or removed. `empty()` matches tasks that name no decision. An address that is not a "
             "`decision` entry of a project's or an area's case is refused rather than read "
             "as «no tasks»"
         ),

@@ -129,7 +129,7 @@ class ProjectView(BaseModel):
         description=(
             "Index of the case, titles only, in number order: artifacts and notes and the "
             "tracker's entries about the card. Decisions and findings are left out, in "
-            "force or superseded. Entry bodies come from `read_project_entries`"
+            "force or not. Entry bodies come from `read_project_entries`"
         )
     )
     # Словарь с ключами-строками, а не модель и не ключи-перечисление: `EntryTypeSchema`
@@ -137,7 +137,7 @@ class ProjectView(BaseModel):
     index_omitted: dict[str, int] = Field(
         description=(
             "Number of entries left out of `index`, by type, `decision` and `finding`: all "
-            "of them in the case, the superseded ones included. `read_project_entries` "
+            "of them in the case, those out of force included. `read_project_entries` "
             "returns them by `types`, `in_force` and `text`"
         )
     )
@@ -196,8 +196,8 @@ def register(tools: Toolset) -> None:
         values, the project decisions and findings in force by address and title, its
         areas and the index of the project's case. Decisions and findings stay out
         of that index; `index_omitted` counts them by type. An area address returns
-        the area in the same shape: its own decisions and findings in force, superseded
-        the way a project's are, and an empty list of areas.
+        the area in the same shape: its own decisions and findings in force, and an empty
+        list of areas. A decision a human rejected or removed is not in force and is left out.
 
         The keys of the installation's projects are listed by `list_projects`.
         """

@@ -21,9 +21,9 @@ InForceArg = Annotated[
     bool | None,
     Field(
         description=(
-            "`true`: only the decisions and findings in force; `false`: only the superseded "
-            "ones. Entries without a status — other types and every entry of a "
-            "discussion's case — match neither"
+            "`true`: only the decisions and findings in force; `false`: only those out of "
+            "force: superseded, and decisions a human rejected or removed. Entries without a "
+            "status — other types and every entry of a discussion's case — match neither"
         )
     ),
 ]
@@ -71,7 +71,8 @@ def register(tools: Toolset) -> None:
 
         Decisions and findings of a project's or an area's case carry `status` and
         `superseded_by` on every read, numbers included; `superseded_by` is the direct
-        successor's number.
+        successor's number. A decision with status `rejected` or `removed` was withdrawn by
+        a human and has no successor (`superseded_by` is null); it is not in force.
         """
         async with runtime.call() as (session, actor):
             if is_discussion_address(key):
