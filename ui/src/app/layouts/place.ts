@@ -11,6 +11,7 @@ export type Section =
   | 'start'
   | 'connect'
   | 'access'
+  | 'settings'
   | 'people'
   | 'account'
   | 'other';
@@ -49,6 +50,10 @@ export function readPlace(pathname: string, params: URLSearchParams): Place {
 
   if (pathname === '/access') {
     return { section: 'access', project: null, taskKey: null };
+  }
+
+  if (pathname === '/settings') {
+    return { section: 'settings', project: null, taskKey: null };
   }
 
   if (pathname === '/people') {

@@ -11,6 +11,7 @@ import { moving } from './moving';
 import { people } from './people';
 import { project } from './project';
 import { questions } from './questions';
+import { settings } from './settings';
 import { start } from './start';
 import { task } from './task';
 import { tasks } from './tasks';
@@ -44,6 +45,7 @@ export const en = {
   people,
   project,
   questions,
+  settings,
   start,
   task,
   tasks,
