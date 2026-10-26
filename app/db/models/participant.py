@@ -9,6 +9,7 @@ from app.db.base import BaseModel, string_enum
 from app.db.models.author import CreatedByMixin
 from app.domain.authors import Author, participant_author
 from app.domain.participants import ParticipantKind
+from app.domain.project_access import ProjectAccessMode
 
 
 class Participant(BaseModel, CreatedByMixin):
@@ -34,6 +35,16 @@ class Participant(BaseModel, CreatedByMixin):
     # Канонизацию делает домен (`validate_participant_name`) — до всякой записи.
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     description: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
+
+    # Режим доступа к проектам (TRK-746; TRK~28#6): `all` — все, включая новые; `except` —
+    # все, кроме списка; `only` — только список (`participant_projects`). Людям и
+    # безымянным вызовам ограничений нет.
+    project_access_mode: Mapped[ProjectAccessMode] = mapped_column(
+        string_enum(ProjectAccessMode, name="project_access_mode", length=16),
+        default=ProjectAccessMode.ALL,
+        server_default=ProjectAccessMode.ALL.value,
+        nullable=False,
+    )
 
     # Хозяин агента: человек, чей это агент (TRK#73; TRK-475#14). У людей, у
     # общих агентов и у локальных `claude`/`codex` — NULL. Связь объектом подгружается

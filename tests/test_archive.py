@@ -26,14 +26,17 @@ from app.db.models.entry import Entry
 from app.db.models.link import Link
 from app.db.models.oauth import OAuthClient, OAuthCode, OAuthRefreshToken
 from app.db.models.participant import Participant
+from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.models.token import Token
-from app.db.repositories import AccountRepository
+from app.db.repositories import AccountRepository, ParticipantRepository
+from app.db.repositories.participant_projects import ParticipantProjectRepository
 from app.db.session import transaction
 from app.domain.archive import EXCLUDED_TABLES, Archive, ArchiveFormat, ArchiveTable, copy_text
 from app.domain.errors import ArchiveInvalidError
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
+from app.domain.project_access import ProjectAccessMode
 from app.domain.tokens import TokenKind
 from app.services import archive as archive_service
 from app.services import areas as areas_service
@@ -791,3 +794,35 @@ async def test_a_value_postgres_rejects_leaves_the_installation_untouched(
 
 def test_copy_text_escapes_what_the_format_reads_as_markup() -> None:
     assert copy_text([["a\tb", None, "c\nd\\e\rf", ""]]) == b"a\\tb\t\\N\tc\\nd\\\\e\\rf\t\n"
+
+
+async def test_an_agent_project_access_travels_with_its_mode_and_list(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Агент с режимом `only` и двумя проектами уезжает в архив и принимается на пустую
+    установку с тем же режимом и списком (TRK-746)."""
+    await populate(auth_client)
+    ops = await auth_client.post("/api/v1/projects", json={"key": "OPS", "title": "Соседний"})
+    assert ops.status_code == 201, ops.text
+    agent = await participants_service.register_participant(
+        db_session, actor=TRACKER_ACTOR, kind=ParticipantKind.AGENT, name="scoped"
+    )
+    projects = (await db_session.scalars(select(Project))).all()
+    ids = {project.key: project.id for project in projects}
+    await ParticipantProjectRepository(db_session).replace_access(
+        agent, ProjectAccessMode.ONLY, [ids["TRK"], ids["OPS"]]
+    )
+    archive = (await auth_client.get(ARCHIVE)).json()["data"]
+    assert len(table(archive, "participant_projects")["rows"]) == 2
+
+    await wipe(db_session)
+    target_ui, _ = await fresh_installation(db_session)
+    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=bearer(target_ui))
+    assert response.status_code == 200, response.text
+
+    db_session.expire_all()
+    restored = await ParticipantRepository(db_session).get_by_name("scoped")
+    assert restored is not None
+    access = await ParticipantProjectRepository(db_session).get_access(restored)
+    assert access.mode is ProjectAccessMode.ONLY
+    assert access.project_ids == frozenset({ids["TRK"], ids["OPS"]})

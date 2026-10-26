@@ -19,6 +19,7 @@ from app.db.models.installation_setting import InstallationSetting
 from app.db.models.link import Link
 from app.db.models.oauth import OAuthClient, OAuthCode, OAuthRefreshToken
 from app.db.models.participant import Participant
+from app.db.models.participant_project import ParticipantProject
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.models.token import Token
@@ -44,6 +45,7 @@ __all__ = [
     "OAuthCode",
     "OAuthRefreshToken",
     "Participant",
+    "ParticipantProject",
     "Project",
     "ProjectAttribute",
     "Task",

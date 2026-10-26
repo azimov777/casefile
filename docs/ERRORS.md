@@ -45,6 +45,7 @@
 | `agent_owned_by_another` | Only an administrator can issue a token to an agent owned by another person | Ключ агента с чужим хозяином выпускает только администратор (TRK-475#14). |
 | `human_token_not_allowed` | A key cannot be issued to a person: people sign in, keys are for agents | Ключ человеку не выпускается: человек входит в интерфейс, а не ходит с токеном (TRK-469#25). |
 | `permission_denied` | Action is not allowed | Действие запрещено. В v1 ролей нет, но точка отказа существует с самого начала. |
+| `project_not_allowed` | This project is closed to the agent | Проект закрыт этому агенту его режимом доступа (TRK~28#6). |
 
 ## 404 — не найдено
 
@@ -161,6 +162,7 @@
 | `journal_too_many_tasks` | Too many tasks in one journal filter | Задач в одном фильтре ленты больше потолка: потолок и присланное — в `details`. |
 | `journal_wait_too_long` | Requested wait exceeds the ceiling | Запрошенное ожидание больше потолка: потолок и запрошенное лежат в `details`. |
 | `link_self_not_allowed` | A task cannot be linked to itself | Связь задачи с самой собой запрещена — любого вида, включая `relates`. |
+| `project_access_mode_invalid` | Project access mode is invalid | Режим доступа к проектам — не `all`, `except` и не `only`. |
 | `project_description_too_long` | Project description is too long | Описание проекта длиннее предела (`app/domain/projects.py`). |
 | `project_reason_required` | Archiving or restoring a project requires a reason | Архивирование и восстановление проекта требуют непустой причины `reason`. |
 | `question_not_a_task_entry` | Questions are asked in discussions, not in a task's case | Вопрос в деле задачи: вопросы задают в обсуждениях (решение `TRK#51`, п. 6). |
