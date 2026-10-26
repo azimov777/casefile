@@ -11,9 +11,15 @@ from fastapi import APIRouter, Path, status
 from app.api.deps import ActorDep, CursorQuery, LimitQuery, SessionDep
 from app.api.idempotency import OnceDep
 from app.api.schemas.common import CollectionResponse, DataResponse
-from app.api.schemas.participants import ParticipantCreate, ParticipantRead
+from app.api.schemas.participants import (
+    ParticipantCreate,
+    ParticipantRead,
+    ProjectAccessRead,
+    ProjectAccessWrite,
+)
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.services import participants as service
+from app.services import project_access as access_service
 
 router = APIRouter(prefix="/participants", tags=["participants"])
 
@@ -72,3 +78,47 @@ async def register_participant(
         return DataResponse[ParticipantRead](data=ParticipantRead.model_validate(participant))
 
     return await once.run(DataResponse[ParticipantRead], request=payload, build=register)
+
+
+def _access_response(view: access_service.AgentProjectAccess) -> DataResponse[ProjectAccessRead]:
+    return DataResponse[ProjectAccessRead](
+        data=ProjectAccessRead(mode=view.mode, projects=[project.key for project in view.projects])
+    )
+
+
+@router.get("/{participant_name}/projects", summary="Read the project access of an agent")
+async def read_project_access(
+    participant_name: ParticipantNamePath, session: SessionDep, actor: ActorDep
+) -> DataResponse[ProjectAccessRead]:
+    """Режим доступа агента к проектам и список проектов.
+
+    Читает человек с учётной записью, которому доступен агент; агенту доступ закрыт
+    (`account_required`). У человека ограничений нет: читается `all` и пустой список.
+    """
+    return _access_response(
+        await access_service.read_project_access(session, participant_name, actor=actor)
+    )
+
+
+@router.put("/{participant_name}/projects", summary="Set the project access of an agent")
+async def set_project_access(
+    participant_name: ParticipantNamePath,
+    payload: ProjectAccessWrite,
+    session: SessionDep,
+    actor: ActorDep,
+) -> DataResponse[ProjectAccessRead]:
+    """Заменяет режим и список проектов агента целиком.
+
+    Режим `all` открывает все проекты, в том числе заведённые позже, и очищает список;
+    `except` закрывает перечисленные; `only` открывает только перечисленные, а проект,
+    созданный самим агентом, попадает в список сразу. Закрытый проект исчезает у агента из
+    списков, поиска, ленты и входящей, а по прямому адресу отвечает `project_not_allowed`.
+    Токен не меняется: доступ стоит на участнике. Настраивает человек с учётной записью,
+    которому доступен агент: чужого агента - только администратор (`agent_owned_by_another`),
+    агент себе доступ не меняет (`account_required`).
+    """
+    return _access_response(
+        await access_service.set_project_access(
+            session, participant_name, actor=actor, mode=payload.mode, project_keys=payload.projects
+        )
+    )

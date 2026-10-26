@@ -12,6 +12,8 @@
 запрещается — оно ничего не ломает.
 """
 
+from enum import StrEnum
+
 from app.domain.errors import (
     AreaLinkReasonRequiredError,
     AreaLinkReasonTooLongError,
@@ -23,6 +25,33 @@ SEE_ALSO = "see_also"
 
 #: Имя той же связи со стороны области-цели. В таблицу не попадает: вычисляется при чтении.
 SEE_ALSO_FROM = "see_also_from"
+
+
+class AreaLinkKind(StrEnum):
+    """Вид связи областей **со стороны области**, чьё дело или чью карточку читают.
+
+    В таблицу попадает только `see_also`; `see_also_from` — то же ребро, прочитанное из
+    области-цели (в payload записи дела цели и в `link_kind` описи).
+    """
+
+    SEE_ALSO = "see_also"
+    SEE_ALSO_FROM = "see_also_from"
+
+
+#: Заголовок записи о связи в деле области-источника: другая сторона названа фразой с
+#: подлежащим (как `other_side_phrase` у задач), «см. также» читалось бы двояко.
+SEE_ALSO_PHRASE = "see also {other}"
+
+#: То же в деле области-цели.
+SEE_ALSO_FROM_PHRASE = "{other} lists this area in see also"
+
+
+def see_also_phrase(kind: AreaLinkKind, other_address: str) -> str:
+    """Связь словами для заголовка записи дела: `see also TRK/mcp` у источника,
+    `TRK/mcp lists this area in see also` у цели."""
+    template = SEE_ALSO_PHRASE if kind is AreaLinkKind.SEE_ALSO else SEE_ALSO_FROM_PHRASE
+    return template.format(other=other_address)
+
 
 #: Предел причины в знаках после обрезки пробелов; тот же предел держит
 #: `ck_area_links_reason_length`.

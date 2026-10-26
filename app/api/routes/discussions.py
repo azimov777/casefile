@@ -42,6 +42,7 @@ from app.domain.case import EntryType
 from app.domain.discussions import DiscussionOrder, DiscussionStatus, DiscussionTurn
 from app.services import case as case_service
 from app.services import discussions as service
+from app.services import files as files_service
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 
@@ -219,8 +220,12 @@ async def list_discussion_entries(
         limit=limit,
         cursor=cursor,
     )
+    attached = await files_service.entry_attachments(session, page.items)
     return CollectionResponse[EntryRead].of(
-        [entry_read(item, discussion=found.address) for item in page.items],
+        [
+            entry_read(item, discussion=found.address, files=attached.get(item.id))
+            for item in page.items
+        ],
         next_cursor=page.next_cursor,
     )
 
@@ -257,8 +262,12 @@ async def create_discussion_entry(
             body=given.get("body", ""),
             payload=given.get("payload"),
             refs=given.get("refs", []),
+            files=given.get("files", []),
         )
-        return DataResponse[EntryRead](data=entry_read(appended, discussion=found.address))
+        attached = await files_service.entry_attachments(session, [appended])
+        return DataResponse[EntryRead](
+            data=entry_read(appended, discussion=found.address, files=attached.get(appended.id))
+        )
 
     return await once.run(
         DataResponse[EntryRead],

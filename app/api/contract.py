@@ -43,7 +43,7 @@ BODYLESS_STATUS_CODES = frozenset({"204"})
 #: причина. Список закрытый: решение TRK/api#4 называет ровно эти исключения, и добавление
 #: нового сюда обязано сопровождаться заменой этого решения (`supersedes`).
 #:
-#: Исключений ровно два, и каждое заведено вместе со своим маршрутом: разрешение,
+#: Исключений ровно три, и каждое заведено вместе со своим маршрутом: разрешение,
 #: выданное несуществующему пути, достанется первому, кто этот путь заведёт, и это
 #: стережёт отдельный тест.
 ENVELOPE_EXEMPT: dict[tuple[str, str], str] = {
@@ -56,6 +56,12 @@ ENVELOPE_EXEMPT: dict[tuple[str, str], str] = {
         'into {"data": ...} would stop it being SSE. The contract holds anyway — the '
         "frame payload is the same EntryRead union as an item of GET /api/v1/journal, "
         "where the envelope is the usual one"
+    ),
+    ("GET", "/api/v1/files/{file_id}/content"): (
+        "The bytes of an uploaded file: the body is the file itself with its own "
+        'Content-Type, and wrapping it into {"data": ...} would change the bytes. The '
+        "file's card (name, type, size, sha256) comes in the usual envelope from "
+        "GET /api/v1/files/{file_id}"
     ),
 }
 

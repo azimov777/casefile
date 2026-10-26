@@ -23,6 +23,12 @@
 нескольких процессах ссылка, взятая в одном, не открылась бы в другом, и тогда хранилище надо
 переносить в базу. Не больше `MAX_OPEN_LINKS` живых ссылок: сверх этого выдача отказывает.
 
+## Доступ к проектам
+
+Доступ агента к проектам (TRK-751) лежит на сессии. Маршруты открывают свою сессию без входа по
+токену, поэтому штампуют её доступом автора ссылки, снятым при выдаче: файл закрытого проекта не
+выдаётся и не принимается по ссылке, даже если доступ сузили уже после выдачи.
+
 ## Что ссылка не делает
 
 Не подшивает записей в дело и не пишет в ленту: файл — строка установки (TRK#216 стоит на
@@ -45,6 +51,7 @@ from starlette.responses import JSONResponse, Response
 
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.db.project_scope import stamp
 from app.domain.errors import (
     FileLinkExpiredError,
     FileLinkNotFoundError,
@@ -198,6 +205,7 @@ def register_file_routes(
             link = links.take(request.path_params["secret"], LinkKind.UPLOAD, LinkKind.REPLACE)
             data = await _body(request, settings.file_max_bytes)
             async with runtime.sessions() as session:
+                stamp(session, link.actor.project_access)
                 if link.kind is LinkKind.UPLOAD:
                     assert link.project is not None and link.name is not None
                     card = await files_service.upload_file(
@@ -236,6 +244,7 @@ def register_file_routes(
             link = links.take(request.path_params["secret"], LinkKind.DOWNLOAD)
             assert link.file_id is not None
             async with runtime.sessions() as session:
+                stamp(session, link.actor.project_access)
                 opened = await files_service.open_file(session, link.file_id, actor=link.actor)
         except AppError as error:
             return _refusal(error)

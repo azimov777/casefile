@@ -35,6 +35,7 @@ from app.domain.case import (
 from app.domain.files import FileCard
 from app.mcp.enums import (
     AnswerOutcomeSchema,
+    AreaLinkKindSchema,
     DecisionStatusSchema,
     EntryTypeSchema,
     LinkKindSchema,
@@ -103,8 +104,9 @@ class LinkFactsView(BaseModel):
     """Link added or removed: its kind and the other side."""
 
     type: Literal[EntryType.LINK_ADDED, EntryType.LINK_REMOVED]
-    link_kind: LinkKindSchema | None
+    link_kind: LinkKindSchema | AreaLinkKindSchema | None
     other_key: str | None
+    other_area: str | None = None
 
 
 class QuestionFactsView(BaseModel):
@@ -234,7 +236,10 @@ def facts(value: EntryFacts) -> FactsView:
             )
         case LinkFacts():
             return LinkFactsView(
-                type=value.type, link_kind=value.link_kind, other_key=value.other_key
+                type=value.type,
+                link_kind=value.link_kind,
+                other_key=value.other_key,
+                other_area=value.other_area,
             )
         case QuestionFacts():
             return QuestionFactsView(

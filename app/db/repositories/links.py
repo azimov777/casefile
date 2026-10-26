@@ -25,7 +25,9 @@ from sqlalchemy.orm import aliased
 
 from app.db.models.link import Link
 from app.db.models.task import Task
+from app.db.project_scope import open_to
 from app.domain.links import MAX_LINK_DEPTH, LinkKind
+from app.domain.project_access import UNRESTRICTED, ProjectAccess
 from app.domain.tasks import CLOSED_STATUSES
 
 
@@ -197,7 +199,7 @@ def related_task_keys(task_id: Any, *, kind: LinkKind, as_source: bool) -> Selec
     )
 
 
-def parent_of(task_id: Any) -> Select[tuple[Any]]:
+def parent_of(task_id: Any, access: ProjectAccess = UNRESTRICTED) -> Select[tuple[Any]]:
     """Родитель задачи одним значением: JSON-объект `{key, title}` или `NULL`.
 
     Отдаётся не строкой, а одним значением, потому что поиск вкладывает запрос в выборку
@@ -217,7 +219,11 @@ def parent_of(task_id: Any) -> Select[tuple[Any]]:
         select(func.jsonb_build_object("key", parent.key, "title", parent.title))
         .select_from(Link)
         .join(parent, parent.id == Link.source_id)
-        .where(Link.kind == LinkKind.PARENT, Link.target_id == task_id)
+        .where(
+            Link.kind == LinkKind.PARENT,
+            Link.target_id == task_id,
+            open_to(access, parent.project_id),
+        )
         .order_by(Link.created_at, Link.id)
         .limit(1)
     )

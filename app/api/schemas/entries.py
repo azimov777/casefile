@@ -45,7 +45,9 @@ from pydantic import (
 )
 
 from app.api.schemas.authors import AuthorRead
+from app.api.schemas.files import FileRead, file_read
 from app.db.models.entry import Entry
+from app.domain.area_links import AreaLinkKind
 from app.domain.case import (
     CLOSING_SUMMARY_PART,
     MAX_ADDRESSEES,
@@ -66,6 +68,7 @@ from app.domain.case import (
     read_payload,
 )
 from app.domain.decisions import DecisionStatus
+from app.domain.files import MAX_ENTRY_FILES, FileCard
 from app.domain.links import LinkKind
 from app.domain.tasks import FIRST_CHECK_NUMBER, TaskField, TaskStatus
 from app.services.decisions import Standing
@@ -170,9 +173,22 @@ class LinkFactsRead(_EntryFactsBase):
     """Связь появилась или снята: её вид и вторая сторона."""
 
     type: Literal[EntryType.LINK_ADDED, EntryType.LINK_REMOVED]
-    link_kind: LinkKind | None = Field(default=None, description="Kind of the link")
+    link_kind: LinkKind | AreaLinkKind | None = Field(
+        default=None,
+        description=(
+            "Kind of the link; in the case of an area `see_also` (this area lists the other "
+            "in see also) or `see_also_from` (the other area lists this one)"
+        ),
+    )
     other_key: str | None = Field(
-        default=None, examples=["TRK-7"], description="The task on the other side"
+        default=None,
+        examples=["TRK-7"],
+        description="The task on the other side; `null` in the case of an area",
+    )
+    other_area: str | None = Field(
+        default=None,
+        examples=["TRK/mcp"],
+        description="Address of the area on the other side; `null` in the case of a task",
     )
 
 
@@ -779,7 +795,9 @@ class AssigneeChangedPayload(BaseModel):
 
 
 class LinkPayload(BaseModel):
-    """Связь между задачами. Подшивается в дело обеих сторон под своим именем.
+    """Связь между задачами или областями. Подшивается в дело обеих сторон под своим именем.
+
+    Связь областей — `AreaLinkPayload`.
 
     Модель объявлена здесь, а не в задаче 24 вместе со связями: объединение по `type`
     обязано покрывать **все** типы записей, иначе первая же запись о связи развалила бы
@@ -789,7 +807,31 @@ class LinkPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: str = Field(examples=["blocked_by"])
-    other: str = Field(examples=["TRK-7"], description="Key of the task on the other side")
+    other: str = Field(
+        examples=["TRK-7"],
+        description="Key of the task on the other side; address of the area for an area link",
+    )
+
+
+class AreaLinkPayload(BaseModel):
+    """Связь областей `see_also`. Подшивается в дело обеих областей под своим именем.
+
+    Отдельная модель от `LinkPayload`: у связи задач причины нет, и добавлять ей пустое
+    поле значило бы менять нагрузку уже записанных записей. Объединение различает их по
+    набору ключей (`extra="forbid"`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: AreaLinkKind = Field(
+        examples=["see_also"],
+        description="`see_also` in the case of the source area, `see_also_from` in the target's",
+    )
+    other: str = Field(examples=["TRK/mcp"], description="Address of the area on the other side")
+    reason: str = Field(
+        examples=["Экраны показывают механики ядра: их правила — там."],
+        description="Why one working in the source area reads the target too, one phrase",
+    )
 
 
 class AttachmentPayload(BaseModel):
@@ -941,6 +983,18 @@ class _EntryReadBase(BaseModel):
     created_at: datetime
     action_id: uuid.UUID | None = Field(
         default=None, examples=[None], description=_ACTION_ID_DESCRIPTION
+    )
+    # Вложения записи (TRK-736): текущие карточки файлов в порядке вложения; у удалённого
+    # файла — надгробие (`deleted: true`). Пустой список — вложений нет. С умолчанием по
+    # той же причине, что `area`: ответы подшивки, сохранённые ключами идемпотентности до
+    # поля, поднимаются этой моделью.
+    files: list[FileRead] = Field(
+        default_factory=list,
+        description=(
+            "Files the entry attaches, in the order attached: the card of each file as it is "
+            "now (a replaced file shows its new content, a deleted one is a tombstone). "
+            "Empty if there are none"
+        ),
     )
     # Статус есть только у решения и заметки дела проекта или области
     # (`_ReplaceableEntryRead`); у остальных типов поле стоит, чтобы форма записи была одна
@@ -1318,11 +1372,11 @@ class AssigneeChangedEntryRead(_EntryReadBase):
     payload: AssigneeChangedPayload
 
 
-class LinkEntryRead(_EntryReadBase):
-    """Служебная запись о появлении или снятии связи."""
+class LinkEntryRead(_ProjectOwnableEntryRead):
+    """Служебная запись о появлении или снятии связи: в деле задачи или области."""
 
     type: Literal[EntryType.LINK_ADDED, EntryType.LINK_REMOVED]
-    payload: LinkPayload
+    payload: LinkPayload | AreaLinkPayload
 
 
 class MovedEntryRead(_EntryReadBase):
@@ -1447,6 +1501,7 @@ def entry_read(
     discussion: str | None = None,
     standing: Standing | None = None,
     lifted_by: Sequence[str] | None = None,
+    files: Sequence[FileCard] | None = None,
 ) -> EntryRead:
     """Собирает вариант ответа по типу записи.
 
@@ -1460,6 +1515,8 @@ def entry_read(
     (`app/services/decisions.py`); без него `status` и `superseded_by` — `null`.
     `lifted_by` — подъёмы черновика, посчитанные чтением дела задачи
     (`app/services/case.py`, `draft_lifts`); без него поле — `null`.
+    `files` — карточки вложений записи (`app/services/files.py`, `entry_attachments`);
+    без них вложений в ответе нет.
 
     Тип, которого нет в таблице, — это запись без формы нагрузки, то есть дефект
     объединения, а не рабочее состояние: `KeyError` здесь честнее молчаливого
@@ -1486,6 +1543,7 @@ def entry_read(
         status=None if standing is None else standing.status,
         superseded_by=None if standing is None else standing.superseded_by,
         lifted_by=None if lifted_by is None else list(lifted_by),
+        files=[] if files is None else [file_read(card) for card in files],
     )
 
 
@@ -1510,6 +1568,21 @@ class _EntryCreateBase(BaseModel):
     )
 
 
+class _AttachmentsField(BaseModel):
+    """Вложения подшиваемой записи: файлы, уже загруженные в установку (`POST /files`)."""
+
+    files: list[uuid.UUID] = Field(
+        default_factory=list,
+        max_length=MAX_ENTRY_FILES,
+        examples=[[]],
+        description=(
+            f"References of uploaded files to attach, at most {MAX_ENTRY_FILES}, no repeats; "
+            "the order is kept. A file of any project of the installation may be attached; "
+            "an unknown one answers `file_not_found`, a deleted one `file_deleted`"
+        ),
+    )
+
+
 class _TitledEntryCreate(_EntryCreateBase):
     """Записи, у которых заголовок пишет автор: вывести его не из чего."""
 
@@ -1521,7 +1594,7 @@ class _TitledEntryCreate(_EntryCreateBase):
     )
 
 
-class PlainEntryCreate(_TitledEntryCreate):
+class PlainEntryCreate(_TitledEntryCreate, _AttachmentsField):
     """Решение, попытка, находка, артефакт, заметка. Нагрузки нет.
 
     Замечание сюда не входит: у него свой вариант (`RemarkEntryCreate`), потому что
@@ -1538,7 +1611,7 @@ class PlainEntryCreate(_TitledEntryCreate):
     ]
 
 
-class SummaryEntryCreate(_EntryCreateBase):
+class SummaryEntryCreate(_EntryCreateBase, _AttachmentsField):
     """Сводка посреди работы. Заголовок не принимается: он равен первой строке `done`.
 
     Нагрузка — четыре части и только они: закрывающая сводка сюда не подшивается, у неё
@@ -1549,21 +1622,21 @@ class SummaryEntryCreate(_EntryCreateBase):
     payload: SummaryPartsPayload
 
 
-class QuestionEntryCreate(_TitledEntryCreate):
+class QuestionEntryCreate(_TitledEntryCreate, _AttachmentsField):
     """Вопрос участникам реестра."""
 
     type: Literal[EntryType.QUESTION]
     payload: QuestionPayload
 
 
-class AnswerEntryCreate(_EntryCreateBase):
+class AnswerEntryCreate(_EntryCreateBase, _AttachmentsField):
     """Ответ. Заголовок не принимается: он собирается из ссылки на вопрос и исхода."""
 
     type: Literal[EntryType.ANSWER]
     payload: AnswerFilingPayload
 
 
-class VerdictEntryCreate(_EntryCreateBase):
+class VerdictEntryCreate(_EntryCreateBase, _AttachmentsField):
     """Вердикт. Заголовок не принимается; тело записи — доказательство исхода, у
     `partial` и `unverifiable` обязательное (`422 entry_fields_invalid`, поле `evidence`)."""
 
@@ -1571,13 +1644,13 @@ class VerdictEntryCreate(_EntryCreateBase):
     payload: VerdictPayload
 
 
-class RemarkEntryCreate(_TitledEntryCreate):
+class RemarkEntryCreate(_TitledEntryCreate, _AttachmentsField):
     """Замечание: «вышло не то». Нагрузки нет, заголовок пишет автор."""
 
     type: Literal[EntryType.REMARK]
 
 
-class AcceptanceEntryCreate(_TitledEntryCreate):
+class AcceptanceEntryCreate(_TitledEntryCreate, _AttachmentsField):
     """Принятие открытого предупреждения: нагрузки нет, заголовок пишет автор.
 
     Без открытого предупреждения — `409 warning_not_open`; от подписи, закрывшей
@@ -1587,7 +1660,7 @@ class AcceptanceEntryCreate(_TitledEntryCreate):
     type: Literal[EntryType.ACCEPTANCE]
 
 
-class ResolutionEntryCreate(_EntryCreateBase):
+class ResolutionEntryCreate(_EntryCreateBase, _AttachmentsField):
     """Резолюция. Заголовок не принимается: он собирается из ссылки на замечание и исхода."""
 
     type: Literal[EntryType.RESOLUTION]
@@ -1608,7 +1681,7 @@ type EntryCreate = Annotated[
 """Подшиваемая запись: те же типы, что доступны агенту, размеченные по `type`."""
 
 
-class ProjectEntryCreate(_TitledEntryCreate):
+class ProjectEntryCreate(_TitledEntryCreate, _AttachmentsField):
     """Запись агента или человека в деле проекта: заметка, решение, находка, артефакт.
 
     Отдельная модель, а не ветвь `EntryCreate`: набор типов у дела проекта свой
@@ -1656,7 +1729,7 @@ class AreaEntryCreate(_TitledEntryCreate):
     ]
 
 
-class DiscussionNoteCreate(_TitledEntryCreate):
+class DiscussionNoteCreate(_TitledEntryCreate, _AttachmentsField):
     """Заметка в деле обсуждения: человек пишет её сам, без вопроса (решение `TRK#51`, п. 2).
 
     Свободная запись человека задаёт работу привязанных задач, как ответ (`TRK#51`, п. 5).

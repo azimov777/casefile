@@ -95,7 +95,9 @@ async def read_bootstrap(
     open_questions = (
         0
         if actor.participant is None
-        else await case_service.count_open_questions(session, participant=actor.participant)
+        else await case_service.count_open_questions(
+            session, participant=actor.participant, access=actor.project_access
+        )
     )
     return Bootstrap(
         participant=actor.participant,
@@ -103,6 +105,8 @@ async def read_bootstrap(
         token_id=actor.token_id,
         projects=page.items,
         open_questions=open_questions,
-        open_warnings=await case_service.count_open_warnings(session),
-        open_discussions=await discussions_service.count_waiting_on_humans(session),
+        open_warnings=await case_service.count_open_warnings(session, access=actor.project_access),
+        open_discussions=await discussions_service.count_waiting_on_humans(
+            session, access=actor.project_access
+        ),
     )

@@ -9,6 +9,7 @@ from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import unset_field
 from app.api.schemas.projects import AreaRefRead, AttributeRead
 from app.db.models.area import Area
+from app.db.models.area_link import AreaLink
 from app.domain.areas import (
     AREA_KEY_PATTERN,
     MAX_AREA_DESCRIPTION_LENGTH,
@@ -61,6 +62,46 @@ class AreaRead(BaseModel):
     updated_at: datetime
 
 
+class AreaSeeAlsoRead(BaseModel):
+    """Связь `see_also` со стороны источника: куда он отсылает читателя."""
+
+    address: str = Field(
+        examples=["TRK/mcp"],
+        description=(
+            "Address of the area the card refers to; its card is read at `/projects/TRK/areas/mcp`"
+        ),
+    )
+    title: str = Field(examples=["MCP-сервер"])
+    description: str = Field(
+        examples=["Инструменты агентов и их ответы"],
+        description=(
+            'Short "what this is" of the area on the other side, so one can decide to open it'
+        ),
+    )
+    reason: str = Field(
+        examples=["Экраны показывают механики ядра: их правила — там."],
+        description="Why one working here reads there too, one phrase",
+    )
+    created_by: AuthorRead
+    created_at: datetime
+
+
+class AreaSeeAlsoFromRead(BaseModel):
+    """Связь `see_also` со стороны цели: кто отсылает читателя сюда."""
+
+    address: str = Field(
+        examples=["TRK/ui"],
+        description="Address of the area that lists this one in its see also",
+    )
+    title: str = Field(examples=["Интерфейс"])
+    reason: str = Field(
+        examples=["Экраны показывают механики ядра: их правила — там."],
+        description="Why one working there reads here too, as the source of the link wrote it",
+    )
+    created_by: AuthorRead
+    created_at: datetime
+
+
 class AreaDetailRead(AreaRead):
     """Одна область с нынешними значениями атрибутов.
 
@@ -74,6 +115,22 @@ class AreaDetailRead(AreaRead):
             "entry of the area's case: `attribute_created`, `attribute_changed`, "
             "`attribute_removed`"
         )
+    )
+    see_also: list[AreaSeeAlsoRead] = Field(
+        default_factory=list,
+        description=(
+            'Areas this one refers to — "who works here, reads there too" — ordered by '
+            "address; may lie in another project. The link is set by agents through MCP; "
+            "an archived area stays listed. Each link is also an entry `link_added` or "
+            "`link_removed` in the case of both areas"
+        ),
+    )
+    see_also_from: list[AreaSeeAlsoFromRead] = Field(
+        default_factory=list,
+        description=(
+            "Areas that refer to this one, ordered by address: the same links read from "
+            "the other side"
+        ),
     )
 
 
@@ -90,6 +147,29 @@ def area_read(area: Area) -> AreaRead:
         created_by=AuthorRead.model_validate(area.created_by),
         created_at=area.created_at,
         updated_at=area.updated_at,
+    )
+
+
+def see_also_read(link: AreaLink) -> AreaSeeAlsoRead:
+    """Связь со стороны источника: цель с названием и описанием."""
+    return AreaSeeAlsoRead(
+        address=link.target.address,
+        title=link.target.title,
+        description=link.target.description,
+        reason=link.reason,
+        created_by=AuthorRead.model_validate(link.created_by),
+        created_at=link.created_at,
+    )
+
+
+def see_also_from_read(link: AreaLink) -> AreaSeeAlsoFromRead:
+    """Связь со стороны цели: источник с названием."""
+    return AreaSeeAlsoFromRead(
+        address=link.source.address,
+        title=link.source.title,
+        reason=link.reason,
+        created_by=AuthorRead.model_validate(link.created_by),
+        created_at=link.created_at,
     )
 
 

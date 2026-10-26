@@ -57,6 +57,7 @@ from app.db.pagination import (
     resolve_limit,
     resolve_offset,
 )
+from app.db.project_scope import open_to
 from app.db.repositories.discussions import open_discussion_question_count
 from app.db.repositories.entries import (
     last_entry_at,
@@ -72,6 +73,7 @@ from app.db.repositories.projects import in_active_project
 from app.db.repositories.tasks import deferred_now
 from app.db.sql import ilike_contains
 from app.domain.links import LinkKind
+from app.domain.project_access import UNRESTRICTED, ProjectAccess
 from app.domain.search import (
     FEATURES_FIELD,
     NEGATIVE_OPERATORS,
@@ -130,6 +132,7 @@ class TaskSearchRepository:
         self,
         resolved: ResolvedFilter,
         *,
+        access: ProjectAccess = UNRESTRICTED,
         limit: int | None = None,
         cursor: str | None = None,
         offset: int | None = None,
@@ -168,7 +171,8 @@ class TaskSearchRepository:
         statement: Select[Any] = (
             select(Task).join(Task.project).options(contains_eager(Task.project))
         )
-        condition = compile_filter(resolved)
+        # Закрытые доступу агента проекты не видны никак — даже названные отбором (TRK~28#6).
+        condition = and_(compile_filter(resolved), open_to(access, Task.project_id))
         statement = statement.where(condition)
         # Порядок колонок в строке: задача, значения ключей сортировки, признаки,
         # родители. Курсор берёт только середину — отсюда явные границы среза ниже:
@@ -177,7 +181,7 @@ class TaskSearchRepository:
         if wanted:
             statement = statement.add_columns(*feature_columns())
         if with_parent:
-            statement = statement.add_columns(parent_column())
+            statement = statement.add_columns(parent_column(access))
 
         if cursor is not None:
             values, item_id = decode_sort_cursor(cursor, arity=len(keys))
@@ -250,7 +254,7 @@ def feature_columns() -> tuple[ColumnElement[Any], ...]:
     )
 
 
-def parent_column() -> ColumnElement[Any]:
+def parent_column(access: ProjectAccess = UNRESTRICTED) -> ColumnElement[Any]:
     """Родитель колонкой выдачи: JSON-объект `{key, title}` или `NULL` на каждую строку.
 
     Подзапрос коррелирован с задачей страницы и считается после `Limit` — по строке
@@ -258,7 +262,7 @@ def parent_column() -> ColumnElement[Any]:
     зависит. Метка обязательна по той же причине, что у признаков: строка читается по
     именам.
     """
-    return parent_of(Task.id).correlate(Task).scalar_subquery().label(PARENT_FIELD)
+    return parent_of(Task.id, access).correlate(Task).scalar_subquery().label(PARENT_FIELD)
 
 
 def _parent_of(row: Any) -> AskedParent:

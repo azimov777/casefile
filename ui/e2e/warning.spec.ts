@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { readAgentKey } from './contour';
+import { readAgentKey, readE2eToken } from './contour';
 
 /*
  * Закрытие не целиком и реакция человека (TRK-561): агент закрывает задачу с проверкой
@@ -127,3 +127,78 @@ test('закрытая не целиком задача ждёт во «Вход
   ).toHaveCount(0);
   await shot(page, 'inbox-after');
 });
+
+/*
+ * «Вернуть на доработку» (TRK-731): возврат — это замечание (TRK#117), форма которого живёт
+ * в блоке «Замечания» ниже плашки. Нажатие должно привести человека к форме: она в видимой
+ * области, курсор в поле. После отправки плашка уходит (замечание снимает предупреждение),
+ * и на её месте остаётся пояснение, почему и что дальше.
+ *
+ * Меряется на телефоне и на десктопе: на длинной карточке форма раньше оставалась за краем
+ * экрана, и нажатие выглядело как «ничего не произошло».
+ */
+for (const size of [
+  { name: '390', width: 390, height: 800 },
+  { name: '1280', width: 1280, height: 800 },
+]) {
+  test(`«Вернуть на доработку» ведёт к форме замечания и объясняет исход (${size.name} px)`, async ({
+    page,
+    request,
+  }) => {
+    const key = await closedNotInFull(request);
+    await page.setViewportSize({ width: size.width, height: size.height });
+    await page.goto(`/tasks/${key}`);
+
+    const panel = page.getByRole('region', { name: 'Закрыта не целиком' });
+    await expect(panel).toBeVisible();
+    await panel.getByRole('button', { name: 'Вернуть на доработку' }).click();
+
+    const field = page.getByLabel(/^Замечание$/);
+    await expect(field).toBeVisible();
+    // Измерение до проверки: цифры нужны делу задачи, даже когда проверка падает.
+    const seen = await field.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return {
+        top: Math.round(box.top),
+        bottom: Math.round(box.bottom),
+        viewport: window.innerHeight,
+        scrollY: Math.round(window.scrollY),
+        focused: document.activeElement === node,
+      };
+    });
+    console.log(`TRK-731 ${size.name}: ${JSON.stringify(seen)}`);
+    await shot(page, `return-opened-${size.name}`);
+
+    // Форма целиком в видимой области, курсор в поле.
+    expect(seen.top).toBeGreaterThanOrEqual(0);
+    expect(seen.bottom).toBeLessThanOrEqual(seen.viewport);
+    expect(seen.focused).toBe(true);
+
+    await page.keyboard.type('Safari на телефоне так и не проверен, проверьте.');
+    await page.getByRole('button', { name: 'Оставить замечание' }).click();
+
+    // Плашка ушла, но не молча: на её месте сказано, что произошло.
+    await expect(panel).toHaveCount(0);
+    const note = page.getByRole('status').filter({ hasText: 'Замечание принято' });
+    await expect(note).toBeVisible();
+    await expect(note).toContainText('снимает предупреждение');
+    await expect(note).toContainText('разберёт агент');
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBe(0);
+    await shot(page, `return-after-${size.name}`);
+
+    // Правда бэкенда: в деле есть remark, предупреждение закрыто.
+    const task = await request.get(`/api/v1/tasks/${key}`, {
+      headers: { Authorization: `Bearer ${readE2eToken()}` },
+    });
+    const features = ((await task.json()) as { data: { features: { open_warnings: number } } }).data
+      .features;
+    expect(features.open_warnings).toBe(0);
+    const remarks = await request.get(`/api/v1/tasks/${key}/entries?types=remark`, {
+      headers: { Authorization: `Bearer ${readE2eToken()}` },
+    });
+    expect(((await remarks.json()) as { data: unknown[] }).data).toHaveLength(1);
+  });
+}

@@ -69,6 +69,7 @@ from mcp.shared.auth import (
     ProtectedResourceMetadata,
 )
 from pydantic import AnyHttpUrl, AnyUrl, ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import Response
@@ -83,6 +84,7 @@ from app.mcp.runtime import SessionFactory
 from app.services import oauth as oauth_service
 from app.services.auth import verify_token
 from app.services.client_documents import ClientDocuments
+from app.services.installation_settings import get_setting
 
 __all__ = [
     "SCOPE",
@@ -194,7 +196,7 @@ class CasefileAuthorization(PresentedToken):
         consent: oauth_service.ConsentPolicy | None,
         documents: ClientDocuments | None = None,
         *,
-        access_ttl: timedelta,
+        settings: Settings,
         resource: str,
         consent_page: str | None = None,
     ) -> None:
@@ -208,8 +210,17 @@ class CasefileAuthorization(PresentedToken):
         self._consent = consent
         self._consent_page = consent_page
         self._documents = documents or ClientDocuments.from_settings()
-        self._access_ttl = access_ttl
+        self._settings = settings
         self._resource = resource
+
+    async def _access_ttl(self, session: AsyncSession) -> timedelta:
+        """Срок подключения на выдаче: настройка читается сейчас, а не при сборке сервера.
+
+        Новое значение действует на новых подключениях и обновлениях; выданные не меняются.
+        """
+        ttl = await get_setting(session, "oauth_access_ttl", settings=self._settings)
+        assert isinstance(ttl, timedelta)
+        return ttl
 
     # --- Клиенты -------------------------------------------------------------------
 
@@ -304,7 +315,9 @@ class CasefileAuthorization(PresentedToken):
         try:
             async with self._sessions() as session:
                 pair = await oauth_service.redeem_code(
-                    session, code_id=authorization_code.row_id, access_ttl=self._access_ttl
+                    session,
+                    code_id=authorization_code.row_id,
+                    access_ttl=await self._access_ttl(session),
                 )
         except OAuthRefusal as refusal:
             raise TokenError(
@@ -341,7 +354,7 @@ class CasefileAuthorization(PresentedToken):
                 pair = await oauth_service.rotate_refresh(
                     session,
                     refresh_id=refresh_token.row_id,
-                    access_ttl=self._access_ttl,
+                    access_ttl=await self._access_ttl(session),
                     scopes=scopes,
                 )
         except OAuthRefusal as refusal:

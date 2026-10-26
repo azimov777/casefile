@@ -60,7 +60,6 @@ TimeoutArg = Annotated[
 def register(tools: Toolset) -> None:
     """Объявляет `wait_journal`."""
     runtime = tools.runtime
-    settings = tools.settings
 
     @tools.tool(title="Wait for journal entries", annotations=READ_ONLY)
     async def wait_journal(
@@ -93,7 +92,7 @@ def register(tools: Toolset) -> None:
                 ),
                 after=after,
                 cursor=cursor,
-                limit=limit or settings.mcp_page_size,
+                limit=await tools.page_limit(session, limit),
                 wait=timeout,
             )
             attached = await files_service.entry_attachments(

@@ -2266,6 +2266,7 @@ async def test_get_project_carries_the_context_shared_by_its_tasks(
         "decisions": [],
         "findings": [],
         "areas": [],
+        "see_also": [],
         "index_omitted": {"decision": 0, "finding": 0},
     }
     # Дело проекта открывается записью `created` (TRK-156): опись едет той же строкой, что
@@ -2361,6 +2362,7 @@ async def test_the_main_scope_runs_the_registries(
         "decisions": [],
         "findings": [],
         "areas": [],
+        "see_also": [],
         "index_omitted": {"decision": 0, "finding": 0},
     }
     # Правка названия осталась в деле проекта (TRK-156), а не пропала без следа.

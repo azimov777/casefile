@@ -43,7 +43,6 @@ EntryTextArg = Annotated[
 def register(tools: Toolset) -> None:
     """Объявляет `read_project_entries`."""
     runtime = tools.runtime
-    settings = tools.settings
 
     @tools.tool(title="Read project entries", annotations=READ_ONLY)
     async def read_project_entries(
@@ -87,7 +86,7 @@ def register(tools: Toolset) -> None:
                     text=text,
                     in_force=in_force,
                     after_no=after_no,
-                    limit=limit or settings.mcp_page_size,
+                    limit=await tools.page_limit(session, limit),
                     cursor=cursor,
                 )
                 attached = await files_service.entry_attachments(session, found.items)
@@ -109,7 +108,7 @@ def register(tools: Toolset) -> None:
                 text=text,
                 in_force=in_force,
                 after_no=after_no,
-                limit=limit or settings.mcp_page_size,
+                limit=await tools.page_limit(session, limit),
                 cursor=cursor,
             )
             attached = await files_service.entry_attachments(session, listed.items)

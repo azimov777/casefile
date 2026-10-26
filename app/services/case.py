@@ -87,6 +87,7 @@ from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.pagination import Page
+from app.db.project_scope import require_open
 from app.db.repositories import (
     AreaRepository,
     DiscussionRepository,
@@ -96,6 +97,7 @@ from app.db.repositories import (
     TaskRepository,
 )
 from app.db.wakeup import journal_wakeup
+from app.domain.area_links import AreaLinkKind, see_also_phrase
 from app.domain.areas import is_area_address, parse_area_address
 from app.domain.authors import AuthorKind
 from app.domain.case import (
@@ -144,6 +146,7 @@ from app.domain.errors import (
 from app.domain.fields import FieldProblems
 from app.domain.links import LinkKind, other_side_phrase
 from app.domain.participants import ParticipantKind
+from app.domain.project_access import UNRESTRICTED, ProjectAccess
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
     CheckGap,
@@ -492,6 +495,7 @@ async def list_questions(
     page = await repository.questions_page(
         addressee=name,
         project_id=project.id if project is not None else None,
+        access=actor.project_access,
         blocking=blocking,
         open_only=open_only,
         order=order,
@@ -539,6 +543,7 @@ async def list_remarks(
     page = await EntryRepository(session).remarks_page(
         author=None if author is None else author.strip().lower(),
         project_id=project.id if project is not None else None,
+        access=actor.project_access,
         open_only=open_only,
         limit=limit,
         cursor=cursor,
@@ -549,16 +554,20 @@ async def list_remarks(
     )
 
 
-async def count_open_warnings(session: AsyncSession) -> int:
+async def count_open_warnings(
+    session: AsyncSession, *, access: ProjectAccess = UNRESTRICTED
+) -> int:
     """Сколько задач несут открытое предупреждение — число для первого экрана.
 
     Адресата у предупреждения нет, как и у замечания: число одно на установку, его видит
     любой вошедший. Задачи архивных проектов не считаются (TRK#146).
     """
-    return await EntryRepository(session).count_open_warnings()
+    return await EntryRepository(session).count_open_warnings(access)
 
 
-async def count_open_questions(session: AsyncSession, *, participant: Participant) -> int:
+async def count_open_questions(
+    session: AsyncSession, *, participant: Participant, access: ProjectAccess = UNRESTRICTED
+) -> int:
     """Сколько открытых вопросов адресовано участнику.
 
     Прав не проверяет и адресата не разрешает: принимает уже прочитанного участника,
@@ -566,7 +575,7 @@ async def count_open_questions(session: AsyncSession, *, participant: Participan
     (`app/services/bootstrap.py`). Отдельный сценарий с собственной проверкой набора
     завёл бы вторую точку входа к тому же числу.
     """
-    return await EntryRepository(session).count_questions(addressee=participant.name)
+    return await EntryRepository(session).count_questions(addressee=participant.name, access=access)
 
 
 # --- Что подшивают одним вызовом ------------------------------------------------------
@@ -1365,6 +1374,14 @@ async def add_discussion_entry(
     )
 
 
+async def latest_area_entry_no(session: AsyncSession, area: Area) -> int:
+    """Номер последней записи дела области — двойник `latest_entry_no` у задачи: годится
+    сразу после подшивки связи области, в той же транзакции под очередью изменений."""
+    no = await EntryRepository(session).latest_area_no(area.id)
+    assert no is not None  # у любой области есть хотя бы `created`
+    return no
+
+
 async def latest_discussion_entry_no(session: AsyncSession, discussion: Discussion) -> int:
     """Номер последней записи дела обсуждения — двойник `latest_entry_no` у задачи: годится
     сразу после подшивки, в той же транзакции под очередью изменений."""
@@ -1676,6 +1693,37 @@ async def record_link_change(
         # по-прежнему роль своей задачи, как в `links` карточки.
         title=f"Link {action}: {other_side_phrase(kind, other_key)}",
         payload={"kind": kind.value, "other": other_key},
+        action_id=action_id,
+    )
+
+
+async def record_area_link_change(
+    session: AsyncSession,
+    area: Area,
+    *,
+    actor: Actor,
+    added: bool,
+    kind: AreaLinkKind,
+    other_address: str,
+    reason: str,
+    action_id: uuid.UUID,
+) -> Entry:
+    """Появление или снятие связи области — в дело **этой** области, её видом связи.
+
+    Как `record_link_change` у задач: одно событие, две записи, по одной в дело каждой
+    области, с общим `action_id` и в порядке адресов (`TRK/links#5`). В деле источника
+    вид `see_also`, в деле цели `see_also_from`; `other` — адрес другой стороны, причина
+    в обеих. `link_removed` архив пропускает (`freeze.UNFROZEN_ENTRY_TYPES`), `link_added`
+    в архивную область не ложится.
+    """
+    action = "added" if added else "removed"
+    return await _append(
+        session,
+        area,
+        actor=actor,
+        type=EntryType.LINK_ADDED if added else EntryType.LINK_REMOVED,
+        title=f"Link {action}: {see_also_phrase(kind, other_address)}",
+        payload={"kind": kind.value, "other": other_address, "reason": reason},
         action_id=action_id,
     )
 
@@ -2028,7 +2076,10 @@ async def _check_refs(
         for ref in task_refs:
             if ref.key not in tasks:
                 problems.add("refs", "unknown_task", ref=_ref_text(ref))
-            elif isinstance(ref, EntryRef):
+                continue
+            # Ссылка на задачу закрытого агенту проекта — запись в закрытый проект (TRK~28#6).
+            require_open(session, tasks[ref.key].project)
+            if isinstance(ref, EntryRef):
                 wanted.setdefault(ref.key, set()).add(ref.no)
         for key, nos in wanted.items():
             existing = await entries.existing_nos(tasks[key].id, sorted(nos))
@@ -2049,6 +2100,7 @@ async def _check_refs(
                         "refs", "unknown_project", ref=_ref_text(ProjectEntryRef(key=key, no=no))
                     )
                 continue
+            require_open(session, project)
             existing = await entries.existing_project_nos(project.id, sorted(nos))
             for no in sorted(nos - existing):
                 problems.add(
@@ -2081,6 +2133,7 @@ async def _check_refs(
                 for ref in refs_of:
                     problems.add("refs", reason, ref=_ref_text(ref))
                 continue
+            require_open(session, area.project)
             existing = await entries.existing_area_nos(area.id, sorted(nos))
             for ref in refs_of:
                 if ref.no not in existing:
@@ -2119,6 +2172,7 @@ async def _check_discussion_refs(
             for ref in named:
                 problems.add("refs", reason, ref=_ref_text(ref))
             continue
+        require_open(session, found.project)
         nos = sorted({ref.no for ref in named if isinstance(ref, DiscussionEntryRef)})
         existing = await entries.existing_discussion_nos(found.id, nos)
         for ref in named:

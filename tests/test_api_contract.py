@@ -50,6 +50,7 @@ from app.domain.case import EntryType
 from app.domain.idempotency import IDEMPOTENCY_KEY_HEADER
 from app.services import areas as areas_service
 from app.services import discussions as discussions_service
+from app.services import files as files_service
 from app.services.auth import Actor
 
 #: Значение-затычка для развёртки без токена: до параметров дело не доходит, потому что
@@ -251,9 +252,10 @@ async def test_every_readable_route_answers_with_the_data_envelope(
         )
 
         assert response.status_code == 200, f"GET {path} -> {response.status_code} {response.text}"
-        payload = response.json()
         if (method, path) in ENVELOPE_EXEMPT:
+            # Тело исключения — не JSON (байты файла): оболочки у него нет по определению.
             continue
+        payload = response.json()
         assert "data" in payload, f"GET {path}: {sorted(payload)}"
         declared = _resolve(
             schema,
@@ -318,7 +320,16 @@ async def sample(
         opening=EntryType.NOTE,
         tasks=[task],
     )
+    stored = await files_service.upload_file(
+        db_session,
+        actor=main_actor,
+        project=project.key,
+        name="sample.txt",
+        data=b"sample",
+        mime_type="text/plain",
+    )
     return {
+        "file_id": str(stored.id),
         "participant_name": owner.name,
         "account_id": str(account.id),
         "project_key": project.key,

@@ -1,28 +1,40 @@
 """Инструмент `link`: связь двух задач и `link_added` в обоих делах — или привязка задачи
-к обсуждению (`attached`) и `attached` в обоих делах."""
+к обсуждению (`attached`) и `attached` в обоих делах — или связь двух областей `see_also`
+с причиной и `link_added` в делах обеих областей."""
 
+from collections.abc import Callable
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.domain.areas import is_area_address
+from app.domain.errors import InvalidLinkKindError, LinkReasonNotAllowedError
 from app.domain.links import LinkKind
-from app.mcp.arguments import IdempotencyKeyArg, TaskKeyArg
+from app.mcp.arguments import IdempotencyKeyArg
 from app.mcp.enums import LinkToolKind
 from app.mcp.idempotency import Once
-from app.mcp.tools.links.arguments import LinkKindArg, OtherTaskKeyArg
+from app.mcp.tools.links.arguments import LinkKeyArg, LinkKindArg, OtherTaskKeyArg, ReasonArg
 from app.mcp.tools.links.views import LinkFilingView
 from app.mcp.toolset import FILING, Toolset
+from app.services import area_links as area_links_service
+from app.services import areas as areas_service
 from app.services import case as case_service
 from app.services import discussions as discussions_service
 from app.services import links as links_service
 from app.services import tasks as tasks_service
+from app.services.auth import Actor
 
 
 def register(tools: Toolset) -> None:
     """Объявляет `link`."""
     runtime = tools.runtime
 
-    @tools.tool(title="Link tasks", annotations=FILING, creating=True)
+    @tools.tool(title="Link tasks or areas", annotations=FILING, creating=True)
     async def link(
-        key: TaskKeyArg,
+        key: LinkKeyArg,
         kind: LinkKindArg,
         other: OtherTaskKeyArg,
+        reason: ReasonArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> LinkFilingView:
         """Links two tasks and files `link_added` in both cases.
@@ -50,8 +62,22 @@ def register(tools: Toolset) -> None:
         both cases: the task depends on its outcome, shown in the `discussions` of
         `get_task`. A repeat is refused with `discussion_task_exists`, a closed task with
         `task_closed`, a closed discussion with `discussion_closed`.
+
+        Areas are linked by `see_also` alone: whoever works in the area `key` also reads
+        `other`, and `reason` says why. `link_added` goes to both area cases. A reason sent
+        for a task is refused with `link_reason_not_allowed`.
         """
         async with runtime.call() as (session, actor):
+            if is_area_address(key):
+                return await _link_areas(
+                    link, session, actor, idempotency_key, key, kind, other, reason
+                )
+            if kind is LinkToolKind.SEE_ALSO:
+                raise InvalidLinkKindError(
+                    details={"kind": kind.value, "allowed": [k.value for k in LinkKind]}
+                )
+            if reason is not None:
+                raise LinkReasonNotAllowedError(details={"kind": kind.value})
             # Ключи разрешаются до занятия ключа идемпотентности: вызов, отклонённый до
             # работы, не должен его тратить.
             task = await tasks_service.get_task(session, key)
@@ -87,3 +113,39 @@ def register(tools: Toolset) -> None:
                 request={"task": task.key, "kind": kind, "other": other_task.key},
                 build=add,
             )
+
+
+async def _link_areas(
+    tool: Callable[..., Any],
+    session: AsyncSession,
+    actor: Actor,
+    idempotency_key: str | None,
+    key: str,
+    kind: LinkToolKind,
+    other: str,
+    reason: str | None,
+) -> LinkFilingView:
+    """`link` двух областей: вид только `see_also`, причина обязательна."""
+    if kind is not LinkToolKind.SEE_ALSO:
+        raise InvalidLinkKindError(
+            details={"kind": kind.value, "allowed": [LinkToolKind.SEE_ALSO.value]}
+        )
+    source = await areas_service.get_area(session, key)
+    target = await areas_service.get_area(session, other)
+
+    async def add() -> LinkFilingView:
+        await area_links_service.add_area_link(session, source, target, actor=actor, reason=reason)
+        entry = await case_service.latest_area_entry_no(session, source)
+        other_entry = await case_service.latest_area_entry_no(session, target)
+        return LinkFilingView(key=source.address, entry=entry, other_entry=other_entry)
+
+    return await Once.of(tool, session, actor, idempotency_key).run(
+        result=LinkFilingView,
+        request={
+            "area": source.address,
+            "kind": kind,
+            "other": target.address,
+            "reason": reason,
+        },
+        build=add,
+    )

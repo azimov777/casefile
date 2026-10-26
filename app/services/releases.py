@@ -37,11 +37,14 @@ import urllib.request
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app import __version__
 from app.core.config import Settings
 from app.core.logging import get_logger
 from app.domain.releases import RELEASES_REPOSITORY, Release, is_newer, parse_version
 from app.services.auth import Actor
+from app.services.installation_settings import get_setting
 
 logger = get_logger("releases")
 
@@ -108,11 +111,13 @@ class ReleaseWatch:
         self,
         *,
         enabled: bool,
+        settings: Settings | None = None,
         fetch: FetchLatest | None = None,
         clock: Clock = time.monotonic,
         version: str = __version__,
     ) -> None:
         self._enabled = enabled
+        self._settings = settings
         # Функция модуля берётся при сборке, а не умолчанием параметра: тест подменяет её
         # на модуле до `create_app`, и в GitHub не ходит.
         self._fetch = fetch if fetch is not None else read_latest_release
@@ -124,12 +129,23 @@ class ReleaseWatch:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> ReleaseWatch:
-        """Проверка по настройкам: только `production` и только не выключенная."""
-        return cls(enabled=settings.release_check and settings.environment == "production")
+        """Проверка по настройкам: только `production` и только не выключенная.
 
-    async def read(self) -> ReleaseState:
+        Переключатель `release_check` читается при каждом обращении (TRK-745), а не при
+        сборке: `enabled` здесь — только `production`.
+        """
+        return cls(enabled=settings.environment == "production", settings=settings)
+
+    async def _is_enabled(self, session: AsyncSession | None) -> bool:
+        if not self._enabled:
+            return False
+        if self._settings is None or session is None:
+            return True
+        return bool(await get_setting(session, "release_check", settings=self._settings))
+
+    async def read(self, session: AsyncSession | None = None) -> ReleaseState:
         """Версия и последний выпуск; в GitHub — только если срок кэша вышел."""
-        latest = await self._latest_release() if self._enabled else None
+        latest = await self._latest_release() if await self._is_enabled(session) else None
         return ReleaseState(
             version=self._version,
             latest=latest,
@@ -146,6 +162,8 @@ class ReleaseWatch:
             return self._latest
 
 
-async def read_release(*, actor: Actor, watch: ReleaseWatch) -> ReleaseState:
+async def read_release(
+    *, actor: Actor, watch: ReleaseWatch, session: AsyncSession | None = None
+) -> ReleaseState:
     """Отстаёт ли установка от последнего выпуска. Открыто любому набору: секрета нет."""
-    return await watch.read()
+    return await watch.read(session)

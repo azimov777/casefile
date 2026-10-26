@@ -20,7 +20,19 @@ from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, case, distinct, func, or_, select, text, true, union_all
+from sqlalchemy import (
+    Select,
+    and_,
+    case,
+    distinct,
+    func,
+    null,
+    or_,
+    select,
+    text,
+    true,
+    union_all,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
@@ -37,9 +49,11 @@ from app.db.pagination import (
     encode_sort_cursor,
     resolve_limit,
 )
+from app.db.project_scope import open_to
 from app.db.repositories.discussions import discussion_ids_of_tasks, unanswered_in_discussion
 from app.db.repositories.projects import in_active_project
 from app.db.sql import ilike_contains
+from app.domain.area_links import AreaLinkKind
 from app.domain.areas import ADDRESS_SEPARATOR, format_area_address
 from app.domain.authors import Author, AuthorKind
 from app.domain.case import (
@@ -81,6 +95,7 @@ from app.domain.discussions import (
     format_discussion_entry_ref,
 )
 from app.domain.links import LinkKind
+from app.domain.project_access import UNRESTRICTED, ProjectAccess
 from app.domain.tasks import CLOSED_STATUSES, ENTRY_REF_SEPARATOR, TaskField, TaskStatus
 
 
@@ -198,6 +213,12 @@ class EntryRepository:
         """Номер последней записи дела обсуждения — по тому же правилу, что `latest_no`."""
         return await self._session.scalar(
             select(func.max(Entry.no)).where(Entry.discussion_id == discussion_id)
+        )
+
+    async def latest_area_no(self, area_id: uuid.UUID) -> int | None:
+        """Номер последней записи дела области — по тому же правилу, что `latest_no`."""
+        return await self._session.scalar(
+            select(func.max(Entry.no)).where(Entry.area_id == area_id)
         )
 
     async def get_by_no(self, task_id: uuid.UUID, no: int) -> Entry | None:
@@ -852,7 +873,7 @@ class EntryRepository:
         )
         return await self._session.scalar(statement)
 
-    async def count_open_warnings(self) -> int:
+    async def count_open_warnings(self, access: ProjectAccess = UNRESTRICTED) -> int:
         """Сколько задач несут открытое предупреждение — число для первого экрана.
 
         Задачи архивных проектов не считаются, как вопросы во «входящей» (TRK#101):
@@ -863,7 +884,9 @@ class EntryRepository:
             select(func.count())
             .select_from(Entry)
             .join(Task, Task.id == Entry.task_id)
-            .where(_IS_WARNING, in_active_project(Task.project_id))
+            .where(
+                _IS_WARNING, in_active_project(Task.project_id), open_to(access, Task.project_id)
+            )
         )
         return await self._session.scalar(statement) or 0
 
@@ -907,6 +930,7 @@ class EntryRepository:
         *,
         addressee: str | None = None,
         project_id: uuid.UUID | None = None,
+        access: ProjectAccess = UNRESTRICTED,
         blocking: bool | None = None,
         open_only: bool = True,
         order: QuestionOrder = QuestionOrder.OLDEST,
@@ -934,7 +958,9 @@ class EntryRepository:
         statement = select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(_IS_QUESTION)
         if addressee is not None:
             statement = statement.where(addressed_to(addressee))
-        statement = statement.where(_in_project_or_active(project_id))
+        statement = statement.where(
+            _in_project_or_active(project_id), open_to(access, Task.project_id)
+        )
         if blocking is not None:
             statement = statement.where(blocking_is(blocking))
         if open_only:
@@ -997,6 +1023,7 @@ class EntryRepository:
         *,
         author: str | None = None,
         project_id: uuid.UUID | None = None,
+        access: ProjectAccess = UNRESTRICTED,
         open_only: bool = True,
         limit: int | None = None,
         cursor: str | None = None,
@@ -1012,7 +1039,9 @@ class EntryRepository:
         statement = select(Entry, Task.key).join(Task, Task.id == Entry.task_id).where(_IS_REMARK)
         if author is not None:
             statement = statement.where(authored_by(author))
-        statement = statement.where(_in_project_or_active(project_id))
+        statement = statement.where(
+            _in_project_or_active(project_id), open_to(access, Task.project_id)
+        )
         if open_only:
             statement = _unresolved(statement)
         if cursor is not None:
@@ -1030,6 +1059,7 @@ class EntryRepository:
         self,
         *,
         addressee: str,
+        access: ProjectAccess = UNRESTRICTED,
         blocking: bool | None = None,
         open_only: bool = True,
     ) -> int:
@@ -1047,7 +1077,12 @@ class EntryRepository:
             select(func.count())
             .select_from(Entry)
             .join(Task, Task.id == Entry.task_id)
-            .where(_IS_QUESTION, addressed_to(addressee), in_active_project(Task.project_id))
+            .where(
+                _IS_QUESTION,
+                addressed_to(addressee),
+                in_active_project(Task.project_id),
+                open_to(access, Task.project_id),
+            )
         )
         if blocking is not None:
             statement = statement.where(blocking_is(blocking))
@@ -1064,6 +1099,7 @@ class EntryRepository:
         task_ids: Sequence[uuid.UUID] | None = None,
         project_id: uuid.UUID | None = None,
         types: Sequence[EntryType] | None = None,
+        access: ProjectAccess = UNRESTRICTED,
         limit: int | None = None,
     ) -> Page[tuple[Entry, str | None, str | None, str | None, str | None]]:
         """Хвост журнала: записи со сквозным номером больше `after`, по возрастанию.
@@ -1111,7 +1147,20 @@ class EntryRepository:
             .outerjoin(area_project, area_project.id == Area.project_id)
             .outerjoin(Discussion, Discussion.id == Entry.discussion_id)
             .outerjoin(discussion_project, discussion_project.id == Discussion.project_id)
-            .where(Entry.seq > after)
+            .where(
+                Entry.seq > after,
+                # Проект записи — проект её владельца: задачи, дела проекта, области или
+                # обсуждения. Закрытый доступу агента проект в ленте не виден (TRK~28#6).
+                open_to(
+                    access,
+                    func.coalesce(
+                        Task.project_id,
+                        Entry.project_id,
+                        Area.project_id,
+                        Discussion.project_id,
+                    ),
+                ),
+            )
         )
         if task_ids is not None:
             statement = statement.where(
@@ -1554,7 +1603,15 @@ def _facts_json() -> ColumnElement[Any]:
         ),
         (
             Entry.type.in_((EntryType.LINK_ADDED, EntryType.LINK_REMOVED)),
-            func.jsonb_build_object("link_kind", payload["kind"], "other_key", payload["other"]),
+            func.jsonb_build_object(
+                "link_kind",
+                payload["kind"],
+                # Другая сторона: ключ задачи в деле задачи, адрес области в деле области.
+                "other_key",
+                case((Entry.task_id.is_not(None), payload["other"]), else_=null()),
+                "other_area",
+                case((Entry.area_id.is_not(None), payload["other"]), else_=null()),
+            ),
         ),
         (
             Entry.type == EntryType.QUESTION,
@@ -1655,8 +1712,10 @@ def _read_facts(entry_type: EntryType, raw: Any) -> EntryFacts:
         case EntryType.LINK_ADDED | EntryType.LINK_REMOVED:
             return LinkFacts(
                 type=entry_type,
-                link_kind=_as_enum(LinkKind, values.get("link_kind")),
+                link_kind=_as_enum(LinkKind, values.get("link_kind"))
+                or _as_enum(AreaLinkKind, values.get("link_kind")),
                 other_key=values.get("other_key"),
+                other_area=values.get("other_area"),
             )
         case EntryType.QUESTION:
             addressees = values.get("addressees")

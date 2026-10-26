@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import re
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -27,8 +28,10 @@ from app.db.models.project import Project
 from app.db.models.task import Task
 from app.domain.authors import Author, AuthorKind
 from app.domain.errors import FileLinkExpiredError, FileLinkNotFoundError, FileLinkUsedError
+from app.domain.project_access import ProjectAccess
 from app.mcp import file_links
-from app.mcp.file_links import FileLinks, LinkKind, link_origin
+from app.mcp.file_links import FileLinks, LinkKind, link_origin, register_file_routes
+from app.mcp.runtime import Runtime
 from app.services.auth import Actor
 from conftest import MCP_BASE_URL, call, refuse, tool_text
 from mcp import ClientSession
@@ -404,3 +407,51 @@ def test_the_link_address_is_the_mcp_address_without_the_mcp_path() -> None:
     assert link_origin(Settings(mcp_public_url=None, mcp_port=8100)) == "http://localhost:8100"
     proxied = Settings(mcp_public_url="https://tracker.example.com/casefile/mcp")
     assert link_origin(proxied) == "https://tracker.example.com/casefile"
+
+
+async def test_a_link_acts_with_the_project_access_of_who_took_it(
+    mcp_sessions: Any, project: Project
+) -> None:
+    """Доступ агента к проектам (TRK-751) действует и на маршрутах ссылок: ссылка, взятая
+    агентом, у которого проект закрыт, ничего не загружает и не выдаёт, даже если доступ
+    сузили уже после выдачи."""
+    server = MCPServer(name="probe")
+    links = FileLinks()
+    register_file_routes(
+        server, runtime=Runtime(sessions=mcp_sessions), settings=get_settings(), links=links
+    )
+    application = server.streamable_http_app()
+    closed = Actor(
+        author=Author(kind=AuthorKind.AGENT, signature="narrow"),
+        project_access=ProjectAccess.of("only", []),
+    )
+    async with (
+        application.router.lifespan_context(application),
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(application), base_url=MCP_BASE_URL
+        ) as curl,
+    ):
+        upload = links.issue(LinkKind.UPLOAD, closed, project="TRK", name="a.bin")
+        refused = await curl.put(f"/files/upload/{upload.secret}", content=b"x")
+        assert refused.status_code == 403
+        assert refused.json()["code"] == "project_not_allowed"
+
+        opened = Actor(author=Author(kind=AuthorKind.AGENT, signature="wide"))
+        stored_link = links.issue(LinkKind.UPLOAD, opened, project="TRK", name="b.bin")
+        stored = await curl.put(f"/files/upload/{stored_link.secret}", content=b"x")
+        assert stored.status_code == 200
+        download = links.issue(LinkKind.DOWNLOAD, closed, file_id=uuid.UUID(stored.json()["id"]))
+        refused = await curl.get(f"/files/download/{download.secret}")
+        assert refused.json()["code"] == "project_not_allowed"
+
+
+async def test_the_file_tools_refuse_a_project_the_agent_cannot_see(
+    mcp_server: MCPServer, main_secret: str, project: Project
+) -> None:
+    """Инструменты файлов идут через сценарии: закрытый проект не даёт ссылки (проверка на
+    сессии вызова, TRK-751) — для людей и общего ключа ограничений нет, поэтому здесь
+    проверяется, что вызов с открытым проектом проходит и неизвестный проект отказывает."""
+    async with served(mcp_server, main_secret) as (session, _):
+        assert "project_not_found" in await refuse(
+            session, "request_file_upload", project="NOPE", name="a.bin"
+        )

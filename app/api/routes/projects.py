@@ -46,6 +46,7 @@ from app.services import areas as areas_service
 from app.services import attributes as attributes_service
 from app.services import case as case_service
 from app.services import decisions as decisions_service
+from app.services import files as files_service
 from app.services import projects as service
 from app.services.auth import Actor
 from app.services.decisions import CaseDecision
@@ -301,8 +302,12 @@ async def create_project_entry(
             body=given["body"],
             refs=given["refs"],
             supersedes=given["supersedes"],
+            files=given["files"],
         )
-        return DataResponse[EntryRead](data=entry_read(appended, project_key=project.key))
+        attached = await files_service.entry_attachments(session, [appended])
+        return DataResponse[EntryRead](
+            data=entry_read(appended, project_key=project.key, files=attached.get(appended.id))
+        )
 
     return await once.run(
         DataResponse[EntryRead],
@@ -353,9 +358,15 @@ async def list_project_entries(
         limit=limit,
         cursor=cursor,
     )
+    attached = await files_service.entry_attachments(session, page.items)
     return CollectionResponse[EntryRead].of(
         [
-            entry_read(entry, project_key=project.key, standing=page.standings.get(entry.no))
+            entry_read(
+                entry,
+                project_key=project.key,
+                standing=page.standings.get(entry.no),
+                files=attached.get(entry.id),
+            )
             for entry in page.items
         ],
         next_cursor=page.next_cursor,
@@ -377,8 +388,11 @@ async def read_project_entry(
     project = await service.get_project(session, project_key)
     entry = await case_service.read_project_entry(session, project, entry_no, actor=actor)
     standing = await decisions_service.standing_of(session, project, entry)
+    attached = await files_service.entry_attachments(session, [entry])
     return DataResponse[EntryRead](
-        data=entry_read(entry, project_key=project.key, standing=standing)
+        data=entry_read(
+            entry, project_key=project.key, standing=standing, files=attached.get(entry.id)
+        )
     )
 
 

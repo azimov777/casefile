@@ -215,6 +215,7 @@ async def search_tasks(
     )
     page = await TaskSearchRepository(session).search_page(
         resolved,
+        access=actor.project_access,
         limit=limit,
         cursor=cursor,
         offset=offset,

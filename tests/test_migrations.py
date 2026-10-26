@@ -1078,6 +1078,8 @@ async def test_only_the_live_keys_of_people_are_revoked(
         "agent-key": False,
         "shared-key": False,
     }
+    # `authenticate` читает модели головы: базу доводят до неё, отзыв уже записан.
+    await migrate(url, "head")
     async with AsyncSession(migration_engine) as session:
         for name in ("browser-session", "local-ui", "agent-key", "shared-key"):
             await authenticate(session, secrets[name], label="checker")
@@ -1836,3 +1838,116 @@ async def test_the_area_links_table_guards_pairs_and_comes_off_on_rollback(
     assert not await _area_links_table_exists(migration_engine)
     await migrate(url, AREA_LINKS_REVISION)
     assert await _area_links_table_exists(migration_engine)
+
+
+# --- Доступ агента к проектам (TRK-746) -------------------------------------------------
+
+#: Ревизия доступа к проектам и ревизия перед ней.
+PROJECT_ACCESS_REVISION = "50535bc472dd"
+PROJECT_ACCESS_PREVIOUS = "68c51da858b1"
+
+_INSERT_PARTICIPANT_PROJECT = text(
+    "INSERT INTO participant_projects (participant_id, project_id) "
+    "SELECT p.id, j.id FROM participants p, projects j WHERE p.name = 'old_agent'"
+)
+
+
+async def _project_access_objects(engine: AsyncEngine) -> tuple[bool, bool]:
+    """Есть ли столбец режима и таблица списка."""
+    async with engine.connect() as connection:
+        column = await connection.scalar(
+            text(
+                "SELECT count(*) FROM information_schema.columns "
+                "WHERE table_name = 'participants' AND column_name = 'project_access_mode'"
+            )
+        )
+        table = await connection.scalar(
+            text("SELECT to_regclass('participant_projects') IS NOT NULL")
+        )
+    return bool(column), bool(table)
+
+
+async def test_project_access_defaults_to_all_guards_pairs_and_comes_off_on_rollback(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """После подъёма у существующего участника режим `all`; вторая строка той же пары и режим
+    вне трёх отвергаются базой; после `downgrade -1` столбца и таблицы нет."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, PROJECT_ACCESS_PREVIOUS)
+    assert await _project_access_objects(migration_engine) == (False, False)
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PROJECT)
+        await connection.execute(
+            text(
+                "INSERT INTO participants (kind, name, description, created_by_kind, "
+                "created_by_signature) VALUES ('agent', 'old_agent', '', 'tracker', NULL)"
+            )
+        )
+
+    await migrate(url, PROJECT_ACCESS_REVISION)
+    assert await _project_access_objects(migration_engine) == (True, True)
+    async with migration_engine.connect() as connection:
+        mode = await connection.scalar(
+            text("SELECT project_access_mode FROM participants WHERE name = 'old_agent'")
+        )
+    assert mode == "all"
+    async with migration_engine.begin() as connection:
+        await connection.execute(_INSERT_PARTICIPANT_PROJECT)
+    with pytest.raises(Exception, match="uq_participant_projects_participant_id_project_id"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(_INSERT_PARTICIPANT_PROJECT)
+    with pytest.raises(Exception, match="ck_participants_project_access_mode"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "UPDATE participants SET project_access_mode = 'some' WHERE name = 'old_agent'"
+                )
+            )
+
+    await migrate(url, PROJECT_ACCESS_PREVIOUS, down=True)
+    assert await _project_access_objects(migration_engine) == (False, False)
+    await migrate(url, PROJECT_ACCESS_REVISION)
+    assert await _project_access_objects(migration_engine) == (True, True)
+
+
+# --- Настройки установки (TRK-743) ---------------------------------------------------------
+
+#: Ревизия таблицы настроек установки и ревизия перед ней.
+INSTALLATION_SETTINGS_REVISION = "68c51da858b1"
+INSTALLATION_SETTINGS_PREVIOUS = "2d73da764c90"
+
+_INSERT_SETTING = text(
+    "INSERT INTO installation_settings (name, value, updated_by_kind, updated_by_signature) "
+    "VALUES (:name, :value, 'human', 'owner')"
+)
+
+
+async def _settings_table_exists(engine: AsyncEngine) -> bool:
+    async with engine.connect() as connection:
+        return bool(
+            await connection.scalar(text("SELECT to_regclass('installation_settings') IS NOT NULL"))
+        )
+
+
+async def test_the_installation_settings_table_guards_names_and_comes_off_on_rollback(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """После подъёма таблица есть и пуста, второе значение того же имени отвергается
+    базой; после `downgrade -1` таблицы нет, подъём идёт снова."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, INSTALLATION_SETTINGS_PREVIOUS)
+    assert not await _settings_table_exists(migration_engine)
+
+    await migrate(url, INSTALLATION_SETTINGS_REVISION)
+    assert await _settings_table_exists(migration_engine)
+    async with migration_engine.begin() as connection:
+        assert await connection.scalar(text("SELECT count(*) FROM installation_settings")) == 0
+        await connection.execute(_INSERT_SETTING, {"name": "mcp_page_size", "value": "10"})
+    with pytest.raises(Exception, match="uq_installation_settings_name"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(_INSERT_SETTING, {"name": "mcp_page_size", "value": "11"})
+
+    await migrate(url, INSTALLATION_SETTINGS_PREVIOUS, down=True)
+    assert not await _settings_table_exists(migration_engine)
+    await migrate(url, INSTALLATION_SETTINGS_REVISION)
+    assert await _settings_table_exists(migration_engine)

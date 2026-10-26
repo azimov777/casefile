@@ -58,7 +58,9 @@ async def read_installation(
 
 
 @router.get("/release", summary="Read the latest release")
-async def read_release(actor: ActorDep, watch: ReleaseWatchDep) -> DataResponse[ReleaseRead]:
+async def read_release(
+    actor: ActorDep, watch: ReleaseWatchDep, session: SessionDep
+) -> DataResponse[ReleaseRead]:
     """Версия установки и последний выпуск Casefile: вышел ли новый (TRK-416).
 
     Открыт любому набору. В GitHub ходит API, а не браузер, и не чаще раза в час:
@@ -66,7 +68,7 @@ async def read_release(actor: ActorDep, watch: ReleaseWatchDep) -> DataResponse[
     выключенная проверка и не `production`-установка отвечают `200` с пустым последним
     выпуском и без признака обновления: плашке нечего сказать, а ошибки нет.
     """
-    state = await releases_service.read_release(actor=actor, watch=watch)
+    state = await releases_service.read_release(actor=actor, watch=watch, session=session)
     latest = state.latest
     return DataResponse[ReleaseRead](
         data=ReleaseRead(

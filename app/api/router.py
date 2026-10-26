@@ -26,7 +26,9 @@ from app.api.routes import (
     areas,
     bootstrap,
     discussions,
+    files,
     installation,
+    installation_settings,
     journal,
     links,
     participants,
@@ -77,6 +79,7 @@ api_router = APIRouter(
 
 api_router.include_router(bootstrap.router)
 api_router.include_router(installation.router)
+api_router.include_router(installation_settings.router)
 api_router.include_router(participants.router)
 api_router.include_router(tokens.router)
 api_router.include_router(accounts.router)
@@ -87,6 +90,7 @@ api_router.include_router(links.router)
 api_router.include_router(discussions.router)
 api_router.include_router(questions.router)
 api_router.include_router(remarks.router)
+api_router.include_router(files.router)
 api_router.include_router(journal.router)
 
 

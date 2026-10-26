@@ -114,3 +114,24 @@ export function WarningPanel({ taskKey, warning, checks, canAct, onReturn }: War
     </section>
   );
 }
+
+/**
+ * Пояснение на месте плашки после возврата на доработку. Замечание снимает предупреждение
+ * (TRK#117), и плашка уходит; без слов это читалось как «интерфейс пропал». Говорит,
+ * что произошло и чей теперь ход.
+ */
+export function WarningReturnedNote() {
+  const { t } = useTranslation('ui');
+  return (
+    <section
+      role="status"
+      aria-labelledby="warning-returned"
+      className="flex flex-col gap-1 rounded-control border border-line bg-surface p-3"
+    >
+      <h2 id="warning-returned" className="text-screen">
+        {t('warning.returnedTitle')}
+      </h2>
+      <p>{t('warning.returnedText')}</p>
+    </section>
+  );
+}

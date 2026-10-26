@@ -32,6 +32,7 @@ from app.db.pagination import (
     encode_sort_cursor,
     resolve_limit,
 )
+from app.db.project_scope import open_to
 from app.db.repositories.projects import in_active_project
 from app.domain.authors import AuthorKind
 from app.domain.case import AGENT_ENTRY_TYPES, EntryType
@@ -42,6 +43,7 @@ from app.domain.discussions import (
     DiscussionTurn,
     format_discussion_address,
 )
+from app.domain.project_access import UNRESTRICTED, ProjectAccess
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,6 +223,7 @@ class DiscussionRepository:
         self,
         *,
         project_id: uuid.UUID | None = None,
+        access: ProjectAccess = UNRESTRICTED,
         status: DiscussionStatus | None = None,
         turn: DiscussionTurn | None = None,
         task_id: uuid.UUID | None = None,
@@ -245,6 +248,7 @@ class DiscussionRepository:
             turn_column.label("turn"),
             open_question_count_of(Discussion).label("open_questions"),
         )
+        statement = statement.where(open_to(access, Discussion.project_id))
         if project_id is not None:
             statement = statement.where(Discussion.project_id == project_id)
         else:
@@ -291,7 +295,7 @@ class DiscussionRepository:
             next_cursor=encode_sort_cursor([last.created_at, last.number, order.value], last.id),
         )
 
-    async def count_waiting_on_humans(self) -> int:
+    async def count_waiting_on_humans(self, access: ProjectAccess = UNRESTRICTED) -> int:
         """Сколько незакрытых обсуждений ждут человека (`turn: human`) в живых проектах —
         число для значка входящей на первом экране. Условие то же, что у отбора списка."""
         statement = (
@@ -301,6 +305,7 @@ class DiscussionRepository:
                 Discussion.status == DiscussionStatus.OPEN,
                 turn_of(Discussion) == DiscussionTurn.HUMAN.value,
                 in_active_project(Discussion.project_id),
+                open_to(access, Discussion.project_id),
             )
         )
         return await self._session.scalar(statement) or 0

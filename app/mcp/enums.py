@@ -21,6 +21,7 @@ from typing import Annotated
 
 from pydantic import WithJsonSchema
 
+from app.domain.area_links import AreaLinkKind
 from app.domain.authors import AuthorKind
 from app.domain.case import AnswerOutcome, EntryType, RemarkOutcome, VerdictOutcome
 from app.domain.decisions import DecisionStatus
@@ -74,15 +75,26 @@ LinkKindSchema = Annotated[
     LinkKind,
     described(LinkKind, "Link kind, named by the role of the task the link is shown for"),
 ]
+AreaLinkKindSchema = Annotated[
+    AreaLinkKind,
+    described(
+        AreaLinkKind,
+        "Area link kind, named by the role of the area the entry is filed in: `see_also` "
+        "in the source's case, `see_also_from` in the target's",
+    ),
+]
 
 
 class LinkToolKind(StrEnum):
-    """Вид в аргументе `link` и `unlink`: виды связи домена и привязка к обсуждению.
+    """Вид в аргументе `link` и `unlink`: виды связи домена, привязка к обсуждению и связь
+    областей `see_also`.
 
     Привязка задачи к обсуждению — не связь двух задач (`TRK#51`, п. 3), и в `LinkKind`
     её нет: там перечислены виды строк таблицы связей. Инструменты связи принимают её
-    видом `attached` (решение TRK-671#11), поэтому у аргумента своё перечисление —
-    виды домена и `attached`. Что виды домена здесь все и те же, стережёт проверка ниже.
+    видом `attached` (решение TRK-671#11), связь областей — видом `see_also` (TRK-735):
+    она ставится только по адресам областей. Поэтому у аргумента своё перечисление —
+    виды домена, `attached` и `see_also`. Что виды домена здесь все и те же, стережёт
+    проверка ниже.
     """
 
     PARENT = LinkKind.PARENT.value
@@ -91,17 +103,20 @@ class LinkToolKind(StrEnum):
     BLOCKED_BY = LinkKind.BLOCKED_BY.value
     RELATES = LinkKind.RELATES.value
     ATTACHED = EntryType.ATTACHED.value
+    SEE_ALSO = AreaLinkKind.SEE_ALSO.value
 
 
 assert {kind.value for kind in LinkToolKind} == {kind.value for kind in LinkKind} | {
-    LinkToolKind.ATTACHED.value
+    LinkToolKind.ATTACHED.value,
+    AreaLinkKind.SEE_ALSO.value,
 }, "виды связи домена и аргумента `link` разошлись"
 
 LinkToolKindSchema = Annotated[
     LinkToolKind,
     described(
         LinkToolKind,
-        "Link kind, named by the role of the task `key`; `attached` attaches it to a discussion",
+        "Link kind, named by the role of `key`; `attached` attaches a task to a discussion, "
+        "`see_also` links areas",
     ),
 ]
 AuthorKindSchema = Annotated[
