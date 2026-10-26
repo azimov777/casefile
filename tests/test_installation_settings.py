@@ -34,13 +34,9 @@ def test_the_registry_holds_exactly_the_seven_parameters() -> None:
 
 
 def test_registry_defaults_and_minimums_match_the_settings_class() -> None:
-    """Умолчание кода живёт в двух местах (реестр и `Settings`); тест их не даёт разойтись.
-    `file_unopened_days` в `Settings` ещё нет (придёт с TRK-741)."""
+    """Умолчание кода живёт в двух местах (реестр и `Settings`); тест их не даёт разойтись."""
     defaults = Settings(_env_file=None)  # type: ignore[call-arg]
     for spec in SETTINGS:
-        if spec.name == "file_unopened_days":
-            assert spec.default == 90
-            continue
         assert getattr(defaults, spec.name) == spec.default, spec.name
 
 

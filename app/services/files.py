@@ -25,8 +25,10 @@
 
 ## Выдача байтов ставит «когда последний раз открыт»
 
-Единственное чтение, которое пишет. Срока жизни изображений здесь нет (отдельная задача);
-отметку ставит `open_file`, и только он.
+Единственное чтение, которое пишет. Срока жизни изображений нет: трекер сам ничего не
+стирает. Отметку ставит `open_file`, и только он; по ней на чтении вычисляется признак
+`FileCard.unopened` и работает отбор `unopened` (TRK~8#12, срок — настройка
+`file_unopened_days`).
 """
 
 import uuid
@@ -56,15 +58,18 @@ from app.domain.files import (
     FileCard,
     FileSort,
     check_file_size,
+    is_unopened,
     normalize_file_ids,
     normalize_file_name,
     normalize_mime_type,
     sha256_hex,
+    unopened_cutoff,
 )
 from app.domain.project_access import is_open
 from app.services import freeze
 from app.services import projects as projects_service
 from app.services.auth import Actor
+from app.services.installation_settings import get_setting
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +107,7 @@ async def list_files(
     sort: FileSort = FileSort.ADDED,
     descending: bool = True,
     include_deleted: bool = False,
+    unopened: bool = False,
     limit: int | None = None,
     cursor: str | None = None,
 ) -> FilePage:
@@ -111,7 +117,8 @@ async def list_files(
     Без `project` файлы архивных проектов скрыты; названный проект виден и архивным.
     Надгробия по умолчанию не показываются (`include_deleted`). Сортировка по умолчанию —
     свежие добавленные первыми; для `FileSort.OPENED` не открывавшийся файл стоит по дате
-    добавления.
+    добавления. `unopened` оставляет только изображения, которых не открывали заданное
+    настройкой `file_unopened_days` число дней (признак `FileCard.unopened`).
     """
     project_id = (
         None if project is None else (await projects_service.get_project(session, project)).id
@@ -126,6 +133,7 @@ async def list_files(
         include_deleted=include_deleted,
         limit=limit,
         cursor=cursor,
+        unopened_before=await _unopened_cutoff(session) if unopened else None,
     )
     return FilePage(items=await _cards(session, page.items), next_cursor=page.next_cursor)
 
@@ -256,19 +264,26 @@ async def delete_matching(
     project: str | None = None,
     query: str | None = None,
     mime_type: str | None = None,
+    unopened: bool = False,
 ) -> list[FileCard]:
     """Удаляет все живые файлы под отбор списка — при условии, что их ровно `expected_count`.
 
     Число — то, что человек увидел и подтвердил (TRK#25). Не совпало с числом подходящих —
     `file_count_mismatch`, ничего не удалено. Пустой отбор — «все файлы установки»
     (кроме архивных проектов, как и в списке). Отбор по названному архивному проекту
-    отказывает `project_archived`, как удаление одного файла.
+    отказывает `project_archived`, как удаление одного файла. Отбор `unopened` — только
+    изображения, давно не открытые (TRK~8#12: стирает человек или агент, трекер сам — никогда).
+    Закрытые агенту проекты в отбор не входят, как и в списке (TRK-751).
     """
     project_id = (
         None if project is None else (await projects_service.get_project(session, project)).id
     )
     found = await FileRepository(session).matching(
-        project_id=project_id, query=query, mime_type=mime_type
+        project_id=project_id,
+        access=actor.project_access,
+        query=query,
+        mime_type=mime_type,
+        unopened_before=await _unopened_cutoff(session) if unopened else None,
     )
     if len(found) != expected_count:
         raise FileCountMismatchError(details={"expected": expected_count, "actual": len(found)})
@@ -365,8 +380,16 @@ def _name_and_type(name: Any, mime_type: Any) -> tuple[str, str]:
     return clean_name, clean_mime
 
 
+async def _unopened_cutoff(session: AsyncSession) -> datetime:
+    """Граница «давно не открывали» на сейчас: срок читается из настроек установки."""
+    days = await get_setting(session, "file_unopened_days", settings=get_settings())
+    assert isinstance(days, int)
+    return unopened_cutoff(datetime.now(UTC), days)
+
+
 async def _cards(session: AsyncSession, files: Sequence[File]) -> list[FileCard]:
     repository = FileRepository(session)
+    cutoff = await _unopened_cutoff(session) if files else None
     keys = await repository.project_keys({file.project_id for file in files})
     counts = await repository.reference_counts([file.id for file in files])
     return [
@@ -386,6 +409,14 @@ async def _cards(session: AsyncSession, files: Sequence[File]) -> list[FileCard]
             deleted_at=file.deleted_at,
             entries=counts.get(file.id, (0, 0))[0],
             tasks=counts.get(file.id, (0, 0))[1],
+            unopened=cutoff is not None
+            and is_unopened(
+                mime_type=file.mime_type,
+                added_at=file.created_at,
+                last_opened_at=file.last_opened_at,
+                deleted=file.deleted_at is not None,
+                cutoff=cutoff,
+            ),
         )
         for file in files
     ]

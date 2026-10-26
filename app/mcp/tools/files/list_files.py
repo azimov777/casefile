@@ -25,6 +25,10 @@ TypeFilterArg = Annotated[
     str | None,
     Field(description="Only this media type, or a family: `image/png`, `image` or `image/*`"),
 ]
+UnopenedArg = Annotated[
+    bool,
+    Field(description="Only images not opened for the installation's term of days (`unopened`)"),
+]
 SortArg = Annotated[
     Literal["added", "opened", "size", "type"],
     Field(
@@ -49,12 +53,15 @@ def register(tools: Toolset) -> None:
         sort: SortArg = "added",
         descending: bool = True,
         include_deleted: bool = False,
+        unopened: UnopenedArg = False,
         limit: LimitArg = None,
         cursor: CursorArg = None,
     ) -> PageView[FileCardView]:
         """Lists the installation's files as cards, without bytes. Tombstones of deleted
         files are left out unless `include_deleted` is set. Listing does not mark a file
-        as opened.
+        as opened. An image not opened for the installation's term of days carries `unopened`
+        and is picked by the `unopened` argument; a person or an agent may delete it, the
+        tracker never does.
         """
         async with runtime.call() as (session, actor):
             listed = await files_service.list_files(
@@ -66,6 +73,7 @@ def register(tools: Toolset) -> None:
                 sort=FileSort(sort),
                 descending=descending,
                 include_deleted=include_deleted,
+                unopened=unopened,
                 limit=limit or settings.mcp_page_size,
                 cursor=cursor,
             )

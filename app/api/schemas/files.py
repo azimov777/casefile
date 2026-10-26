@@ -41,6 +41,14 @@ class FileRead(BaseModel):
     deleted: bool = Field(description="True for a tombstone: the bytes are gone")
     deleted_by: AuthorRead | None = None
     deleted_at: datetime | None = None
+    unopened: bool = Field(
+        description=(
+            "Image (PNG, JPEG, GIF, WebP) not opened for the installation's "
+            "`file_unopened_days` days, counted from the last opening or, if never opened, "
+            "from adding. Computed on reading, stored nowhere; documents and tombstones "
+            "never have it. The tracker deletes nothing by itself"
+        )
+    )
     entries: int = Field(description="Case entries that attach the file")
     tasks: int = Field(description="Distinct tasks among those entries")
 
@@ -64,6 +72,7 @@ def file_read(card: FileCard) -> FileRead:
         deleted=card.deleted,
         deleted_by=None if card.deleted_by is None else AuthorRead.model_validate(card.deleted_by),
         deleted_at=card.deleted_at,
+        unopened=card.unopened,
         entries=card.entries,
         tasks=card.tasks,
     )
@@ -123,12 +132,22 @@ class FileDeletion(BaseModel):
     mime_type: str | None = Field(
         default=None, examples=["image"], description="Filter by type: `image/png` or `image`"
     )
+    unopened: bool | None = Field(
+        default=None,
+        description="True: only images not opened for `file_unopened_days` days (`unopened`)",
+    )
 
     @model_validator(mode="after")
     def _one_way(self) -> FileDeletion:
         by_filter = any(
             value is not None
-            for value in (self.expected_count, self.project, self.q, self.mime_type)
+            for value in (
+                self.expected_count,
+                self.project,
+                self.q,
+                self.mime_type,
+                self.unopened,
+            )
         )
         if self.ids is not None and by_filter:
             raise ValueError("name either `ids` or a filter with `expected_count`, not both")

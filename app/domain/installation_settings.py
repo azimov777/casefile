@@ -62,8 +62,7 @@ class SettingSpec:
 _DAY = 24 * 3600
 
 #: Реестр. Порядок — порядок показа. Умолчания совпадают с `Settings` в
-#: `app/core/config.py` (тест сверяет), а `TRACKER_FILE_UNOPENED_DAYS` приходит с
-#: TRK-741: поля в `Settings` пока нет, и умолчание 90 взято из слова владельца TRK~8#16.
+#: `app/core/config.py` (тест сверяет).
 SETTINGS: tuple[SettingSpec, ...] = (
     SettingSpec(
         "session_hours", "TRACKER_SESSION_HOURS", SettingKind.INTEGER, 168, 1, 24 * 365 * 5

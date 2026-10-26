@@ -16,7 +16,7 @@ import re
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -41,6 +41,39 @@ _MIME_RE = re.compile(r"^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"
 _BAD_NAME_CHARS = re.compile(r"[\x00-\x1f\x7f/\\]")
 
 
+#: Изображения: только они получают признак «давно не открывали» (TRK~8#12). Остальное —
+#: документы, которые не удаляются и не помечаются никогда.
+IMAGE_MIME_TYPES = ("image/png", "image/jpeg", "image/gif", "image/webp")
+
+
+def is_image(mime_type: str) -> bool:
+    """Изображение в смысле срока: PNG, JPEG, GIF или WebP."""
+    return mime_type in IMAGE_MIME_TYPES
+
+
+def unopened_cutoff(now: datetime, days: int) -> datetime:
+    """Граница признака: не открытое с этого момента или раньше изображение — «давно»."""
+    return now - timedelta(days=days)
+
+
+def is_unopened(
+    *,
+    mime_type: str,
+    added_at: datetime,
+    last_opened_at: datetime | None,
+    deleted: bool,
+    cutoff: datetime,
+) -> bool:
+    """Признак «изображение давно не открывали»: вычисляется на чтении, нигде не хранится.
+
+    Отсчёт — от последнего открытия, а у не открывавшегося файла — от добавления. У
+    документа и у надгробия признака нет.
+    """
+    if deleted or not is_image(mime_type):
+        return False
+    return (last_opened_at or added_at) <= cutoff
+
+
 class FileSort(StrEnum):
     """По чему упорядочен список файлов. Направление — отдельно (`descending`)."""
 
@@ -55,7 +88,8 @@ class FileCard:
     """Карточка файла без байтов: живого или надгробия (`deleted_at` не пуст).
 
     У надгробия остаются имя, тип, размер и sha256 — какой файл был и что было бы
-    видно на записях дела, — и кто и когда его удалил. Число ссылок считается на чтении:
+    видно на записях дела, — и кто и когда его удалил. `unopened` — признак «изображение
+    давно не открывали» (срок — настройка `file_unopened_days`). Число ссылок считается на чтении:
     `entries` — записей дела, которые прикладывают файл, `tasks` — различных задач среди них.
     """
 
@@ -74,6 +108,7 @@ class FileCard:
     deleted_at: datetime | None
     entries: int
     tasks: int
+    unopened: bool = False
 
     @property
     def deleted(self) -> bool:

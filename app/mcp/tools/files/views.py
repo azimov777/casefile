@@ -12,7 +12,8 @@ from app.mcp.views import AttachedFileView, attached_file, signature
 
 class FileCardView(AttachedFileView):
     """File card with its history. `entries` counts the entries that attach the file,
-    `tasks` the distinct tasks among them."""
+    `tasks` the distinct tasks among them. `unopened` (present only when true) marks an
+    image not opened for the installation's term of days."""
 
     sha256: str
     project: str
@@ -21,6 +22,7 @@ class FileCardView(AttachedFileView):
     replaced_at: datetime | None = None
     last_opened_at: datetime | None = None
     deleted_by: str | None = None
+    unopened: bool = False
     entries: int
     tasks: int
 
@@ -33,6 +35,8 @@ class FileCardView(AttachedFileView):
         for name in ("replaced_at", "last_opened_at", "deleted_by", "deleted_at"):
             if dumped.get(name) is None:
                 dumped.pop(name, None)
+        if not dumped.get("unopened"):
+            dumped.pop("unopened", None)
         return dumped
 
 
@@ -47,6 +51,7 @@ def file_card(card: FileCard) -> FileCardView:
         replaced_at=card.replaced_at,
         last_opened_at=card.last_opened_at,
         deleted_by=signature(card.deleted_by),
+        unopened=card.unopened,
         entries=card.entries,
         tasks=card.tasks,
     )
