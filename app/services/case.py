@@ -96,6 +96,7 @@ from app.db.repositories import (
     TaskRepository,
 )
 from app.db.wakeup import journal_wakeup
+from app.domain.area_links import AreaLinkKind, see_also_phrase
 from app.domain.areas import is_area_address, parse_area_address
 from app.domain.authors import AuthorKind
 from app.domain.case import (
@@ -1654,6 +1655,37 @@ async def record_link_change(
         # по-прежнему роль своей задачи, как в `links` карточки.
         title=f"Link {action}: {other_side_phrase(kind, other_key)}",
         payload={"kind": kind.value, "other": other_key},
+        action_id=action_id,
+    )
+
+
+async def record_area_link_change(
+    session: AsyncSession,
+    area: Area,
+    *,
+    actor: Actor,
+    added: bool,
+    kind: AreaLinkKind,
+    other_address: str,
+    reason: str,
+    action_id: uuid.UUID,
+) -> Entry:
+    """Появление или снятие связи области — в дело **этой** области, её видом связи.
+
+    Как `record_link_change` у задач: одно событие, две записи, по одной в дело каждой
+    области, с общим `action_id` и в порядке адресов (`TRK/links#5`). В деле источника
+    вид `see_also`, в деле цели `see_also_from`; `other` — адрес другой стороны, причина
+    в обеих. `link_removed` архив пропускает (`freeze.UNFROZEN_ENTRY_TYPES`), `link_added`
+    в архивную область не ложится.
+    """
+    action = "added" if added else "removed"
+    return await _append(
+        session,
+        area,
+        actor=actor,
+        type=EntryType.LINK_ADDED if added else EntryType.LINK_REMOVED,
+        title=f"Link {action}: {see_also_phrase(kind, other_address)}",
+        payload={"kind": kind.value, "other": other_address, "reason": reason},
         action_id=action_id,
     )
 

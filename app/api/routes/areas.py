@@ -34,6 +34,8 @@ from app.api.schemas.areas import (
     AreaRead,
     AreaUpdate,
     area_read,
+    see_also_from_read,
+    see_also_read,
 )
 from app.api.schemas.common import CollectionResponse, DataResponse
 from app.api.schemas.entries import AreaEntryCreate, EntryRead, entry_read
@@ -42,6 +44,7 @@ from app.db.models.area import Area
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.areas import format_area_address
 from app.domain.projects import normalize_project_key
+from app.services import area_links as area_links_service
 from app.services import areas as service
 from app.services import attributes as attributes_service
 from app.services import case as case_service
@@ -397,5 +400,13 @@ async def _detail(
         data=AreaDetailRead(
             **area_read(area).model_dump(),
             attributes=[AttributeRead.model_validate(item) for item in attributes],
+            see_also=[
+                see_also_read(link)
+                for link in await area_links_service.list_see_also(session, area)
+            ],
+            see_also_from=[
+                see_also_from_read(link)
+                for link in await area_links_service.list_see_also_from(session, area)
+            ],
         )
     )

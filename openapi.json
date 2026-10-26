@@ -11738,6 +11738,22 @@
             "type": "array",
             "title": "Attributes",
             "description": "Current attribute values, ordered by name ignoring case. Every change is an entry of the area's case: `attribute_created`, `attribute_changed`, `attribute_removed`"
+          },
+          "see_also": {
+            "items": {
+              "$ref": "#/components/schemas/AreaSeeAlsoRead"
+            },
+            "type": "array",
+            "title": "See Also",
+            "description": "Areas this one refers to — \"who works here, reads there too\" — ordered by address; may lie in another project. The link is set by agents through MCP; an archived area stays listed. Each link is also an entry `link_added` or `link_removed` in the case of both areas"
+          },
+          "see_also_from": {
+            "items": {
+              "$ref": "#/components/schemas/AreaSeeAlsoFromRead"
+            },
+            "type": "array",
+            "title": "See Also From",
+            "description": "Areas that refer to this one, ordered by address: the same links read from the other side"
           }
         },
         "type": "object",
@@ -11807,6 +11823,51 @@
         ],
         "title": "AreaEntryCreate",
         "description": "Запись агента или человека в деле области: заметка, решение, находка, артефакт.\n\nТе же типы, что у дела проекта (TRK#57), но без `supersedes`: замену у\nдела области ведёт агент через MCP, интерфейс записей не заменяет, и поля без вызова\nREST не держит (решение TRK#53). Лишнее поле схема отвергает до сценария."
+      },
+      "AreaLinkKind": {
+        "type": "string",
+        "enum": [
+          "see_also",
+          "see_also_from"
+        ],
+        "title": "AreaLinkKind",
+        "description": "Вид связи областей **со стороны области**, чьё дело или чью карточку читают.\n\nВ таблицу попадает только `see_also`; `see_also_from` — то же ребро, прочитанное из\nобласти-цели (в payload записи дела цели и в `link_kind` описи)."
+      },
+      "AreaLinkPayload": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AreaLinkKind",
+            "description": "`see_also` in the case of the source area, `see_also_from` in the target's",
+            "examples": [
+              "see_also"
+            ]
+          },
+          "other": {
+            "type": "string",
+            "title": "Other",
+            "description": "Address of the area on the other side",
+            "examples": [
+              "TRK/mcp"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Why one working in the source area reads the target too, one phrase",
+            "examples": [
+              "Экраны показывают механики ядра: их правила — там."
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "other",
+          "reason"
+        ],
+        "title": "AreaLinkPayload",
+        "description": "Связь областей `see_also`. Подшивается в дело обеих областей под своим именем.\n\nОтдельная модель от `LinkPayload`: у связи задач причины нет, и добавлять ей пустое\nполе значило бы менять нагрузку уже записанных записей. Объединение различает их по\nнабору ключей (`extra=\"forbid\"`)."
       },
       "AreaRead": {
         "properties": {
@@ -11925,6 +11986,105 @@
         ],
         "title": "AreaRefRead",
         "description": "Область строкой в чтении проекта: адрес и название (TRK#57)."
+      },
+      "AreaSeeAlsoFromRead": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the area that lists this one in its see also",
+            "examples": [
+              "TRK/ui"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Интерфейс"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Why one working there reads here too, as the source of the link wrote it",
+            "examples": [
+              "Экраны показывают механики ядра: их правила — там."
+            ]
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "title",
+          "reason",
+          "created_by",
+          "created_at"
+        ],
+        "title": "AreaSeeAlsoFromRead",
+        "description": "Связь `see_also` со стороны цели: кто отсылает читателя сюда."
+      },
+      "AreaSeeAlsoRead": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Address of the area the card refers to; its card is read at `/projects/TRK/areas/mcp`",
+            "examples": [
+              "TRK/mcp"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "MCP-сервер"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Short \"what this is\" of the area on the other side, so one can decide to open it",
+            "examples": [
+              "Инструменты агентов и их ответы"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Why one working here reads there too, one phrase",
+            "examples": [
+              "Экраны показывают механики ядра: их правила — там."
+            ]
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "title",
+          "description",
+          "reason",
+          "created_by",
+          "created_at"
+        ],
+        "title": "AreaSeeAlsoRead",
+        "description": "Связь `see_also` со стороны источника: куда он отсылает читателя."
       },
       "AreaUpdate": {
         "properties": {
@@ -16107,32 +16267,61 @@
             ]
           },
           "task_key": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Task Key",
+            "description": "Key of the owning task; `null` for an entry of a project's, an area's or a discussion's case",
             "examples": [
               "TRK-42"
             ]
           },
           "project_key": {
-            "type": "null",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Project Key",
-            "description": "Always `null`: entries of this type belong to a task, never to a project",
+            "description": "Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for an area or a discussion entry",
             "examples": [
               null
             ]
           },
           "area": {
-            "type": "null",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Area",
-            "description": "Always `null`: entries of this type belong to a task, never to an area",
+            "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
             "examples": [
               null
             ]
           },
           "discussion": {
-            "type": "null",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Discussion",
-            "description": "Always `null`: entries of this type never belong to a discussion",
+            "description": "Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise",
             "examples": [
               null
             ]
@@ -16224,7 +16413,15 @@
             "title": "Type"
           },
           "payload": {
-            "$ref": "#/components/schemas/LinkPayload"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinkPayload"
+              },
+              {
+                "$ref": "#/components/schemas/AreaLinkPayload"
+              }
+            ],
+            "title": "Payload"
           }
         },
         "type": "object",
@@ -16242,7 +16439,7 @@
           "payload"
         ],
         "title": "LinkEntryRead",
-        "description": "Служебная запись о появлении или снятии связи."
+        "description": "Служебная запись о появлении или снятии связи: в деле задачи или области."
       },
       "LinkFactsRead": {
         "properties": {
@@ -16260,10 +16457,14 @@
                 "$ref": "#/components/schemas/LinkKind"
               },
               {
+                "$ref": "#/components/schemas/AreaLinkKind"
+              },
+              {
                 "type": "null"
               }
             ],
-            "description": "Kind of the link"
+            "title": "Link Kind",
+            "description": "Kind of the link; in the case of an area `see_also` (this area lists the other in see also) or `see_also_from` (the other area lists this one)"
           },
           "other_key": {
             "anyOf": [
@@ -16275,9 +16476,24 @@
               }
             ],
             "title": "Other Key",
-            "description": "The task on the other side",
+            "description": "The task on the other side; `null` in the case of an area",
             "examples": [
               "TRK-7"
+            ]
+          },
+          "other_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Area",
+            "description": "Address of the area on the other side; `null` in the case of a task",
+            "examples": [
+              "TRK/mcp"
             ]
           }
         },
@@ -16312,7 +16528,7 @@
           "other": {
             "type": "string",
             "title": "Other",
-            "description": "Key of the task on the other side",
+            "description": "Key of the task on the other side; address of the area for an area link",
             "examples": [
               "TRK-7"
             ]
@@ -16325,7 +16541,7 @@
           "other"
         ],
         "title": "LinkPayload",
-        "description": "Связь между задачами. Подшивается в дело обеих сторон под своим именем.\n\nМодель объявлена здесь, а не в задаче 24 вместе со связями: объединение по `type`\nобязано покрывать **все** типы записей, иначе первая же запись о связи развалила бы\nчтение дела целиком."
+        "description": "Связь между задачами или областями. Подшивается в дело обеих сторон под своим именем.\n\nСвязь областей — `AreaLinkPayload`.\n\nМодель объявлена здесь, а не в задаче 24 вместе со связями: объединение по `type`\nобязано покрывать **все** типы записей, иначе первая же запись о связи развалила бы\nчтение дела целиком."
       },
       "LinkTaskRead": {
         "properties": {
