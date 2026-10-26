@@ -293,6 +293,10 @@ def without_empty_standing(value: Any) -> Any:
     kept = {key: without_empty_standing(item) for key, item in value.items()}
     if "status" in kept and "superseded_by" in kept and kept["status"] is None:
         del kept["status"], kept["superseded_by"]
+    # Состояние проверки решения человеком (TRK-755) в MCP пока не отдаётся — его добавит
+    # задача MCP: сверка REST с MCP его не сравнивает.
+    kept.pop("review_state", None)
+    kept.pop("review_entry", None)
     if "lifted_by" in kept and kept["lifted_by"] is None:
         del kept["lifted_by"]
     if "files" in kept and kept["files"] == []:

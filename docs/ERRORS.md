@@ -91,7 +91,8 @@
 | `checks_not_passed` | Some checks have no verdict, or a failed one, recorded since the last entry into in_progress | `in_progress → done` требует по каждой проверке вердикта не `failed`, подшитого после последнего входа в `in_progress`. |
 | `closing_not_a_transition` | Closing a task is a separate call, not a status transition | `done` достигается только сценарием закрытия, а не переводом статуса. |
 | `conflict` | State conflict | Состояние объекта не позволяет выполнить операцию: дубликат ключа, гонка версий. |
-| `decision_not_in_force` | Decision is superseded by a later decision | Решение проекта или области уже заменено другим, а его называют как действующее. |
+| `decision_already_confirmed` | Decision is already confirmed by a person | Решение уже подтверждено человеком, а его подтверждают снова (TRK-755). |
+| `decision_not_in_force` | Decision is not in force: it is superseded, rejected or removed | Решение проекта или области уже заменено другим, а его называют как действующее. |
 | `discussion_closed` | Discussion is closed: its case and its tasks are frozen | Обсуждение закрыто: любая запись, привязка, отвязка и повторное закрытие — отказ. |
 | `discussion_has_open_questions` | Discussion has questions with no answer | Закрытие обсуждения, в деле которого есть вопрос без ответа: адреса вопросов (`TRK~7#3`) — в `details.questions`. |
 | `discussion_task_exists` | Task is already attached to the discussion | Задача уже привязана к этому обсуждению: привязка хранится одной строкой. |

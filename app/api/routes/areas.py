@@ -38,11 +38,13 @@ from app.api.schemas.areas import (
     see_also_read,
 )
 from app.api.schemas.common import CollectionResponse, DataResponse
+from app.api.schemas.decisions import DecisionReview
 from app.api.schemas.entries import AreaEntryCreate, EntryRead, entry_read
 from app.api.schemas.projects import AttributeRead, AttributeRemoval, AttributeSet
 from app.db.models.area import Area
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.areas import format_area_address
+from app.domain.decisions import ReviewOutcome
 from app.domain.projects import normalize_project_key
 from app.services import area_links as area_links_service
 from app.services import areas as service
@@ -301,10 +303,9 @@ async def create_area_entry(
     """Подшивает запись в дело области: заметку, решение, находку или артефакт.
 
     Номер `no` считается внутри области, ссылка на запись — `TRK/promotion#3`.
-    `supersedes` в теле нет: замену у дела области ведёт агент через MCP, а интерфейс
-    записей не заменяет, и поле без вызова в REST не держат (решение TRK#53). Замечания к
-    форме и ссылкам — разом в `422 entry_fields_invalid`. Архивная область — `409
-    area_archived`.
+    `supersedes` называет решения и находки области, которые новая запись заменяет:
+    человек исправляет решение области новым решением (TRK-755). Замечания к форме и
+    ссылкам — разом в `422 entry_fields_invalid`. Архивная область — `409 area_archived`.
     """
     area = await _area(session, project_key, area_key)
     given = entry.model_dump(mode="json")
@@ -318,6 +319,7 @@ async def create_area_entry(
             title=given["title"],
             body=given["body"],
             refs=given["refs"],
+            supersedes=given["supersedes"],
         )
         return DataResponse[EntryRead](data=entry_read(appended, area=area.address))
 
@@ -325,6 +327,47 @@ async def create_area_entry(
         DataResponse[EntryRead],
         request={"area": area.address, "entry": given},
         build=append,
+    )
+
+
+@router.post(
+    "/{area_key}/decisions/{decision_no}/review",
+    status_code=status.HTTP_201_CREATED,
+    summary="Review an area decision",
+)
+async def review_area_decision(
+    project_key: ProjectKeyPath,
+    area_key: AreaKeyPath,
+    decision_no: AreaEntryNoPath,
+    review: DecisionReview,
+    session: SessionDep,
+    actor: ActorDep,
+    once: OnceDep,
+) -> DataResponse[EntryRead]:
+    """Человек подтверждает, отклоняет или удаляет действующее решение области (TRK-755).
+
+    То же, что `POST /projects/{project_key}/decisions/{decision_no}/review`, для дела
+    области: тело `{outcome, reason}`, ответ — запись `decision_review`. Архивная область —
+    `409 area_archived`.
+    """
+    area = await _area(session, project_key, area_key)
+    given = review.model_dump(mode="json")
+
+    async def file_review() -> DataResponse[EntryRead]:
+        entry = await decisions_service.review_decision(
+            session,
+            area,
+            decision_no,
+            actor=actor,
+            outcome=ReviewOutcome(given["outcome"]),
+            reason=given["reason"],
+        )
+        return DataResponse[EntryRead](data=entry_read(entry, area=area.address))
+
+    return await once.run(
+        DataResponse[EntryRead],
+        request={"area": area.address, "decision": decision_no, "review": given},
+        build=file_review,
     )
 
 
@@ -400,6 +443,9 @@ async def _detail(
         data=AreaDetailRead(
             **area_read(area).model_dump(),
             attributes=[AttributeRead.model_validate(item) for item in attributes],
+            unconfirmed_decisions=await decisions_service.count_unconfirmed(
+                session, actor=actor, area=area
+            ),
             see_also=[
                 see_also_read(link)
                 for link in await area_links_service.list_see_also(session, area)

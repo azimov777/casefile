@@ -162,6 +162,7 @@ class EntryType(StrEnum):
     ATTRIBUTE_REMOVED = "attribute_removed"
     ARCHIVED = "archived"
     RESTORED = "restored"
+    DECISION_REVIEW = "decision_review"
 
 
 class VerdictOutcome(StrEnum):
@@ -287,6 +288,7 @@ SERVICE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
         EntryType.ATTRIBUTE_REMOVED,
         EntryType.ARCHIVED,
         EntryType.RESTORED,
+        EntryType.DECISION_REVIEW,
     }
 )
 
@@ -302,6 +304,11 @@ ATTRIBUTE_ENTRY_TYPES: frozenset[EntryType] = frozenset(
 #: `archived` и `restored` с причиной. Бывают только в делах проекта и области —
 #: отдельного архива у задачи нет.
 ARCHIVE_ENTRY_TYPES: frozenset[EntryType] = frozenset({EntryType.ARCHIVED, EntryType.RESTORED})
+
+#: Служебная запись проверки решения человеком (TRK-755): `decision_review` в деле
+#: проекта или области. Подшивает её только сценарий проверки (`app/services/decisions.py`),
+#: тип выводится из действия, а не присылается; в деле задачи и обсуждения её нет.
+DECISION_REVIEW_ENTRY_TYPES: frozenset[EntryType] = frozenset({EntryType.DECISION_REVIEW})
 
 #: Записи агента и человека — всё, что не служебное.
 AGENT_ENTRY_TYPES: frozenset[EntryType] = frozenset(EntryType) - SERVICE_ENTRY_TYPES
@@ -752,6 +759,8 @@ FACTS_BY_ENTRY_TYPE: Mapping[EntryType, type[EntryFacts]] = {
     # Причина — свободный текст и остаётся в записи, в опись ехать нечему.
     EntryType.ARCHIVED: NoFacts,
     EntryType.RESTORED: NoFacts,
+    # Номер решения и исход — в нагрузке; заголовок несёт то и другое фразой.
+    EntryType.DECISION_REVIEW: NoFacts,
 }
 
 

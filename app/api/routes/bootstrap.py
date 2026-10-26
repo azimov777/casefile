@@ -53,5 +53,6 @@ async def read_bootstrap(
             open_questions=state.open_questions,
             open_warnings=state.open_warnings,
             open_discussions=state.open_discussions,
+            unconfirmed_decisions=state.unconfirmed_decisions,
         )
     )

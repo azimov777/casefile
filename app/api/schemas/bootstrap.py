@@ -63,3 +63,13 @@ class BootstrapRead(BaseModel):
             "discussions. A turn has no addressee, so the number is the same for every token"
         ),
     )
+    unconfirmed_decisions: int = Field(
+        default=0,
+        examples=[12],
+        description=(
+            "Decisions in force that no person has confirmed yet, in the cases of projects "
+            "that are not archived and their active areas — the inbox of decisions awaiting "
+            "review. The same number as `unconfirmed` of `GET /api/v1/decisions` without "
+            "`project`"
+        ),
+    )

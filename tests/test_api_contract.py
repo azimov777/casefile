@@ -80,6 +80,9 @@ UNCALLABLE: dict[tuple[str, str], str] = {
 #: попасть сюда, иначе прогон встанет на минуту.
 QUERY_OVERRIDES: dict[str, dict[str, Any]] = {}
 
+#: Поля ответа сверх `data` и `meta`, объявленные в схеме: путь → имена полей.
+ENVELOPE_EXTRAS: dict[str, tuple[str, ...]] = {"/api/v1/decisions": ("unconfirmed",)}
+
 
 @pytest.fixture
 def schema(app: FastAPI) -> dict[str, Any]:
@@ -262,6 +265,9 @@ async def test_every_readable_route_answers_with_the_data_envelope(
             operation["responses"]["200"]["content"]["application/json"]["schema"],
         )
         expected = ["data", "meta"] if "meta" in declared.get("properties", {}) else ["data"]
+        # Список решений несёт сверх оболочки число непроверенных (TRK-755): поле объявлено в
+        # схеме ответа и названо здесь, любое другое лишнее поле по-прежнему падает.
+        expected = sorted([*expected, *ENVELOPE_EXTRAS.get(path, ())])
         assert sorted(payload) == expected, f"GET {path}: {sorted(payload)}"
         if "meta" in expected:
             assert sorted(payload["meta"]) == ["has_more", "next_cursor", "total"], f"GET {path}"

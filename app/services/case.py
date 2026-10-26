@@ -999,9 +999,11 @@ async def list_project_entries(
                 if types is None
                 else REPLACEABLE_ENTRY_TYPES.intersection(types)
             )
-            exclude_nos = standings.superseded
+            exclude_nos = standings.not_in_force
         else:
-            nos = sorted(standings.superseded if nos is None else standings.superseded & set(nos))
+            nos = sorted(
+                standings.not_in_force if nos is None else standings.not_in_force & set(nos)
+            )
     page = await (
         repository.list_area_page if isinstance(project, Area) else repository.list_project_page
     )(
@@ -1170,6 +1172,33 @@ async def record_attribute_removed(
         type=EntryType.ATTRIBUTE_REMOVED,
         title=f"Attribute removed: {name}",
         payload={"name": name, "before": before, "reason": reason},
+    )
+
+
+async def record_decision_review(
+    session: AsyncSession,
+    owner: CaseOwner,
+    *,
+    actor: Actor,
+    no: int,
+    outcome: str,
+    reason: str,
+) -> Entry:
+    """Человек проверил решение дела: исход и причина (TRK-755).
+
+    Заголовок — фраза с адресом решения, `refs` называет его же. Подшивает сценарий
+    проверки (`decisions.review_decision`) после всех своих проверок.
+    """
+    ref = format_entry_ref(owner_name(owner), no)
+    return await _append(
+        session,
+        owner,
+        actor=actor,
+        type=EntryType.DECISION_REVIEW,
+        title=f"Decision {ref} {outcome}",
+        body=reason,
+        payload={"decision": no, "outcome": outcome},
+        refs=[ref],
     )
 
 

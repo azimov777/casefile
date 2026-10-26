@@ -563,10 +563,27 @@ class DecisionNotInForceError(ConflictError):
     `decisions` новую ссылку на заменённое — иначе отменённое обрастало бы ссылками. В
     `details.decisions` каждое такое решение и его преемник (`ref`, `superseded_by`).
     Конфликт состояния, а не ошибка формы: та же ссылка на преемника проходит.
+
+    С проверкой человеком (TRK-755) отказ говорит и о решении, которое человек отклонил
+    или удалил: преемника у него нет (`superseded_by: null`), а причина названа в
+    `status` (`rejected` или `removed`). Так же отказывает и сама проверка решения,
+    которое не действует, и номер, под которым решения в деле нет.
     """
 
     code = "decision_not_in_force"
-    message = "Decision is superseded by a later decision"
+    message = "Decision is not in force: it is superseded, rejected or removed"
+
+
+class DecisionAlreadyConfirmedError(ConflictError):
+    """Решение уже подтверждено человеком, а его подтверждают снова (TRK-755).
+
+    Подтверждённым решение читается, если человек подтвердил его записью проверки или
+    сам его подписал. Подтверждённое можно отклонить или удалить, а подтверждать ещё раз
+    нечего. В `details` — адрес решения и номер записи подтверждения, если она есть.
+    """
+
+    code = "decision_already_confirmed"
+    message = "Decision is already confirmed by a person"
 
 
 class FindingNotInForceError(ConflictError):

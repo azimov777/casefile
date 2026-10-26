@@ -545,8 +545,8 @@ async def test_rest_keeps_attributes_entries_and_the_archive_of_an_area(
         None,
         "TRK/x",
     )
-    # Поля `supersedes` в теле REST области нет (решение TRK#53: интерфейс записей не
-    # заменяет); замена у дела области — путь агента через MCP, `test_area_knowledge.py`.
+    # `supersedes` в теле REST области принимается (TRK-755: человек исправляет решение
+    # новым); номер записи, которая не решение, — отказ формы, как у MCP.
     superseding = await auth_client.post(
         f"{base}/entries",
         json={"type": "decision", "title": "Решение", "supersedes": [1]},
@@ -554,7 +554,7 @@ async def test_rest_keeps_attributes_entries_and_the_archive_of_an_area(
     )
     assert (superseding.status_code, superseding.json()["error"]["code"]) == (
         422,
-        "validation_error",
+        "entry_fields_invalid",
     )
 
     archived = await auth_client.post(f"{base}/archive", json={"reason": "Пауза"})

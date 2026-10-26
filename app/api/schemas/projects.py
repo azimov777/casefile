@@ -153,6 +153,14 @@ class ProjectDetailRead(ProjectRead):
             "Archived ones are listed by `/projects/{key}/areas?include_archived=true`"
         )
     )
+    unconfirmed_decisions: int = Field(
+        default=0,
+        examples=[12],
+        description=(
+            "How many decisions in force no person has confirmed yet, counted in the "
+            "project's case and the cases of its active areas"
+        ),
+    )
 
 
 class AttributeSet(BaseModel):

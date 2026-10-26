@@ -33,6 +33,8 @@ from app.db.repositories import AccountRepository, ParticipantRepository
 from app.db.repositories.participant_projects import ParticipantProjectRepository
 from app.db.session import transaction
 from app.domain.archive import EXCLUDED_TABLES, Archive, ArchiveFormat, ArchiveTable, copy_text
+from app.domain.authors import Author, AuthorKind
+from app.domain.decisions import ReviewOutcome
 from app.domain.errors import ArchiveInvalidError
 from app.domain.participants import ParticipantKind
 from app.domain.passwords import hash_password
@@ -41,6 +43,7 @@ from app.domain.tokens import TokenKind
 from app.services import archive as archive_service
 from app.services import areas as areas_service
 from app.services import case as case_service
+from app.services import decisions as decisions_service
 from app.services import oauth as oauth_service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
@@ -458,6 +461,48 @@ async def test_an_area_entry_that_supersedes_comes_in_with_the_same_status(
     ] == [
         (first.no, {"supersedes": [], "draft_for": None}, "superseded", second.no),
         (second.no, {"supersedes": [first.no], "draft_for": None}, "in_force", None),
+    ]
+
+
+async def test_a_decision_review_comes_in_and_the_state_is_read_the_same(
+    auth_client: AsyncClient, db_session: AsyncSession, main_actor: Actor
+) -> None:
+    """Запись `decision_review` переезжает как строка дела: после приёма отклонённое решение
+    остаётся отклонённым, подтверждённое — подтверждённым с тем же номером записи
+    (TRK-755)."""
+    await populate(auth_client)
+    core = await areas_service.get_area(db_session, "TRK/core")
+    agent = Actor(author=Author(kind=AuthorKind.AGENT, signature="claude"))
+    kept = await case_service.append_project_entry(
+        db_session, core, actor=agent, type="decision", title="Оставить"
+    )
+    dropped = await case_service.append_project_entry(
+        db_session, core, actor=agent, type="decision", title="Убрать"
+    )
+    confirmed = await decisions_service.review_decision(
+        db_session, core, kept.no, actor=main_actor, outcome=ReviewOutcome.CONFIRMED
+    )
+    await decisions_service.review_decision(
+        db_session, core, dropped.no, actor=main_actor, outcome=ReviewOutcome.REMOVED
+    )
+    path = "/api/v1/projects/TRK/areas/core/entries"
+    before = (await auth_client.get(path, params={"types": ["decision"]})).json()["data"]
+    archive = (await auth_client.get(ARCHIVE)).json()["data"]
+
+    await wipe(db_session)
+    target_ui, _ = await fresh_installation(db_session)
+    ui = bearer(target_ui)
+    response = await auth_client.post(ARCHIVE, json={"data": archive}, headers=ui)
+    assert response.status_code == 200, response.text
+
+    after = await auth_client.get(path, params={"types": ["decision"]}, headers=ui)
+    assert after.json()["data"] == before
+    assert [
+        (item["no"], item["status"], item["review_state"], item["review_entry"])
+        for item in after.json()["data"]
+    ] == [
+        (kept.no, "in_force", "confirmed", confirmed.no),
+        (dropped.no, "removed", "unconfirmed", None),
     ]
 
 

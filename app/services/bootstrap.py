@@ -30,6 +30,7 @@ from app.db.models.project import Project
 from app.db.pagination import MAX_PAGE_SIZE
 from app.services import accounts as accounts_service
 from app.services import case as case_service
+from app.services import decisions as decisions_service
 from app.services import discussions as discussions_service
 from app.services import projects as projects_service
 from app.services.auth import Actor
@@ -61,6 +62,10 @@ class Bootstrap:
     #: Незакрытые обсуждения, где ход за человеком (`turn: human`, решение `TRK#51`, п. 8):
     #: входящая по обсуждениям. Адресата у хода нет — число одно для любого токена.
     open_discussions: int
+    #: Действующие решения, которые человек ещё не проверял, в неархивных проектах и их
+    #: областях (TRK-755): раздел «Решения ждут проверки» во входящей. Число одно на любой токен
+    #: с тем же доступом к проектам.
+    unconfirmed_decisions: int
 
 
 async def read_bootstrap(
@@ -109,4 +114,5 @@ async def read_bootstrap(
         open_discussions=await discussions_service.count_waiting_on_humans(
             session, access=actor.project_access
         ),
+        unconfirmed_decisions=await decisions_service.count_unconfirmed(session, actor=actor),
     )

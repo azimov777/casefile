@@ -65,6 +65,7 @@ class NoFactsView(BaseModel):
         EntryType.CLOSED,
         EntryType.ARCHIVED,
         EntryType.RESTORED,
+        EntryType.DECISION_REVIEW,
     ]
 
 

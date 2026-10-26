@@ -42,21 +42,27 @@
 изменить между проверкой и фиксацией, и тогда у записи оказалось бы два преемника.
 """
 
+import uuid
 from collections import defaultdict
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import PermissionDeniedError
 from app.db.models.area import Area
 from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
+from app.db.pagination import decode_sort_cursor, encode_sort_cursor, resolve_limit
 from app.db.project_scope import require_open
 from app.db.repositories import AreaRepository, EntryRepository, ProjectRepository, TaskRepository
+from app.db.repositories.entries import DecisionFact
 from app.domain import state as state_domain
 from app.domain.areas import is_area_address, parse_area_address
+from app.domain.authors import Author, AuthorKind
 from app.domain.case import (
     REPLACEABLE_ENTRY_TYPES,
     SUPERSEDES_FIELD,
@@ -64,8 +70,20 @@ from app.domain.case import (
     format_entry_ref,
     superseded_numbers,
 )
-from app.domain.decisions import DecisionStatus, status_of, successors
+from app.domain.decisions import (
+    DecisionStatus,
+    Review,
+    ReviewOutcome,
+    ReviewState,
+    confirmations,
+    review_of_payload,
+    review_state_of,
+    status_of,
+    successors,
+    withdrawals,
+)
 from app.domain.errors import (
+    DecisionAlreadyConfirmedError,
     DecisionNotInForceError,
     EntryFieldsInvalidError,
     FindingNotInForceError,
@@ -74,6 +92,8 @@ from app.domain.errors import (
 from app.domain.fields import FieldProblems
 from app.domain.project_access import is_open
 from app.domain.tasks import TaskField, split_decision_ref
+from app.services import freeze
+from app.services.accounts import active_account_of
 from app.services.auth import Actor
 
 #: Владелец дела без хода работы: проект или область (TRK#128, TRK#57). У обоих
@@ -93,13 +113,19 @@ class CaseDecision:
     `owner` — ключ проекта или адрес области: голова ссылки (`TRK#15`, `TRK/mcp#3`).
     `superseded_by` — запись решения, которое заменило это, или `None`, пока оно
     действует. Преемник прямой, а не конец цепочки: цепочка замен видна шаг за шагом, и
-    статус преемника считается тем же правилом.
+    статус преемника считается тем же правилом. `withdrawn` — исход проверки человека,
+    выведший решение из силы (`rejected` или `removed`), или `None`; преемника у такого
+    решения нет. `review_state` и `review_entry` — проверено ли решение человеком и
+    номер записи подтверждения (TRK-755).
     """
 
     entry: Entry
     owner: str
     supersedes: tuple[int, ...]
     superseded_by: Entry | None
+    withdrawn: ReviewOutcome | None = None
+    review_state: ReviewState = ReviewState.UNCONFIRMED
+    review_entry: int | None = None
 
     @property
     def ref(self) -> str:
@@ -107,7 +133,13 @@ class CaseDecision:
 
     @property
     def status(self) -> DecisionStatus:
-        return DecisionStatus.IN_FORCE if self.superseded_by is None else DecisionStatus.SUPERSEDED
+        if self.superseded_by is not None:
+            return DecisionStatus.SUPERSEDED
+        if self.withdrawn is ReviewOutcome.REJECTED:
+            return DecisionStatus.REJECTED
+        if self.withdrawn is ReviewOutcome.REMOVED:
+            return DecisionStatus.REMOVED
+        return DecisionStatus.IN_FORCE
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,32 +186,48 @@ class Standing:
     """Статус записи знания в чтении дела и номер её прямого преемника.
 
     Преемник прямой, а не конец цепочки — как у `CaseDecision.superseded_by`: его
-    статус читается тем же правилом, и цепочка видна шаг за шагом.
+    статус читается тем же правилом, и цепочка видна шаг за шагом. `review_state` и
+    `review_entry` — только у решения; у заметки оба `None`.
     """
 
     status: DecisionStatus
     superseded_by: int | None
+    review_state: ReviewState | None = None
+    review_entry: int | None = None
 
 
 class CaseStandings:
     """Статусы записей знания одного дела проекта или области, посчитанные разом.
 
-    Собирается из всех решений и заметок дела (`case_standings`) и отвечает на два
-    вопроса чтения дела: какой статус у записи (`of`) и какие номера заменены
-    (`superseded`) — по ним выборка отбирает `in_force`, не считая статус второй раз.
+    Собирается из всех решений и заметок дела (`case_standings`), проверок человека и
+    номеров решений, подписанных человеком, и отвечает на два вопроса чтения дела: какой
+    статус у записи (`of`) и какие номера не действуют (`not_in_force`) — по ним выборка
+    отбирает `in_force`, не считая статус второй раз.
     """
 
-    __slots__ = ("_successor_of", "_type_of")
+    __slots__ = ("_confirmed_by", "_human", "_successor_of", "_type_of", "_withdrawn")
 
-    def __init__(self, entries: Iterable[tuple[int, EntryType, Sequence[int]]]) -> None:
+    def __init__(
+        self,
+        entries: Iterable[tuple[int, EntryType, Sequence[int]]],
+        reviews: Iterable[Review] = (),
+        human_decisions: Iterable[int] = (),
+    ) -> None:
         listed = list(entries)
         self._type_of = {no: entry_type for no, entry_type, _ in listed}
         self._successor_of = successors(listed)
+        decision_nos = {
+            no for no, entry_type in self._type_of.items() if entry_type is EntryType.DECISION
+        }
+        checked = list(reviews)
+        self._withdrawn = withdrawals(checked, decision_nos)
+        self._confirmed_by = confirmations(checked, decision_nos)
+        self._human = frozenset(human_decisions) & decision_nos
 
     @property
-    def superseded(self) -> frozenset[int]:
-        """Номера заменённых записей дела."""
-        return frozenset(self._successor_of)
+    def not_in_force(self) -> frozenset[int]:
+        """Номера записей, которые не действуют: заменённые, отклонённые и удалённые."""
+        return frozenset(self._successor_of) | frozenset(self._withdrawn)
 
     def type_of(self, no: int) -> EntryType | None:
         """Тип записи знания с этим номером; `None` — такого решения или заметки в деле нет."""
@@ -196,8 +244,16 @@ class CaseStandings:
 
     def of_number(self, no: int) -> Standing:
         """Статус решения или заметки дела по номеру; номер — из `type_of`."""
+        status = status_of(no, self._successor_of, self._withdrawn)
+        successor = self._successor_of.get(no)
+        if self._type_of.get(no) is not EntryType.DECISION:
+            return Standing(status=status, superseded_by=successor)
+        state, review_entry = review_state_of(no, self._confirmed_by, self._human)
         return Standing(
-            status=status_of(no, self._successor_of), superseded_by=self._successor_of.get(no)
+            status=status,
+            superseded_by=successor,
+            review_state=state,
+            review_entry=review_entry,
         )
 
 
@@ -221,11 +277,11 @@ async def case_knowledge(session: AsyncSession, owner: CaseOwner, *, actor: Acto
     `CaseStandings`, что у чтения дела.
     """
     rows = await _replaceables(session, owner)
-    standings = _standings(rows)
+    standings = await _standings(session, owner, rows)
     prefix = owner_name(owner)
     listed: dict[EntryType, list[KnowledgeRef]] = {kind: [] for kind in _KNOWLEDGE_TYPES}
     for no, entry_type, title, _ in rows:
-        if standings.of_number(no).superseded_by is None:
+        if standings.of_number(no).status is DecisionStatus.IN_FORCE:
             listed[entry_type].append(KnowledgeRef(ref=format_entry_ref(prefix, no), title=title))
     return CaseKnowledge(
         decisions=listed[EntryType.DECISION],
@@ -240,24 +296,28 @@ async def project_decisions_after_card(
     """Действующие решения проекта задачи, подшитые после последней правки её разделов, —
     ссылками `TRK#7` для блока `state` (TRK#156).
 
-    Статус считает тот же `CaseStandings`, что у чтения проекта: заменённое решение в поле
-    не входит. Решения областей — дела других сущностей, их здесь нет (TRK-643).
+    Статус считает тот же `CaseStandings`, что у чтения проекта: заменённое, отклонённое и
+    удалённое решение в поле не входит. Решения областей — дела других сущностей, их здесь
+    нет (TRK-643).
     """
     entries = EntryRepository(session)
     project_key = task.key.rsplit("-", 1)[0]
-    standings = _standings(await entries.project_replaceables(task.project_id))
+    standings = _build_standings(
+        await entries.project_replaceables(task.project_id),
+        await entries.project_review_facts(task.project_id),
+    )
     return state_domain.project_decisions_after_card(
         project_key,
         await entries.project_decision_seqs(task.project_id),
         cut_seq=await entries.card_edit_seq(task.id),
-        superseded=standings.superseded,
+        superseded=standings.not_in_force,
     )
 
 
 async def case_standings(session: AsyncSession, owner: CaseOwner) -> CaseStandings:
     """Статусы всех решений и заметок дела проекта или области: для чтения дела и отбора
     `in_force`."""
-    return _standings(await _replaceables(session, owner))
+    return await _standings(session, owner, await _replaceables(session, owner))
 
 
 async def standing_of(session: AsyncSession, owner: CaseOwner, entry: Entry) -> Standing | None:
@@ -332,6 +392,231 @@ async def is_decision(session: AsyncSession, ref: str) -> bool:
     return entry is not None and entry.type is EntryType.DECISION
 
 
+# --- Список решений поперёк проектов и областей ------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ListedDecision:
+    """Строка списка решений: решение дела проекта или области со статусом и проверкой.
+
+    `ref` — адрес решения (`TRK#15`, `TRK/mcp#3`), `area` — адрес области или `None` у
+    решения проекта. `supersedes` и `superseded_by` — ссылки в деле того же владельца;
+    `refs` — ссылки самого решения (откуда оно). `tasks` — сколько задач на него ссылается.
+    """
+
+    ref: str
+    area: str | None
+    title: str
+    author: Author
+    created_at: datetime
+    status: DecisionStatus
+    review_state: ReviewState
+    review_entry: int | None
+    supersedes: list[str]
+    superseded_by: str | None
+    refs: list[str]
+    tasks: int
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionListing:
+    """Страница списка решений и число непроверенных действующих решений в той же области
+    видимости (проект или вся установка), не зависящее от отборов."""
+
+    items: list[ListedDecision]
+    next_cursor: str | None
+    unconfirmed: int
+
+
+async def list_decisions(
+    session: AsyncSession,
+    *,
+    actor: Actor,
+    project: Project | None = None,
+    status: DecisionStatus | None = None,
+    review_state: ReviewState | None = None,
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> DecisionListing:
+    """Решения проекта вместе с его неархивными областями или всех неархивных проектов
+    установки, открытых доступу вызова; старые первыми (TRK-755).
+
+    Статус и состояние проверки считаются при чтении теми же правилами, что в деле:
+    `CaseStandings` на владельца. Читаются записи без тел — одним запросом на всю область
+    видимости. Страница режется по `seq` решения; число `unconfirmed` считается по всей
+    области видимости, а не по отбору.
+    """
+    shown = await _decision_rows(
+        session, actor=actor, project_id=None if project is None else project.id
+    )
+    unconfirmed = sum(
+        1
+        for row in shown
+        if row.standing.status is DecisionStatus.IN_FORCE
+        and row.standing.review_state is ReviewState.UNCONFIRMED
+    )
+    chosen = [
+        row
+        for row in shown
+        if (status is None or row.standing.status is status)
+        and (review_state is None or row.standing.review_state is review_state)
+    ]
+    size = resolve_limit(limit)
+    if cursor is not None:
+        (after_seq,), _ = decode_sort_cursor(cursor, arity=1)
+        chosen = [row for row in chosen if row.fact.seq > after_seq]
+    page = chosen[:size]
+    next_cursor = (
+        encode_sort_cursor([page[-1].fact.seq], page[-1].fact.id) if len(chosen) > size else None
+    )
+    refs = [format_entry_ref(row.fact.owner, row.fact.no) for row in page]
+    counts = await TaskRepository(session).decision_counts(refs)
+    items = [
+        ListedDecision(
+            ref=ref,
+            area=row.fact.area,
+            title=row.fact.title,
+            author=row.fact.author,
+            created_at=row.fact.created_at,
+            status=row.standing.status,
+            review_state=row.standing.review_state or ReviewState.UNCONFIRMED,
+            review_entry=row.standing.review_entry,
+            supersedes=[
+                format_entry_ref(row.fact.owner, number)
+                for number in superseded_numbers(row.fact.payload)
+            ],
+            superseded_by=(
+                None
+                if row.standing.superseded_by is None
+                else format_entry_ref(row.fact.owner, row.standing.superseded_by)
+            ),
+            refs=row.fact.refs,
+            tasks=counts.get(ref, 0),
+        )
+        for ref, row in zip(refs, page, strict=True)
+    ]
+    return DecisionListing(items=items, next_cursor=next_cursor, unconfirmed=unconfirmed)
+
+
+async def count_unconfirmed(
+    session: AsyncSession,
+    *,
+    actor: Actor,
+    project_id: uuid.UUID | None = None,
+    area: Area | None = None,
+) -> int:
+    """Сколько действующих решений человек ещё не проверял: область — её решения,
+    проект (`project_id`) — его и его неархивных областей, без названия — всей установки (неархивные
+    проекты, открытые доступу вызова). Число карточек проекта и области, `bootstrap` и
+    поля `unconfirmed` списка решений — одно и то же правило."""
+    rows = await _decision_rows(
+        session, actor=actor, project_id=area.project_id if area is not None else project_id
+    )
+    return sum(
+        1
+        for row in rows
+        if row.standing.status is DecisionStatus.IN_FORCE
+        and row.standing.review_state is ReviewState.UNCONFIRMED
+        and (area is None or row.fact.owner_id == area.id)
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _DecisionRow:
+    fact: DecisionFact
+    standing: Standing
+
+
+async def _decision_rows(
+    session: AsyncSession, *, actor: Actor, project_id: uuid.UUID | None
+) -> list[_DecisionRow]:
+    """Все решения области видимости со статусом, по `seq`."""
+    facts = await EntryRepository(session).decision_facts(
+        project_id=project_id, access=actor.project_access
+    )
+    by_owner: dict[uuid.UUID, list[DecisionFact]] = defaultdict(list)
+    for fact in facts:
+        by_owner[fact.owner_id].append(fact)
+    rows: list[_DecisionRow] = []
+    for group in by_owner.values():
+        decisions = [fact for fact in group if fact.type is EntryType.DECISION]
+        reviews = [
+            review
+            for fact in group
+            if fact.type is EntryType.DECISION_REVIEW
+            and (review := review_of_payload(fact.no, fact.payload)) is not None
+        ]
+        standings = CaseStandings(
+            ((fact.no, fact.type, superseded_numbers(fact.payload)) for fact in decisions),
+            reviews,
+            [fact.no for fact in decisions if fact.author.kind is AuthorKind.HUMAN],
+        )
+        rows.extend(_DecisionRow(fact, standings.of_number(fact.no)) for fact in decisions)
+    return sorted(rows, key=lambda row: row.fact.seq)
+
+
+# --- Проверка решения человеком ----------------------------------------------------------
+
+
+async def review_decision(
+    session: AsyncSession,
+    owner: CaseOwner,
+    no: int,
+    *,
+    actor: Actor,
+    outcome: ReviewOutcome,
+    reason: str | None = None,
+) -> Entry:
+    """Человек подтверждает, отклоняет или удаляет действующее решение проекта или
+    области — подшивается запись `decision_review` (TRK-755).
+
+    Порядок отказов: не человек с учётной записью — `permission_denied`
+    (`details.reason: account_required`, как при выпуске ключа); архивный проект или
+    область — `project_archived`, `area_archived`; решения нет или оно не действует
+    (заменено, отклонено, удалено) — `decision_not_in_force`, у заменённого с
+    преемником; повторное `confirmed` — `decision_already_confirmed`. Состояние читается
+    под очередью изменений, как у замены: две проверки одного решения не разойдутся.
+    «Удалить» — отмена без замены, запись остаётся в деле: записи неизменяемы.
+    """
+    from app.services import case as case_service  # дело импортирует этот модуль
+
+    if await active_account_of(session, actor) is None:
+        raise PermissionDeniedError(
+            message="Only a person signed in with an account can review decisions",
+            details={"action": "decision.review", "reason": "account_required"},
+        )
+    if isinstance(owner, Area):
+        await freeze.lock_unfrozen(session, area=owner)
+    else:
+        await freeze.lock_unfrozen(session, project=owner)
+    standings = await case_standings(session, owner)
+    prefix = owner_name(owner)
+    ref = format_entry_ref(prefix, no)
+    if standings.type_of(no) is not EntryType.DECISION:
+        raise DecisionNotInForceError(
+            details={"decisions": [{"ref": ref, "superseded_by": None}], "key": prefix}
+        )
+    standing = standings.of_number(no)
+    if standing.status is not DecisionStatus.IN_FORCE:
+        successor = (
+            None
+            if standing.superseded_by is None
+            else format_entry_ref(prefix, standing.superseded_by)
+        )
+        raise DecisionNotInForceError(
+            details=_not_in_force_details(
+                EntryType.DECISION, [(ref, successor, standing.status)], key=prefix
+            )
+        )
+    if outcome is ReviewOutcome.CONFIRMED and standing.review_state is ReviewState.CONFIRMED:
+        raise DecisionAlreadyConfirmedError(
+            details={"ref": ref, "review_entry": standing.review_entry, "key": prefix}
+        )
+    return await case_service.record_decision_review(
+        session, owner, actor=actor, no=no, outcome=outcome.value, reason=(reason or "").strip()
+    )
+
+
 # --- Проверки записи ---------------------------------------------------------------------
 
 
@@ -371,7 +656,7 @@ async def check_cited(
         require_open(session, owner if isinstance(owner, Project) else owner.project)
         decision = found.get(owner_key, {}).get(no)
         if decision is not None:
-            if decision.superseded_by is not None:
+            if decision.status is not DecisionStatus.IN_FORCE:
                 superseded.append(decision)
             continue
         await _not_of_type(
@@ -388,7 +673,7 @@ async def check_cited(
         raise DecisionNotInForceError(
             details=_not_in_force_details(
                 EntryType.DECISION,
-                [(item.ref, _successor_ref(item)) for item in superseded],
+                [(item.ref, _successor_ref(item), item.status) for item in superseded],
                 key=key,
             )
         )
@@ -410,7 +695,7 @@ async def check_superseded(
     standings = await case_standings(session, owner)
     prefix = owner_name(owner)
     problems = FieldProblems()
-    superseded: list[tuple[str, str | None]] = []
+    superseded: list[tuple[str, str | None, DecisionStatus]] = []
     for no in numbers:
         ref = format_entry_ref(prefix, no)
         if standings.type_of(no) is not entry_type:
@@ -425,8 +710,13 @@ async def check_superseded(
             )
             continue
         standing = standings.of_number(no)
-        if standing.superseded_by is not None:
-            superseded.append((ref, format_entry_ref(prefix, standing.superseded_by)))
+        if standing.status is not DecisionStatus.IN_FORCE:
+            successor = (
+                None
+                if standing.superseded_by is None
+                else format_entry_ref(prefix, standing.superseded_by)
+            )
+            superseded.append((ref, successor, standing.status))
     problems.raise_as(EntryFieldsInvalidError, key=prefix)
     if superseded:
         error, _ = _NOT_IN_FORCE[entry_type]
@@ -439,10 +729,39 @@ async def check_superseded(
 _KNOWLEDGE_TYPES = tuple(sorted(REPLACEABLE_ENTRY_TYPES))
 
 
-def _standings(rows: Iterable[tuple[int, EntryType, str, dict[str, Any]]]) -> CaseStandings:
+def _build_standings(
+    rows: Iterable[tuple[int, EntryType, str, dict[str, Any]]],
+    facts: Iterable[tuple[int, EntryType, dict[str, Any]]],
+) -> CaseStandings:
+    """`CaseStandings` из строк знания дела и фактов проверки (`*_review_facts`)."""
+    reviews: list[Review] = []
+    human: list[int] = []
+    for no, entry_type, payload in facts:
+        if entry_type is EntryType.DECISION_REVIEW:
+            review = review_of_payload(no, payload)
+            if review is not None:
+                reviews.append(review)
+        else:
+            human.append(no)
     return CaseStandings(
-        (no, entry_type, superseded_numbers(payload)) for no, entry_type, _, payload in rows
+        ((no, entry_type, superseded_numbers(payload)) for no, entry_type, _, payload in rows),
+        reviews,
+        human,
     )
+
+
+async def _standings(
+    session: AsyncSession,
+    owner: CaseOwner,
+    rows: Iterable[tuple[int, EntryType, str, dict[str, Any]]],
+) -> CaseStandings:
+    entries = EntryRepository(session)
+    facts = await (
+        entries.area_review_facts(owner.id)
+        if isinstance(owner, Area)
+        else entries.project_review_facts(owner.id)
+    )
+    return _build_standings(rows, facts)
 
 
 async def _replaceables(
@@ -505,26 +824,42 @@ async def _decisions_of(
     for entry in await entries.area_decisions(list(areas)):
         assert entry.area_id is not None
         grouped[areas[entry.area_id]].append(entry)
-    return {key: _with_status(key, group) for key, group in grouped.items()}
+    reviews: dict[str, list[Review]] = defaultdict(list)
+    for review_entry in await entries.project_decision_reviews(list(projects)):
+        assert review_entry.project_id is not None
+        found = review_of_payload(review_entry.no, review_entry.payload)
+        if found is not None:
+            reviews[projects[review_entry.project_id]].append(found)
+    for review_entry in await entries.area_decision_reviews(list(areas)):
+        assert review_entry.area_id is not None
+        found = review_of_payload(review_entry.no, review_entry.payload)
+        if found is not None:
+            reviews[areas[review_entry.area_id]].append(found)
+    return {key: _with_status(key, group, reviews.get(key, ())) for key, group in grouped.items()}
 
 
-def _with_status(owner: str, entries: Iterable[Entry]) -> dict[int, CaseDecision]:
+def _with_status(
+    owner: str, entries: Iterable[Entry], reviews: Iterable[Review] = ()
+) -> dict[int, CaseDecision]:
     by_no = {entry.no: entry for entry in entries}
     replaced = {no: tuple(superseded_numbers(entry.payload)) for no, entry in by_no.items()}
     successor_of = successors((no, by_no[no].type, numbers) for no, numbers in replaced.items())
-    return {
-        no: CaseDecision(
+    withdrawn = withdrawals(reviews, by_no.keys())
+    confirmed_by = confirmations(reviews, by_no.keys())
+    human = {no for no, entry in by_no.items() if entry.created_by_kind is AuthorKind.HUMAN}
+    result: dict[int, CaseDecision] = {}
+    for no, entry in by_no.items():
+        state, review_entry = review_state_of(no, confirmed_by, human)
+        result[no] = CaseDecision(
             entry=entry,
             owner=owner,
             supersedes=replaced[no],
-            superseded_by=(
-                None
-                if status_of(no, successor_of) is DecisionStatus.IN_FORCE
-                else by_no[successor_of[no]]
-            ),
+            superseded_by=by_no[successor_of[no]] if no in successor_of else None,
+            withdrawn=withdrawn.get(no),
+            review_state=state,
+            review_entry=review_entry,
         )
-        for no, entry in by_no.items()
-    }
+    return result
 
 
 async def _not_of_type(
@@ -569,13 +904,22 @@ def _successor_ref(decision: CaseDecision) -> str | None:
 
 
 def _not_in_force_details(
-    entry_type: EntryType, superseded: Sequence[tuple[str, str | None]], *, key: str | None
+    entry_type: EntryType,
+    superseded: Sequence[tuple[str, str | None, DecisionStatus]],
+    *,
+    key: str | None,
 ) -> dict[str, Any]:
     """Подробности `decision_not_in_force` и `finding_not_in_force`: каждая названная
-    запись и её преемник — в `decisions` или `findings`."""
+    запись и её преемник — в `decisions` или `findings`. У отклонённого и удалённого
+    человеком решения преемника нет (`superseded_by: null`), и отказ называет его
+    статус в `status`; у заменённой записи ключа `status` нет — форма прежняя."""
     _, field = _NOT_IN_FORCE[entry_type]
     details: dict[str, Any] = {
-        field: [{"ref": ref, "superseded_by": successor} for ref, successor in superseded]
+        field: [
+            {"ref": ref, "superseded_by": successor}
+            | ({} if status is DecisionStatus.SUPERSEDED else {"status": status.value})
+            for ref, successor, status in superseded
+        ]
     }
     if key is not None:
         details["key"] = key
