@@ -125,6 +125,29 @@ class FileRepository:
             grouped.setdefault(entry_id, []).append(file_id)
         return grouped
 
+    async def matching(
+        self,
+        *,
+        project_id: uuid.UUID | None,
+        query: str | None,
+        mime_type: str | None,
+    ) -> list[File]:
+        """Все живые файлы под отбор списка, без страниц: для удаления по отбору.
+
+        Условия те же, что у `list_page` (без проекта — архивные скрыты, TRK#99); надгробия
+        не входят: удалять в них нечего. Порядок по `id` — один и тот же при каждом вызове.
+        """
+        statement: Select[Any] = select(File).where(File.deleted_at.is_(None))
+        if project_id is not None:
+            statement = statement.where(File.project_id == project_id)
+        else:
+            statement = statement.where(in_active_project(File.project_id))
+        if query:
+            statement = statement.where(ilike_contains(File.name, query))
+        if mime_type:
+            statement = statement.where(_mime_condition(mime_type))
+        return list(await self._session.scalars(statement.order_by(File.id)))
+
     async def list_page(
         self,
         *,

@@ -1181,3 +1181,16 @@ class FileDeletedError(ConflictError):
 
     code = "file_deleted"
     message = "File was deleted: only its tombstone remains"
+
+
+class FileCountMismatchError(ConflictError):
+    """Число файлов под отбор не совпало с тем, что подтвердил человек: ничего не удалено.
+
+    Удаление по отбору и «всех» называет число, которое человек увидел и подтвердил;
+    пока отбор менялся (кто-то загрузил или удалил файл), число могло разойтись.
+    `details.expected` — подтверждённое число, `details.actual` — сколько файлов подходит
+    сейчас.
+    """
+
+    code = "file_count_mismatch"
+    message = "The number of matching files differs from the confirmed one; nothing was deleted"

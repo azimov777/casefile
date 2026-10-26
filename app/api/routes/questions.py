@@ -8,6 +8,7 @@
 Роутер только переводит HTTP в вызов сценария и обратно.
 """
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -17,7 +18,9 @@ from app.api.schemas.common import CollectionResponse
 from app.api.schemas.entries import AnsweredQuestionRead, entry_read
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.case import QuestionOrder
+from app.domain.files import FileCard
 from app.services import case as case_service
+from app.services import files as files_service
 from app.services import projects as projects_service
 from app.services.case import AnsweredQuestion
 
@@ -115,22 +118,31 @@ async def list_questions(
         limit=limit,
         cursor=cursor,
     )
+    shown = [entry for item in page.items for entry in (item.entry, *item.answers)]
+    attached = await files_service.entry_attachments(session, shown)
     return CollectionResponse[AnsweredQuestionRead].of(
-        [answered_question_read(item) for item in page.items],
+        [answered_question_read(item, attached) for item in page.items],
         next_cursor=page.next_cursor,
     )
 
 
-def answered_question_read(item: AnsweredQuestion) -> AnsweredQuestionRead:
-    """Строка выдачи: вопрос тем же сборщиком, что и в деле, плюс его ответы."""
-    question = entry_read(item.entry, task_key=item.task_key)
+def answered_question_read(
+    item: AnsweredQuestion, attached: dict[uuid.UUID, list[FileCard]]
+) -> AnsweredQuestionRead:
+    """Строка выдачи: вопрос тем же сборщиком, что и в деле, плюс его ответы.
+
+    `attached` — вложения записей выдачи (`entry_attachments`): ответ человека несёт файлы.
+    """
+    question = entry_read(item.entry, task_key=item.task_key, files=attached.get(item.entry.id))
     return AnsweredQuestionRead.model_validate(
         {
             **question.model_dump(by_alias=True),
             # Ответы — словарями: модель выдачи сужает их до ответа задачи
             # (`QuestionAnswerRead`), а объект общего варианта она не примет как свой.
             "answers": [
-                entry_read(answer, task_key=item.task_key).model_dump(by_alias=True)
+                entry_read(
+                    answer, task_key=item.task_key, files=attached.get(answer.id)
+                ).model_dump(by_alias=True)
                 for answer in item.answers
             ],
         }

@@ -60,6 +60,7 @@ export const errors = {
   discussion_task_not_found: 'Эта задача к обсуждению не привязана.',
   entry_fields_invalid: 'Запись не прошла проверку.',
   entry_not_found: 'Записи с таким номером в этой задаче нет.',
+  file_count_mismatch: 'Число подходящих файлов изменилось: ничего не удалено.',
   file_deleted: 'Файл удалён: остался только след о нём.',
   file_fields_invalid: 'Имя или тип файла неверны.',
   file_not_found: 'Такого файла нет.',

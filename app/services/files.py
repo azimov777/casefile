@@ -44,7 +44,12 @@ from app.db.models.file import File
 from app.db.models.project import Project
 from app.db.pagination import Page
 from app.db.repositories import FileRepository
-from app.domain.errors import FileDeletedError, FileFieldsInvalidError, TrackerFileNotFoundError
+from app.domain.errors import (
+    FileCountMismatchError,
+    FileDeletedError,
+    FileFieldsInvalidError,
+    TrackerFileNotFoundError,
+)
 from app.domain.fields import FieldProblems
 from app.domain.files import (
     FileCard,
@@ -225,6 +230,46 @@ async def delete_file(session: AsyncSession, file_id: uuid.UUID, *, actor: Actor
     file.deleted_at = datetime.now(UTC)
     await session.flush()
     return (await _cards(session, [file]))[0]
+
+
+async def delete_files(
+    session: AsyncSession, file_ids: Sequence[uuid.UUID], *, actor: Actor
+) -> list[FileCard]:
+    """Удаляет выбранные файлы одним действием: все или ни одного.
+
+    Неизвестный файл — `file_not_found`, уже удалённый — `file_deleted`, архивный проект —
+    `project_archived`; при любом отказе транзакция откатывается и надгробий не остаётся.
+    Повторы в списке схлопываются, порядок ответа — порядок списка.
+    """
+    unique = list(dict.fromkeys(file_ids))
+    return [await delete_file(session, file_id, actor=actor) for file_id in unique]
+
+
+async def delete_matching(
+    session: AsyncSession,
+    *,
+    actor: Actor,
+    expected_count: int,
+    project: str | None = None,
+    query: str | None = None,
+    mime_type: str | None = None,
+) -> list[FileCard]:
+    """Удаляет все живые файлы под отбор списка — при условии, что их ровно `expected_count`.
+
+    Число — то, что человек увидел и подтвердил (TRK#25). Не совпало с числом подходящих —
+    `file_count_mismatch`, ничего не удалено. Пустой отбор — «все файлы установки»
+    (кроме архивных проектов, как и в списке). Отбор по названному архивному проекту
+    отказывает `project_archived`, как удаление одного файла.
+    """
+    project_id = (
+        None if project is None else (await projects_service.get_project(session, project)).id
+    )
+    found = await FileRepository(session).matching(
+        project_id=project_id, query=query, mime_type=mime_type
+    )
+    if len(found) != expected_count:
+        raise FileCountMismatchError(details={"expected": expected_count, "actual": len(found)})
+    return [await delete_file(session, file.id, actor=actor) for file in found]
 
 
 # --- Вложения записей дела ------------------------------------------------------------

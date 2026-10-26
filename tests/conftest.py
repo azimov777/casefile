@@ -282,7 +282,8 @@ async def call(session: ClientSession, tool: str, /, **arguments: Any) -> dict[s
 def without_empty_standing(value: Any) -> Any:
     """Ответ REST в форме MCP: у записи без статуса `status` и `superseded_by` в REST —
     `null`, а MCP их не отдаёт вовсе (TRK-665); так же `lifted_by` у записи, которая не
-    черновик (TRK-659). Остальное не трогает."""
+    черновик (TRK-659); и пустой `files` (вложения записи, TRK-736): MCP отдаёт файлы записи
+    своей задачей (TRK-737). Остальное не трогает."""
     if isinstance(value, list):
         return [without_empty_standing(item) for item in value]
     if not isinstance(value, dict):
@@ -292,6 +293,8 @@ def without_empty_standing(value: Any) -> Any:
         del kept["status"], kept["superseded_by"]
     if "lifted_by" in kept and kept["lifted_by"] is None:
         del kept["lifted_by"]
+    if "files" in kept and kept["files"] == []:
+        del kept["files"]
     return kept
 
 

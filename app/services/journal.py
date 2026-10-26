@@ -53,6 +53,7 @@ from app.db.repositories import EntryRepository
 from app.db.wakeup import journal_wakeup
 from app.domain.case import EntryType
 from app.domain.errors import JournalStreamLimitError
+from app.domain.files import FileCard
 from app.domain.journal import (
     JOURNAL_START,
     JournalFilter,
@@ -61,6 +62,7 @@ from app.domain.journal import (
     resolve_types,
     resolve_wait,
 )
+from app.services import files as files_service
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import Actor
@@ -106,6 +108,9 @@ class JournalEntry:
     project_key: str | None
     area: str | None = None
     discussion: str | None = None
+    #: Карточки вложений записи (TRK-736), в порядке вложения; читаются той же сессией,
+    #: что и страница, — поток открывает свою на каждую выборку.
+    files: tuple[FileCard, ...] = ()
 
 
 # --- Фильтр ---------------------------------------------------------------------------
@@ -174,6 +179,7 @@ async def read_journal(
         types=journal_filter.types,
         limit=limit,
     )
+    attached = await files_service.entry_attachments(session, [row[0] for row in page.items])
     return Page(
         items=[
             JournalEntry(
@@ -182,6 +188,7 @@ async def read_journal(
                 project_key=project_key,
                 area=area,
                 discussion=discussion,
+                files=tuple(attached.get(entry.id, ())),
             )
             for entry, task_key, project_key, area, discussion in page.items
         ],
@@ -402,6 +409,9 @@ async def stream_journal(
                     types=journal_filter.types,
                     limit=STREAM_BATCH_SIZE,
                 )
+                attached = await files_service.entry_attachments(
+                    session, [row[0] for row in page.items]
+                )
             for entry, task_key, project_key, area, discussion in page.items:
                 after = entry.seq
                 yield JournalMessage(
@@ -411,6 +421,7 @@ async def stream_journal(
                         project_key=project_key,
                         area=area,
                         discussion=discussion,
+                        files=tuple(attached.get(entry.id, ())),
                     )
                 )
                 last_sent = loop.time()
