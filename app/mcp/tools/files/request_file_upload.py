@@ -42,4 +42,8 @@ def register(tools: Toolset) -> None:
                 name=clean_name,
                 mime_type=clean_type,
             )
-            return upload_link(link, link_url(settings, link), max_bytes=settings.file_max_bytes)
+            return upload_link(
+                link,
+                link_url(settings, link),
+                max_bytes=await files_service.file_size_limit(session, settings),
+            )

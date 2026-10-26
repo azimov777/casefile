@@ -39,4 +39,8 @@ def register(tools: Toolset) -> None:
             link = tools.links.issue(
                 LinkKind.REPLACE, actor, file_id=identifier, name=name, mime_type=mime_type
             )
-            return upload_link(link, link_url(settings, link), max_bytes=settings.file_max_bytes)
+            return upload_link(
+                link,
+                link_url(settings, link),
+                max_bytes=await files_service.file_size_limit(session, settings),
+            )

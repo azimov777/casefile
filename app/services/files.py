@@ -39,7 +39,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.file import File
@@ -157,6 +157,14 @@ async def open_file(session: AsyncSession, file_id: uuid.UUID, *, actor: Actor) 
 # --- Изменения ------------------------------------------------------------------------
 
 
+async def file_size_limit(session: AsyncSession, settings: Settings | None = None) -> int:
+    """Предел размера одного файла в байтах: настройка `file_max_bytes` (база, окружение,
+    умолчание 25 МБ), читается при каждом обращении — смена действует без перезапуска."""
+    limit = await get_setting(session, "file_max_bytes", settings=settings or get_settings())
+    assert isinstance(limit, int)
+    return limit
+
+
 async def upload_file(
     session: AsyncSession,
     *,
@@ -167,11 +175,11 @@ async def upload_file(
     mime_type: Any = None,
 ) -> FileCard:
     """Кладёт файл в проект. Отказы: `project_archived`, `file_fields_invalid` (имя,
-    тип), `file_too_large` (предел `TRACKER_FILE_MAX_BYTES`, он же в `details`)."""
+    тип), `file_too_large` (предел — настройка `file_max_bytes`, он же в `details`)."""
     owner = await projects_service.get_project(session, project)
     await freeze.lock_unfrozen(session, project=owner)
     clean_name, clean_mime = _name_and_type(name, mime_type)
-    check_file_size(len(data), get_settings().file_max_bytes)
+    check_file_size(len(data), await file_size_limit(session))
     file = File(
         project_id=owner.id,
         name=clean_name,
@@ -211,7 +219,7 @@ async def replace_file(
             file.name if name is None else name, file.mime_type if mime_type is None else mime_type
         )
         file.name, file.mime_type = new_name, new_mime
-    check_file_size(len(data), get_settings().file_max_bytes)
+    check_file_size(len(data), await file_size_limit(session))
     await repository.set_content(file.id, data)
     file.size_bytes = len(data)
     file.sha256 = sha256_hex(data)
