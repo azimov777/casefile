@@ -21,9 +21,11 @@ from app.db.pagination import (
     encode_sort_cursor,
     resolve_limit,
 )
+from app.db.project_scope import open_to
 from app.db.repositories.projects import in_active_project
 from app.db.sql import LIKE_ESCAPE, ilike_contains
 from app.domain.files import FileSort
+from app.domain.project_access import UNRESTRICTED, ProjectAccess
 
 
 class FileRepository:
@@ -129,6 +131,7 @@ class FileRepository:
         self,
         *,
         project_id: uuid.UUID | None,
+        access: ProjectAccess = UNRESTRICTED,
         query: str | None,
         mime_type: str | None,
         sort: FileSort,
@@ -146,7 +149,7 @@ class FileRepository:
         """
         size = resolve_limit(limit)
         key = _sort_expression(sort)
-        statement: Select[Any] = select(File, key)
+        statement: Select[Any] = select(File, key).where(open_to(access, File.project_id))
         if project_id is not None:
             statement = statement.where(File.project_id == project_id)
         else:

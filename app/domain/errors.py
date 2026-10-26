@@ -138,6 +138,16 @@ class ProjectAccessModeInvalidError(ValidationError):
     message = "Project access mode is invalid"
 
 
+class ParticipantNotAgentError(ValidationError):
+    """Доступ к проектам настраивается агенту; у человека ограничений нет.
+
+    `details.name` — имя участника, `details.kind` — его род.
+    """
+
+    code = "participant_not_agent"
+    message = "Project access is configured for agents only"
+
+
 class ProjectArchivedError(ConflictError):
     """Проект в архиве: он и его задачи заморожены для изменений (TRK#101).
 

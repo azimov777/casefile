@@ -16,12 +16,16 @@ from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.pagination import Page
+from app.db.project_scope import require_open, stamp
 from app.db.repositories import ProjectRepository
+from app.db.repositories.participant_projects import ParticipantProjectRepository
 from app.domain.errors import (
     ProjectKeyTakenError,
     ProjectNotArchivedError,
     ProjectNotFoundError,
 )
+from app.domain.participants import ParticipantKind
+from app.domain.project_access import ProjectAccess, ProjectAccessMode
 from app.domain.projects import (
     normalize_project_key,
     require_project_reason,
@@ -35,10 +39,16 @@ from app.services.auth import Actor
 
 
 async def get_project(session: AsyncSession, key: str) -> Project:
-    """Проект по ключу или `project_not_found`. Адресация мягкая: `trk` находит `TRK`."""
+    """Проект по ключу или `project_not_found`; закрытый агенту — `project_not_allowed`.
+
+    Адресация мягкая: `trk` находит `TRK`. Это единственное чтение проекта по адресу, и
+    отсюда же идут область, обсуждение, дело и перенос: закрытый проект не открывается ни
+    одним из них (TRK~28#6).
+    """
     project = await ProjectRepository(session).get_by_key(normalize_project_key(key))
     if project is None:
         raise ProjectNotFoundError(details={"key": key})
+    require_open(session, project)
     return project
 
 
@@ -61,7 +71,7 @@ async def list_projects(
     (`read_project`), и «нет такого» на него не отвечается (TRK#99).
     """
     return await ProjectRepository(session).list_page(
-        include_archived=include_archived, limit=limit, cursor=cursor
+        include_archived=include_archived, access=actor.project_access, limit=limit, cursor=cursor
     )
 
 
@@ -101,7 +111,26 @@ async def create_project(
         )
     )
     await case_service.record_project_created(session, project, actor=actor)
+    await _open_own_project(session, project, actor=actor)
     return project
+
+
+async def _open_own_project(session: AsyncSession, project: Project, *, actor: Actor) -> None:
+    """Агент в режиме `only` получает созданный им проект в свой список сразу.
+
+    Иначе он завёл бы то, чего не видит. В `except` и `all` новый проект открыт сам. Доступ
+    на сессии обновляется тут же: следующее чтение того же вызова проект уже видит.
+    """
+    participant = actor.participant
+    access = actor.project_access
+    if (
+        participant is None
+        or participant.kind is not ParticipantKind.AGENT
+        or access.mode is not ProjectAccessMode.ONLY
+    ):
+        return
+    await ParticipantProjectRepository(session).add_project(participant.id, project.id)
+    stamp(session, ProjectAccess(mode=access.mode, project_ids=access.project_ids | {project.id}))
 
 
 async def update_project(

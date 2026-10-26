@@ -231,6 +231,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/participants/{participant_name}/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the project access of an agent
+         * @description Режим доступа агента к проектам и список проектов.
+         *
+         *     Читает человек с учётной записью, которому доступен агент; агенту доступ закрыт
+         *     (`account_required`). У человека ограничений нет: читается `all` и пустой список.
+         */
+        get: operations["read_project_access"];
+        /**
+         * Set the project access of an agent
+         * @description Заменяет режим и список проектов агента целиком.
+         *
+         *     Режим `all` открывает все проекты, в том числе заведённые позже, и очищает список;
+         *     `except` закрывает перечисленные; `only` открывает только перечисленные, а проект,
+         *     созданный самим агентом, попадает в список сразу. Закрытый проект исчезает у агента из
+         *     списков, поиска, ленты и входящей, а по прямому адресу отвечает `project_not_allowed`.
+         *     Токен не меняется: доступ стоит на участнике. Настраивает человек с учётной записью,
+         *     которому доступен агент: чужого агента - только администратор (`agent_owned_by_another`),
+         *     агент себе доступ не меняет (`account_required`).
+         */
+        put: operations["set_project_access"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tokens": {
         parameters: {
             query?: never;
@@ -3860,6 +3895,10 @@ export interface components {
         DataResponse_ParticipantRead_: {
             data: components["schemas"]["ParticipantRead"];
         };
+        /** DataResponse[ProjectAccessRead] */
+        DataResponse_ProjectAccessRead_: {
+            data: components["schemas"]["ProjectAccessRead"];
+        };
         /** DataResponse[ProjectDetailRead] */
         DataResponse_ProjectDetailRead_: {
             data: components["schemas"]["ProjectDetailRead"];
@@ -5693,6 +5732,55 @@ export interface components {
              */
             type: "artifact" | "attempt" | "created" | "note";
             payload?: components["schemas"]["EmptyPayload"];
+        };
+        /**
+         * ProjectAccessMode
+         * @description Режим доступа к проектам.
+         * @enum {string}
+         */
+        ProjectAccessMode: "all" | "except" | "only";
+        /**
+         * ProjectAccessRead
+         * @description Доступ агента к проектам: режим и список ключей проектов.
+         */
+        ProjectAccessRead: {
+            /**
+             * @description `all` - every project, including ones created later; `except` - every project but the listed ones; `only` - the listed projects alone
+             * @example only
+             */
+            mode: components["schemas"]["ProjectAccessMode"];
+            /**
+             * Projects
+             * @description Keys of the listed projects, sorted; empty with `all`
+             * @example [
+             *       "TRK",
+             *       "DOCS"
+             *     ]
+             */
+            projects: string[];
+        };
+        /**
+         * ProjectAccessWrite
+         * @description Новый доступ агента к проектам: заменяет режим и список целиком.
+         *
+         *     Режим принимается строкой и проверяется доменом, чтобы REST и MCP отвечали одинаково
+         *     (`project_access_mode_invalid`); ключи проектов - любого регистра.
+         */
+        ProjectAccessWrite: {
+            /**
+             * Mode
+             * @description `all`, `except` or `only`; anything else is `project_access_mode_invalid`
+             * @example only
+             */
+            mode: string;
+            /**
+             * Projects
+             * @description Project keys; an unknown key is `project_not_found`. `all` clears the list
+             * @example [
+             *       "TRK"
+             *     ]
+             */
+            projects?: string[];
         };
         /**
          * ProjectArchiveEntryRead
@@ -9629,6 +9717,170 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataResponse_ParticipantRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_project_access: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Participant name; matching ignores case */
+                participant_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_ProjectAccessRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_project_access: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Participant name; matching ignores case */
+                participant_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectAccessWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_ProjectAccessRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

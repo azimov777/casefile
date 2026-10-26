@@ -104,6 +104,7 @@ export const errors = {
   not_found: 'Объект не найден.',
   participant_has_account: 'У этого человека учётная запись уже есть.',
   participant_name_taken: 'Имя участника занято.',
+  participant_not_agent: 'Доступ к проектам настраивается только агентам.',
   participant_not_found: 'Участника с таким именем нет.',
   participant_required:
     'Это общий агентский токен: участника за ним нет. Нужен токен человека из реестра участников.',

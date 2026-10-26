@@ -107,6 +107,7 @@ export const errors = {
   not_found: 'The object was not found.',
   participant_has_account: 'This person already has an account.',
   participant_name_taken: 'The participant name is taken.',
+  participant_not_agent: 'Project access is configured for agents only.',
   participant_not_found: 'There is no participant by that name.',
   participant_required:
     'This is a shared agent token: there is no participant behind it. A person’s token from the participant registry is required.',

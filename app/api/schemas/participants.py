@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.schemas.authors import AuthorRead
 from app.domain.participants import PARTICIPANT_NAME_PATTERN, ParticipantKind
+from app.domain.project_access import ProjectAccessMode
 
 _DESCRIPTION_MAX = 1000
 
@@ -59,4 +60,40 @@ class ParticipantCreate(BaseModel):
         max_length=_DESCRIPTION_MAX,
         examples=["Релизный бот, ведёт задачи выкладки"],
         description="Short note on who this is: it is all the reader of a case knows about them",
+    )
+
+
+class ProjectAccessRead(BaseModel):
+    """Доступ агента к проектам: режим и список ключей проектов."""
+
+    mode: ProjectAccessMode = Field(
+        description=(
+            "`all` - every project, including ones created later; `except` - every project "
+            "but the listed ones; `only` - the listed projects alone"
+        ),
+        examples=[ProjectAccessMode.ONLY],
+    )
+    projects: list[str] = Field(
+        description="Keys of the listed projects, sorted; empty with `all`",
+        examples=[["TRK", "DOCS"]],
+    )
+
+
+class ProjectAccessWrite(BaseModel):
+    """Новый доступ агента к проектам: заменяет режим и список целиком.
+
+    Режим принимается строкой и проверяется доменом, чтобы REST и MCP отвечали одинаково
+    (`project_access_mode_invalid`); ключи проектов - любого регистра.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: str = Field(
+        description="`all`, `except` or `only`; anything else is `project_access_mode_invalid`",
+        examples=["only"],
+    )
+    projects: list[str] = Field(
+        default_factory=list,
+        description="Project keys; an unknown key is `project_not_found`. `all` clears the list",
+        examples=[["TRK"]],
     )

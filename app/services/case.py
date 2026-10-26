@@ -87,6 +87,7 @@ from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.models.task import Task
 from app.db.pagination import Page
+from app.db.project_scope import require_open
 from app.db.repositories import (
     AreaRepository,
     DiscussionRepository,
@@ -145,6 +146,7 @@ from app.domain.errors import (
 from app.domain.fields import FieldProblems
 from app.domain.links import LinkKind, other_side_phrase
 from app.domain.participants import ParticipantKind
+from app.domain.project_access import UNRESTRICTED, ProjectAccess
 from app.domain.tasks import (
     FIRST_CHECK_NUMBER,
     CheckGap,
@@ -493,6 +495,7 @@ async def list_questions(
     page = await repository.questions_page(
         addressee=name,
         project_id=project.id if project is not None else None,
+        access=actor.project_access,
         blocking=blocking,
         open_only=open_only,
         order=order,
@@ -540,6 +543,7 @@ async def list_remarks(
     page = await EntryRepository(session).remarks_page(
         author=None if author is None else author.strip().lower(),
         project_id=project.id if project is not None else None,
+        access=actor.project_access,
         open_only=open_only,
         limit=limit,
         cursor=cursor,
@@ -550,16 +554,20 @@ async def list_remarks(
     )
 
 
-async def count_open_warnings(session: AsyncSession) -> int:
+async def count_open_warnings(
+    session: AsyncSession, *, access: ProjectAccess = UNRESTRICTED
+) -> int:
     """Сколько задач несут открытое предупреждение — число для первого экрана.
 
     Адресата у предупреждения нет, как и у замечания: число одно на установку, его видит
     любой вошедший. Задачи архивных проектов не считаются (TRK#146).
     """
-    return await EntryRepository(session).count_open_warnings()
+    return await EntryRepository(session).count_open_warnings(access)
 
 
-async def count_open_questions(session: AsyncSession, *, participant: Participant) -> int:
+async def count_open_questions(
+    session: AsyncSession, *, participant: Participant, access: ProjectAccess = UNRESTRICTED
+) -> int:
     """Сколько открытых вопросов адресовано участнику.
 
     Прав не проверяет и адресата не разрешает: принимает уже прочитанного участника,
@@ -567,7 +575,7 @@ async def count_open_questions(session: AsyncSession, *, participant: Participan
     (`app/services/bootstrap.py`). Отдельный сценарий с собственной проверкой набора
     завёл бы вторую точку входа к тому же числу.
     """
-    return await EntryRepository(session).count_questions(addressee=participant.name)
+    return await EntryRepository(session).count_questions(addressee=participant.name, access=access)
 
 
 # --- Что подшивают одним вызовом ------------------------------------------------------
@@ -2062,7 +2070,10 @@ async def _check_refs(
         for ref in task_refs:
             if ref.key not in tasks:
                 problems.add("refs", "unknown_task", ref=_ref_text(ref))
-            elif isinstance(ref, EntryRef):
+                continue
+            # Ссылка на задачу закрытого агенту проекта — запись в закрытый проект (TRK~28#6).
+            require_open(session, tasks[ref.key].project)
+            if isinstance(ref, EntryRef):
                 wanted.setdefault(ref.key, set()).add(ref.no)
         for key, nos in wanted.items():
             existing = await entries.existing_nos(tasks[key].id, sorted(nos))
@@ -2083,6 +2094,7 @@ async def _check_refs(
                         "refs", "unknown_project", ref=_ref_text(ProjectEntryRef(key=key, no=no))
                     )
                 continue
+            require_open(session, project)
             existing = await entries.existing_project_nos(project.id, sorted(nos))
             for no in sorted(nos - existing):
                 problems.add(
@@ -2115,6 +2127,7 @@ async def _check_refs(
                 for ref in refs_of:
                     problems.add("refs", reason, ref=_ref_text(ref))
                 continue
+            require_open(session, area.project)
             existing = await entries.existing_area_nos(area.id, sorted(nos))
             for ref in refs_of:
                 if ref.no not in existing:
@@ -2153,6 +2166,7 @@ async def _check_discussion_refs(
             for ref in named:
                 problems.add("refs", reason, ref=_ref_text(ref))
             continue
+        require_open(session, found.project)
         nos = sorted({ref.no for ref in named if isinstance(ref, DiscussionEntryRef)})
         existing = await entries.existing_discussion_nos(found.id, nos)
         for ref in named:
