@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/shared/api';
 import { errorMessage, fieldReasonText } from '@/shared/errors';
+import { AttachmentPicker, useAttachments } from '@/entities/file';
+import { projectOfKey } from '@/shared/lib';
 import { Composer } from '@/shared/ui';
 import { draftKey } from '../model/draft';
 import type { Answered } from '../model/answering';
@@ -50,6 +52,7 @@ export function AnswerForm({
   onCancel,
 }: AnswerFormProps) {
   const answer = useAnswerQuestion();
+  const attachments = useAttachments(projectOfKey(taskKey));
   const fields = answer.error instanceof ApiError ? answer.error.fields : null;
   /*
    * `useTranslation` здесь и ради подписи, и ради подписки: `errorMessage` берёт язык
@@ -79,9 +82,18 @@ export function AnswerForm({
         ) : undefined
       }
       onBegin={onBegin}
+      attachments={<AttachmentPicker attachments={attachments} />}
+      busy={attachments.uploading}
       onSubmit={async (body, idempotencyKey) => {
         try {
-          const entry = await answer.mutateAsync({ taskKey, questionNo, body, idempotencyKey });
+          const entry = await answer.mutateAsync({
+            taskKey,
+            questionNo,
+            body,
+            idempotencyKey,
+            files: attachments.ids,
+          });
+          attachments.reset();
           onAnswered?.({ entryNo: entry.no, body });
           return true;
         } catch {

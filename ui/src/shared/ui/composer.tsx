@@ -62,6 +62,12 @@ interface ComposerProps {
    * начала, флаг не нужен.
    */
   focusOnMount?: boolean;
+  /**
+   * Вложения записи (слот): стоят под кнопками, потому что растут. Отправку запирает
+   * `busy`, пока файл ещё грузится.
+   */
+  attachments?: ReactNode;
+  busy?: boolean;
 }
 
 /** Подпись поля и предпросмотра: она объясняет содержание, а не несёт его. */
@@ -98,6 +104,8 @@ export function Composer({
   onSubmit,
   onCancel,
   focusOnMount = false,
+  attachments,
+  busy = false,
 }: ComposerProps) {
   const [draft, setDraft] = useState<Draft>(() => readDraft(storageKey));
   const [showPreview, setShowPreview] = useState(false);
@@ -214,7 +222,7 @@ export function Composer({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending || busy}>
           {isPending ? pendingLabel : submitLabel}
         </Button>
         <Button tone="quiet" onClick={() => setShowPreview(!showPreview)}>
@@ -259,6 +267,8 @@ export function Composer({
           </Dialog>
         )}
       </div>
+
+      {attachments}
 
       {/* Упрёк не отрывается от поля: связь держит `aria-describedby`, а глазами он
           читается там, где человек только что нажал.

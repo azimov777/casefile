@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/shared/api';
 import { errorMessage, fieldReasonText } from '@/shared/errors';
 import { titleFromText } from '@/shared/lib';
+import { AttachmentPicker, useAttachments } from '@/entities/file';
 import { Composer } from '@/shared/ui';
 import { noteDraftKey } from '../model/draft';
 import { useNote } from '../model/use-discussion-actions';
@@ -13,6 +14,7 @@ import { useNote } from '../model/use-discussion-actions';
  */
 export function NoteForm({ address, onCancel }: { address: string; onCancel: () => void }) {
   const note = useNote();
+  const attachments = useAttachments(address.split('~')[0] ?? null);
   const fields = note.error instanceof ApiError ? note.error.fields : null;
   const fieldReason = fields?.body ?? fields?.title;
   const { t } = useTranslation('discussions');
@@ -29,6 +31,8 @@ export function NoteForm({ address, onCancel }: { address: string; onCancel: () 
       problem={fieldReason === undefined ? undefined : fieldReasonText(fieldReason)}
       isPending={note.isPending}
       onCancel={onCancel}
+      attachments={<AttachmentPicker attachments={attachments} />}
+      busy={attachments.uploading}
       failure={
         note.isError ? (
           <>
@@ -38,7 +42,14 @@ export function NoteForm({ address, onCancel }: { address: string; onCancel: () 
       }
       onSubmit={async (body, idempotencyKey) => {
         try {
-          await note.mutateAsync({ address, title: titleFromText(body), body, idempotencyKey });
+          await note.mutateAsync({
+            address,
+            title: titleFromText(body),
+            body,
+            idempotencyKey,
+            files: attachments.ids,
+          });
+          attachments.reset();
           return true;
         } catch {
           return false;

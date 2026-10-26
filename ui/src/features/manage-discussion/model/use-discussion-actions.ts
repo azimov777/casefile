@@ -29,6 +29,8 @@ export interface ReplyInput {
   choice?: string;
   /** Ключ повтора: тот же на каждой попытке отправить этот ответ. */
   idempotencyKey: string;
+  /** Id загруженных файлов, прикреплённых к ответу. */
+  files?: string[];
 }
 
 /** Ответ человека на вопрос обсуждения (`TRK#51`, п. 8, форма «Ответить на #N»). */
@@ -41,6 +43,7 @@ export function useReply() {
       body,
       choice,
       idempotencyKey,
+      files,
     }: ReplyInput): Promise<Entry> =>
       unwrap(
         apiClient.POST('/api/v1/discussions/{discussion}/entries', {
@@ -52,6 +55,7 @@ export function useReply() {
               question_no: questionNo,
               ...(choice === undefined ? {} : { choice }),
             },
+            ...(files === undefined || files.length === 0 ? {} : { files }),
           },
         }),
       ),
@@ -64,17 +68,23 @@ export interface NoteInput {
   title: string;
   body: string;
   idempotencyKey: string;
+  files?: string[];
 }
 
 /** Свободная заметка человека в обсуждение: задаёт работу привязанных задач, как ответ. */
 export function useNote() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ address, title, body, idempotencyKey }: NoteInput): Promise<Entry> =>
+    mutationFn: ({ address, title, body, idempotencyKey, files }: NoteInput): Promise<Entry> =>
       unwrap(
         apiClient.POST('/api/v1/discussions/{discussion}/entries', {
           params: { path: { discussion: address }, header: { 'Idempotency-Key': idempotencyKey } },
-          body: { type: 'note', title, body },
+          body: {
+            type: 'note',
+            title,
+            body,
+            ...(files === undefined || files.length === 0 ? {} : { files }),
+          },
         }),
       ),
     onSuccess: (_entry, { address }) => refresh(queryClient, address),

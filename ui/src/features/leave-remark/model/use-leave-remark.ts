@@ -10,6 +10,8 @@ export interface RemarkInput {
   body: string;
   /** Ключ повтора: тот же на каждой попытке отправить это замечание. */
   idempotencyKey: string;
+  /** Id загруженных файлов, прикреплённых к замечанию. */
+  files?: string[];
 }
 
 /**
@@ -28,14 +30,19 @@ export function useLeaveRemark() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskKey, title, body, idempotencyKey }: RemarkInput): Promise<Entry> =>
+    mutationFn: ({ taskKey, title, body, idempotencyKey, files }: RemarkInput): Promise<Entry> =>
       unwrap(
         apiClient.POST('/api/v1/tasks/{task_key}/entries', {
           params: {
             path: { task_key: taskKey },
             header: { 'Idempotency-Key': idempotencyKey },
           },
-          body: { type: 'remark', title, body },
+          body: {
+            type: 'remark',
+            title,
+            body,
+            ...(files === undefined || files.length === 0 ? {} : { files }),
+          },
         }),
       ),
 
