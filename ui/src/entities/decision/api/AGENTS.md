@@ -2,4 +2,4 @@
 
 ## Файлы
 
-- `decisions.ts` — `DecisionRow` (строка списка), `ReviewOutcome`, `ReviewState`; ключи списков под корнем `['decisions']`; `decisionsQueryOptions(project)` — все страницы списка разом вместе с числом непроверенных
+- `decisions.ts` — `DecisionRow` (строка списка), `ReviewOutcome`, `ReviewState`; ключи списков под корнем `['decisions']`; `decisionsQueryOptions(project)` — все страницы списка разом вместе с числом непроверенных; `unconfirmedDecisionsQueryOptions(project)` — действующие непроверенные решения страницами по 20 для Входящей

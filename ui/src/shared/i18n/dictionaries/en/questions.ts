@@ -25,6 +25,13 @@ export const questions = {
   attentionLabel: 'Task {{key}} closed not in full',
   awaitingDecision: 'awaits a decision',
 
+  decisionsTitle: 'Decisions awaiting review',
+  decisionsIntro:
+    'Decisions in force across every project that you have not reviewed yet. Confirm, revise, reject or remove: a reviewed one leaves this list.',
+  loadingDecisions: 'Reading the decisions…',
+  noDecisions: 'All decisions are confirmed',
+  noDecisionsProject: 'Every decision of {{project}} is confirmed',
+
   remarksTitle: 'My remarks without a resolution',
   loadingRemarks: 'Reading the remarks…',
   noRemarks: 'There are no unresolved remarks.',

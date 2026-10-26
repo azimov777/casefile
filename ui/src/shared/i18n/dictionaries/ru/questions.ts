@@ -25,6 +25,13 @@ export const questions = {
   attentionLabel: 'Задача {{key}} закрыта не целиком',
   awaitingDecision: 'ждёт решения',
 
+  decisionsTitle: 'Решения ждут проверки',
+  decisionsIntro:
+    'Действующие решения всех проектов, которые вы ещё не проверяли. Подтвердите, исправьте, отклоните или удалите: проверенное уходит отсюда.',
+  loadingDecisions: 'Читаем решения…',
+  noDecisions: 'Все решения подтверждены',
+  noDecisionsProject: 'В проекте {{project}} все решения подтверждены',
+
   remarksTitle: 'Мои замечания без разбора',
   loadingRemarks: 'Читаем замечания…',
   noRemarks: 'Неразобранных замечаний нет.',

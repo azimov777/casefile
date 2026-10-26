@@ -8,6 +8,8 @@ import {
   bootstrap,
   collection,
   data,
+  decisionRow,
+  decisionsPage,
   questionEntry,
   remarkEntry,
   task,
@@ -33,7 +35,11 @@ beforeEach(() => {
   setToken('trk_test');
   // Раздел «Требуют внимания» читает список задач (TRK-561); по умолчанию он пуст, а
   // сценарии, которым он нужен, ставят свой ответ поверх.
-  server.use(http.get(`${API}/api/v1/tasks`, () => taskPage([])));
+  server.use(
+    http.get(`${API}/api/v1/tasks`, () => taskPage([])),
+    // Раздел «Решения ждут проверки» (TRK-759) читает список решений; по умолчанию он пуст.
+    http.get(`${API}/api/v1/decisions`, () => decisionsPage([])),
+  );
 });
 
 describe('входящая: мои замечания', () => {
@@ -528,5 +534,106 @@ describe('история вопросов', () => {
       '/tasks/DEMO-4?entry=5',
     );
     expect(within(row).getByText('Спрашиваю короче.')).toBeInTheDocument();
+  });
+});
+
+describe('входящая: решения ждут проверки (TRK-759)', () => {
+  function serve(unconfirmed: number) {
+    const asked: URL[] = [];
+    const reviews: { path: string; body: { outcome: string } }[] = [];
+    const rows = [
+      decisionRow('DEMO#3', { title: 'Первое решение' }),
+      decisionRow('DEMO/promotion#5', { title: 'Второе решение' }),
+      decisionRow('TRK#7', { title: 'Третье решение' }),
+    ].slice(0, unconfirmed);
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () =>
+        data(bootstrap({ unconfirmed_decisions: unconfirmed })),
+      ),
+      http.get(`${API}/api/v1/questions`, () => collection([])),
+      http.get(`${API}/api/v1/remarks`, () => collection([])),
+      http.get(`${API}/api/v1/decisions`, ({ request }) => {
+        asked.push(new URL(request.url));
+        return decisionsPage(rows);
+      }),
+      http.post(`${API}/api/v1/projects/:project/decisions/:no/review`, async ({ request }) => {
+        const body = (await request.json()) as { outcome: string };
+        reviews.push({ path: new URL(request.url).pathname, body });
+        rows.shift();
+        return data({}, 201);
+      }),
+    );
+    return { asked, reviews };
+  }
+
+  it('при трёх непроверенных раздел стоит после «Требуют внимания» и показывает строки с проектом', async () => {
+    const { asked } = serve(3);
+    renderApp('/questions');
+
+    const section = await screen.findByRole('region', {
+      name: new RegExp(say.questions('decisionsTitle')),
+    });
+    await waitFor(() =>
+      expect(section.querySelector('h2')).toHaveTextContent(`${say.questions('decisionsTitle')} 3`),
+    );
+    const attention = screen.getByRole('region', { name: say.questions('attentionTitle') });
+    expect(
+      attention.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const remarks = screen.getByRole('region', { name: say.questions('remarksTitle') });
+    expect(
+      section.compareDocumentPosition(remarks) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // Весь раздел — один запрос с отбором контракта и без проекта.
+    const url = asked[0] as URL;
+    expect(url.searchParams.get('status')).toBe('in_force');
+    expect(url.searchParams.get('review_state')).toBe('unconfirmed');
+    expect(url.searchParams.has('project')).toBe(false);
+
+    const row = (await within(section).findByText('Второе решение')).closest('li') as HTMLElement;
+    expect(within(row).getByRole('link', { name: 'DEMO' })).toHaveAttribute(
+      'href',
+      '/projects/DEMO',
+    );
+    expect(within(section).getAllByRole('listitem')).toHaveLength(3);
+
+    // Четыре действия появляются в раскрытой строке.
+    await userEvent.setup().click(within(row).getByRole('button', { name: 'Второе решение' }));
+    for (const action of ['confirm', 'revise', 'reject', 'remove']) {
+      expect(row.querySelector(`[data-action="${action}"]`)).not.toBeNull();
+    }
+  });
+
+  it('«Подтвердить» убирает строку, а число перечитывается', async () => {
+    const { reviews } = serve(3);
+    renderApp('/questions');
+
+    const section = await screen.findByRole('region', {
+      name: new RegExp(say.questions('decisionsTitle')),
+    });
+    const row = (await within(section).findByText('Первое решение')).closest('li') as HTMLElement;
+    const user = userEvent.setup();
+    await user.click(within(row).getByRole('button', { name: 'Первое решение' }));
+    await user.click(
+      await within(row).findByRole('button', {
+        name: new RegExp(`^${say.decisions('action.confirm')}`),
+      }),
+    );
+
+    await waitFor(() => expect(within(section).queryByText('Первое решение')).toBeNull());
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]?.body.outcome).toBe('confirmed');
+  });
+
+  it('при нуле — «Все решения подтверждены»', async () => {
+    serve(0);
+    renderApp('/questions');
+
+    const section = await screen.findByRole('region', {
+      name: new RegExp(say.questions('decisionsTitle')),
+    });
+    expect(await within(section).findByText(say.questions('noDecisions'))).toBeInTheDocument();
+    expect(within(section).queryByRole('listitem')).toBeNull();
   });
 });

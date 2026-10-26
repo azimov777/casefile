@@ -1,6 +1,7 @@
 export {
   decisionKeys,
   decisionsQueryOptions,
+  unconfirmedDecisionsQueryOptions,
   type DecisionList,
   type DecisionRow,
   type ReviewOutcome,

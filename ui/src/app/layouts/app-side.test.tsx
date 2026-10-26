@@ -56,6 +56,21 @@ describe('боковая панель', () => {
     expect(inbox).toHaveAttribute('href', '/questions');
   });
 
+  it('неподтверждённые решения в значок «Входящей» не прибавляются (TRK-759)', async () => {
+    server.use(
+      http.get(`${API}/api/v1/bootstrap`, () =>
+        data(bootstrap({ open_questions: 2, unconfirmed_decisions: 200 })),
+      ),
+    );
+    renderApp('/tasks');
+
+    const inbox = await screen.findByRole('link', {
+      name: `${say.ui('app.inbox')} ${say.ui('app.openQuestions', { count: 2 })}`,
+    });
+    expect(inbox).not.toHaveTextContent('200');
+    expect(inbox).toHaveTextContent('2');
+  });
+
   it('обсуждения, ждущие человека, — своим знаком рядом с вопросами, а не в их сумме (TRK-672)', async () => {
     server.use(http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap({ open_discussions: 3 }))));
     renderApp('/tasks');

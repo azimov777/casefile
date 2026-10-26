@@ -35,6 +35,7 @@ export const decisions = {
     confirmed: 'confirmed',
   },
   row: {
+    projectOf: 'Project',
     project: 'project',
     area: 'Area',
     from: 'Source',

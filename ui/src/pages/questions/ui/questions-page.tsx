@@ -28,6 +28,7 @@ import {
   SegmentedNavLink,
 } from '@/shared/ui';
 import { taskRefHref } from '@/shared/lib';
+import { DecisionsInbox } from './decisions-inbox';
 import { DiscussionsHistory, DiscussionsInbox } from './discussion-sections';
 
 /**
@@ -187,6 +188,13 @@ function Inbox() {
           </Button>
         ) : null}
       </section>
+
+      {/*
+       * «Решения ждут проверки» (TRK-759): действующие решения всех проектов, которых человек
+       * ещё не проверял, с подтверждением на месте. Число — только в заголовке: значок
+       * «Входящей» их не считает.
+       */}
+      <DecisionsInbox project={project} />
 
       {/*
        * Вторая половина: что человек сказал агентам и на что ему ещё не ответили.
