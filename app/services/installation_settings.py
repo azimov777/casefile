@@ -22,6 +22,7 @@ from enum import StrEnum
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.db.repositories.installation_settings import InstallationSettingRepository
 from app.domain.authors import Author
 from app.domain.errors import InstallationSettingInvalidError
@@ -52,8 +53,15 @@ class ResolvedSetting:
     source: SettingSource
 
 
-async def resolve_setting(session: AsyncSession, name: str) -> ResolvedSetting:
-    """Значение настройки с источником: база, затем окружение, затем умолчание кода."""
+async def resolve_setting(
+    session: AsyncSession, name: str, *, settings: Settings | None = None
+) -> ResolvedSetting:
+    """Значение настройки с источником: база, затем окружение, затем умолчание кода.
+
+    `settings` — `Settings` приложения, обслуживающего вызов: поле, заданное в нём явно
+    (окружением, `.env` или при сборке приложения), заменяет чтение `os.environ`.
+    Без него окружение читается напрямую.
+    """
     spec = get_spec(name)
     stored = await InstallationSettingRepository(session).get_value(name)
     if stored:
@@ -62,6 +70,8 @@ async def resolve_setting(session: AsyncSession, name: str) -> ResolvedSetting:
         except InstallationSettingInvalidError:
             # Строку мог положить приём архива старой версии или ручной SQL.
             logger.warning("Stored value of setting %s is invalid and is ignored", name)
+    if settings is not None and name in settings.model_fields_set:
+        return ResolvedSetting(name, getattr(settings, name), SettingSource.ENVIRONMENT)
     from_env = os.environ.get(spec.env_var, "").strip()
     if from_env:
         try:
@@ -71,9 +81,11 @@ async def resolve_setting(session: AsyncSession, name: str) -> ResolvedSetting:
     return ResolvedSetting(name, spec.default, SettingSource.DEFAULT)
 
 
-async def get_setting(session: AsyncSession, name: str) -> SettingValue:
+async def get_setting(
+    session: AsyncSession, name: str, *, settings: Settings | None = None
+) -> SettingValue:
     """Значение настройки по имени: узкий вызов для читателей."""
-    return (await resolve_setting(session, name)).value
+    return (await resolve_setting(session, name, settings=settings)).value
 
 
 async def set_setting(

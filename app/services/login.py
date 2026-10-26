@@ -55,8 +55,10 @@ from app.db.models.token import Token
 from app.db.repositories import AccountRepository, TokenRepository
 from app.domain.accounts import normalize_email
 from app.domain.errors import PasswordAttemptsExceededError
+from app.domain.installation_settings import get_spec
 from app.domain.passwords import PasswordHash, hash_password, verify_password
 from app.domain.tokens import TokenKind, generate_token, hash_token
+from app.services.installation_settings import get_setting
 
 #: Имя токена сеанса в списке токенов: по нему человек отличает вкладки от ключей агентов.
 SESSION_TOKEN_NAME = "browser-session"
@@ -139,12 +141,17 @@ def client_key(address: ClientAddress | None) -> str:
 
 
 class PasswordLogin:
-    """Вход по почте и паролю: окна неудачных попыток процесса и срок сеанса."""
+    """Вход по почте и паролю: окна неудачных попыток процесса и срок сеанса.
+
+    С `settings` срок нового сеанса читается из настроек установки при каждом входе;
+    без них — `session_ttl`, как задан.
+    """
 
     def __init__(
         self,
         *,
         session_ttl: timedelta,
+        settings: Settings | None = None,
         clock: Clock = _now,
         limit_per_address: int = ATTEMPT_LIMIT_PER_ADDRESS,
         limit_per_account: int = ATTEMPT_LIMIT_PER_ACCOUNT,
@@ -152,6 +159,7 @@ class PasswordLogin:
         attempt_window: timedelta = ATTEMPT_WINDOW,
     ) -> None:
         self._ttl = session_ttl
+        self._settings = settings
         self._clock = clock
         self._limits: dict[KeyedScope, int] = {
             "address": limit_per_address,
@@ -171,11 +179,21 @@ class PasswordLogin:
     @classmethod
     def from_settings(cls, settings: Settings) -> PasswordLogin:
         """Вход по настройкам установки: из них нужен только срок сеанса."""
-        return cls(session_ttl=timedelta(hours=settings.session_hours))
+        default = get_spec("session_hours").default
+        assert isinstance(default, int)
+        return cls(session_ttl=timedelta(hours=default), settings=settings)
 
-    @property
-    def session_ttl(self) -> timedelta:
-        return self._ttl
+    async def _session_ttl(self, session: AsyncSession) -> timedelta:
+        """Срок нового сеанса: настройка `session_hours` читается при входе (TRK-745).
+
+        Без `Settings` (вход собран с готовым сроком) берётся этот срок. Выданные сеансы
+        срок не меняют: он записан в токене.
+        """
+        if self._settings is None:
+            return self._ttl
+        hours = await get_setting(session, "session_hours", settings=self._settings)
+        assert isinstance(hours, int) and not isinstance(hours, bool)
+        return timedelta(hours=hours)
 
     async def open(
         self,
@@ -239,7 +257,7 @@ class PasswordLogin:
                 name=SESSION_TOKEN_NAME,
                 token_hash=hash_token(secret),
                 kind=TokenKind.SESSION,
-                expires_at=self._clock() + self._ttl,
+                expires_at=self._clock() + await self._session_ttl(session),
                 # Сеанс выпускает себе сам человек, вошедший паролем: в списке токенов
                 # видно, что вкладку открыл он, а не администратор и не трекер.
                 **created_by_columns(participant.author),

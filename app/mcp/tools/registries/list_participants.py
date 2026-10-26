@@ -26,7 +26,6 @@ def participant(item: Participant) -> ParticipantView:
 def register(tools: Toolset) -> None:
     """Объявляет `list_participants`."""
     runtime = tools.runtime
-    settings = tools.settings
 
     @tools.tool(title="List participants", annotations=READ_ONLY)
     async def list_participants(
@@ -39,7 +38,7 @@ def register(tools: Toolset) -> None:
         """
         async with runtime.call() as (session, actor):
             listed = await participants_service.list_participants(
-                session, actor=actor, limit=limit or settings.mcp_page_size, cursor=cursor
+                session, actor=actor, limit=await tools.page_limit(session, limit), cursor=cursor
             )
             return page(
                 (participant(item) for item in listed.items),
