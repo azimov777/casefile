@@ -26,6 +26,7 @@ from app.domain.errors import (
     JournalTooManyTasksError,
     JournalWaitTooLongError,
 )
+from app.domain.project_access import UNRESTRICTED, ProjectAccess
 
 #: Номер, с которого начинается журнал. `seq` выдаётся с единицы, поэтому «ничего ещё
 #: не читал» — это ноль, а не `None`: у курсора ленты нет состояния «неизвестно».
@@ -71,6 +72,10 @@ class JournalFilter:
     task_ids: tuple[uuid.UUID, ...] | None = None
     project_id: uuid.UUID | None = None
     types: tuple[EntryType, ...] | None = None
+    #: Какие проекты открыты тому, кто читает ленту. Поток живёт в своих сессиях без
+    #: штампа доступа, поэтому доступ едет вместе с фильтром; `resolve_filter` берёт его с
+    #: сессии запроса (TRK~28#6).
+    access: ProjectAccess = UNRESTRICTED
 
 
 def resolve_wait(seconds: float | None) -> float:

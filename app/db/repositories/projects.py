@@ -13,6 +13,8 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models.project import Project
 from app.db.pagination import Page, paginate
+from app.db.project_scope import open_to
+from app.domain.project_access import UNRESTRICTED, ProjectAccess
 
 
 def in_active_project(project_id: Any) -> ColumnElement[bool]:
@@ -51,6 +53,12 @@ class ProjectRepository:
         statement = select(Project).where(Project.key.in_(sorted(keys)))
         return {project.key: project for project in await self._session.scalars(statement)}
 
+    async def list_by_ids(self, project_ids: Collection[uuid.UUID]) -> list[Project]:
+        """Проекты по набору идентификаторов, одним запросом."""
+        if not project_ids:
+            return []
+        return list(await self._session.scalars(select(Project).where(Project.id.in_(project_ids))))
+
     async def first_archived(
         self, project_ids: Collection[uuid.UUID]
     ) -> tuple[str, datetime] | None:
@@ -78,11 +86,13 @@ class ProjectRepository:
         self,
         *,
         include_archived: bool = False,
+        access: ProjectAccess = UNRESTRICTED,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> Page[Project]:
-        """Страница проектов; архивные — только если их просили (TRK#99)."""
-        statement = select(Project)
+        """Страница проектов; архивные — только если их просили (TRK#99), закрытые доступу
+        агента не показываются никогда (TRK~28#6)."""
+        statement = select(Project).where(open_to(access, Project.id))
         if not include_archived:
             statement = statement.where(Project.archived_at.is_(None))
         return await paginate(self._session, statement, Project, limit=limit, cursor=cursor)

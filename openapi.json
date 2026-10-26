@@ -888,6 +888,262 @@
         }
       }
     },
+    "/api/v1/participants/{participant_name}/projects": {
+      "get": {
+        "tags": [
+          "participants"
+        ],
+        "summary": "Read the project access of an agent",
+        "description": "Режим доступа агента к проектам и список проектов.\n\nЧитает человек с учётной записью, которому доступен агент; агенту доступ закрыт\n(`account_required`). У человека ограничений нет: читается `all` и пустой список.",
+        "operationId": "read_project_access",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "participant_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Participant name; matching ignores case",
+              "examples": [
+                "release_bot"
+              ],
+              "title": "Participant Name"
+            },
+            "description": "Participant name; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_ProjectAccessRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "participants"
+        ],
+        "summary": "Set the project access of an agent",
+        "description": "Заменяет режим и список проектов агента целиком.\n\nРежим `all` открывает все проекты, в том числе заведённые позже, и очищает список;\n`except` закрывает перечисленные; `only` открывает только перечисленные, а проект,\nсозданный самим агентом, попадает в список сразу. Закрытый проект исчезает у агента из\nсписков, поиска, ленты и входящей, а по прямому адресу отвечает `project_not_allowed`.\nТокен не меняется: доступ стоит на участнике. Настраивает человек с учётной записью,\nкоторому доступен агент: чужого агента - только администратор (`agent_owned_by_another`),\nагент себе доступ не меняет (`account_required`).",
+        "operationId": "set_project_access",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "participant_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Participant name; matching ignores case",
+              "examples": [
+                "release_bot"
+              ],
+              "title": "Participant Name"
+            },
+            "description": "Participant name; matching ignores case"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectAccessWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_ProjectAccessRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tokens": {
       "get": {
         "tags": [
@@ -14231,6 +14487,18 @@
         ],
         "title": "DataResponse[ParticipantRead]"
       },
+      "DataResponse_ProjectAccessRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ProjectAccessRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[ProjectAccessRead]"
+      },
       "DataResponse_ProjectDetailRead_": {
         "properties": {
           "data": {
@@ -17461,6 +17729,80 @@
         ],
         "title": "PlainEntryRead",
         "description": "Запись без нагрузки: попытка, артефакт, заметка, заведение задачи или проекта."
+      },
+      "ProjectAccessMode": {
+        "type": "string",
+        "enum": [
+          "all",
+          "except",
+          "only"
+        ],
+        "title": "ProjectAccessMode",
+        "description": "Режим доступа к проектам."
+      },
+      "ProjectAccessRead": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/ProjectAccessMode",
+            "description": "`all` - every project, including ones created later; `except` - every project but the listed ones; `only` - the listed projects alone",
+            "examples": [
+              "only"
+            ]
+          },
+          "projects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Projects",
+            "description": "Keys of the listed projects, sorted; empty with `all`",
+            "examples": [
+              [
+                "TRK",
+                "DOCS"
+              ]
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "projects"
+        ],
+        "title": "ProjectAccessRead",
+        "description": "Доступ агента к проектам: режим и список ключей проектов."
+      },
+      "ProjectAccessWrite": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "description": "`all`, `except` or `only`; anything else is `project_access_mode_invalid`",
+            "examples": [
+              "only"
+            ]
+          },
+          "projects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Projects",
+            "description": "Project keys; an unknown key is `project_not_found`. `all` clears the list",
+            "examples": [
+              [
+                "TRK"
+              ]
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "ProjectAccessWrite",
+        "description": "Новый доступ агента к проектам: заменяет режим и список целиком.\n\nРежим принимается строкой и проверяется доменом, чтобы REST и MCP отвечали одинаково\n(`project_access_mode_invalid`); ключи проектов - любого регистра."
       },
       "ProjectArchiveEntryRead": {
         "properties": {

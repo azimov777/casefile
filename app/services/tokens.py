@@ -142,7 +142,17 @@ async def revoke_token(session: AsyncSession, token_id: uuid.UUID, *, actor: Act
 async def _ensure_may_issue(
     session: AsyncSession, actor: Actor, participant: Participant | None
 ) -> None:
-    """Выпускает человек с действующей учётной записью или сам трекер.
+    """Выпускает человек с действующей учётной записью или сам трекер (`token.issue`)."""
+    await ensure_may_manage_agent(session, actor, participant, action="token.issue")
+
+
+async def ensure_may_manage_agent(
+    session: AsyncSession, actor: Actor, participant: Participant | None, *, action: str
+) -> None:
+    """Агентом распоряжается человек с действующей учётной записью или сам трекер.
+
+    Одно правило на выпуск ключа (`token.issue`) и на настройку доступа агента к проектам
+    (`participant.projects`, TRK#79, TRK#73): «кому доступен агент» — один и тот же ответ.
 
     Чужим именем и ключом чужого агента (с другим хозяином) — только администратор.
 
@@ -158,7 +168,7 @@ async def _ensure_may_issue(
     if account is None:
         raise PermissionDeniedError(
             message="Only a person signed in with an account can issue tokens",
-            details={"action": "token.issue", "reason": "account_required"},
+            details={"action": action, "reason": "account_required"},
         )
     foreign_human = (
         participant is not None
@@ -168,7 +178,7 @@ async def _ensure_may_issue(
     if foreign_human and not account.is_admin:
         raise PermissionDeniedError(
             message="Only an administrator can issue a token that speaks for another person",
-            details={"action": "token.issue", "reason": "foreign_human"},
+            details={"action": action, "reason": "foreign_human"},
         )
     foreign_agent = (
         participant is not None
@@ -179,7 +189,7 @@ async def _ensure_may_issue(
     if foreign_agent and not account.is_admin:
         raise ForeignAgentError(
             details={
-                "action": "token.issue",
+                "action": action,
                 "agent": participant.name,
                 "owner": participant.owner_name,
             }

@@ -53,6 +53,7 @@ from app.db.models.area import Area
 from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
+from app.db.project_scope import require_open
 from app.db.repositories import AreaRepository, EntryRepository, ProjectRepository, TaskRepository
 from app.domain import state as state_domain
 from app.domain.areas import is_area_address, parse_area_address
@@ -358,6 +359,8 @@ async def check_cited(
             reason = await _missing_owner_reason(session, owner_key)
             problems.add(TaskField.DECISIONS.value, reason, ref=ref)
             continue
+        # Ссылка на решение закрытого агенту проекта — запись в закрытый проект (TRK~28#6).
+        require_open(session, owner if isinstance(owner, Project) else owner.project)
         decision = found.get(owner_key, {}).get(no)
         if decision is not None:
             if decision.superseded_by is not None:

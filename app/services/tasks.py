@@ -55,6 +55,7 @@ from app.db.models.author import created_by_columns
 from app.db.models.entry import Entry
 from app.db.models.project import Project
 from app.db.models.task import Task
+from app.db.project_scope import require_open
 from app.db.repositories import DiscussionRepository, EntryRepository, TaskRepository
 from app.domain import state as state_domain
 from app.domain.case import EntryHeading, is_blocking_question
@@ -70,6 +71,7 @@ from app.domain.errors import (
     TaskVersionConflictError,
 )
 from app.domain.links import LinkKind
+from app.domain.project_access import is_open
 from app.domain.tasks import (
     BACKLOG_ONLY_FIELDS,
     CHECK_EDIT_FIELD,
@@ -276,13 +278,15 @@ async def get_task(session: AsyncSession, key: str) -> Task:
     """Задача по ключу или `task_not_found`. Адресация мягкая: `trk-1` находит `TRK-1`.
 
     Ключ разбирается доменом, а не сравнивается строкой: `TRK-007` и `TRK-1-2` — не
-    ключи задач, и молча искать по ним нечего. Прав не проверяет: точка входа
-    интерфейса — `read_task`.
+    ключи задач, и молча искать по ним нечего. Задача закрытого агенту проекта —
+    `project_not_allowed` (TRK~28#6); других прав не проверяет: точка входа интерфейса —
+    `read_task`.
     """
     canonical = normalize_task_key(key)
     task = await TaskRepository(session).get_by_key(canonical)
     if task is None:
         raise TaskNotFoundError(details={"key": canonical})
+    require_open(session, task.project)
     return task
 
 
@@ -302,7 +306,11 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     `open_drafts:`.
     """
     task = await read_task(session, key, actor=actor)
-    links = await links_service.list_links(session, task, actor=actor)
+    all_links = await links_service.list_links(session, task, actor=actor)
+    # Связь с задачей закрытого агенту проекта не показывается: ни ключа, ни названия
+    # (TRK~28#6). Признак `blocked` считается по всем связям: блокер, которого агент не
+    # видит, задачу всё равно держит.
+    links = [link for link in all_links if is_open(actor.project_access, link.other.project_id)]
     hierarchy = links_service.split_hierarchy(links)
     summary = await case_service.last_summary(session, task, actor=actor)
     questions = await case_service.open_questions(session, task, actor=actor)
@@ -344,7 +352,7 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
             questions,
             summary,
             index,
-            blocked=links_service.blocked(links),
+            blocked=links_service.blocked(all_links),
             deferred=deferred,
             discussion_questions=[question for question, _ in discussion_questions],
             open_drafts=await case_service.count_open_drafts(session, task),

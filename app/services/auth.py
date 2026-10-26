@@ -24,9 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import UnauthorizedError
 from app.db.models.participant import Participant
 from app.db.models.token import Token
+from app.db.project_scope import stamp
 from app.db.repositories import AccountRepository, TokenRepository
+from app.db.repositories.participant_projects import ParticipantProjectRepository
 from app.domain.authors import TRACKER, Author, AuthorKind, label_author
 from app.domain.errors import ActorLabelRequiredError
+from app.domain.participants import ParticipantKind
+from app.domain.project_access import UNRESTRICTED, ProjectAccess
 from app.domain.tokens import hash_token
 
 #: Как часто обновляется отметка последнего использования токена.
@@ -57,6 +61,9 @@ class Actor:
     author: Author
     participant: Participant | None = None
     token_id: uuid.UUID | None = None
+    #: Какие проекты открыты участнику-агенту (TRK~28#6). Загружает `authenticate`;
+    #: у человека, общего агентского ключа, временного агента и трекера ограничений нет.
+    project_access: ProjectAccess = UNRESTRICTED
 
 
 #: Автор служебных действий: команда первичной инициализации и служебные записи дела.
@@ -80,13 +87,27 @@ async def authenticate(
     """
     moment = now or datetime.now(UTC)
     token = await verify_token(session, raw_token, now=moment)
+    access = await _project_access(session, token.participant)
     actor = Actor(
         author=_author(token, label),
         participant=token.participant,
         token_id=token.id,
+        project_access=access,
     )
+    # Чтение по адресу сверяется с доступом, лежащим на сессии: `app/db/project_scope.py`.
+    stamp(session, access)
     _touch(token, moment)
     return actor
+
+
+async def _project_access(session: AsyncSession, participant: Participant | None) -> ProjectAccess:
+    """Доступ к проектам участника-агента; прочим — без ограничений.
+
+    Режим `all` базу не трогает: список читается только в `except` и `only`.
+    """
+    if participant is None or participant.kind is not ParticipantKind.AGENT:
+        return UNRESTRICTED
+    return await ParticipantProjectRepository(session).get_access(participant)
 
 
 async def verify_token(

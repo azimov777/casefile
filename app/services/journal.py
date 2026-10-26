@@ -49,6 +49,7 @@ from app.core.logging import get_logger
 from app.core.shutdown import shutdown
 from app.db.models.entry import Entry
 from app.db.pagination import Page, decode_sort_cursor
+from app.db.project_scope import access_of
 from app.db.repositories import EntryRepository
 from app.db.wakeup import journal_wakeup
 from app.domain.case import EntryType
@@ -142,6 +143,7 @@ async def resolve_filter(
         task_ids=task_ids or None,
         project_id=resolved_project.id if resolved_project is not None else None,
         types=resolve_types(types),
+        access=access_of(session),
     )
 
 
@@ -172,6 +174,7 @@ async def read_journal(
         task_ids=journal_filter.task_ids,
         project_id=journal_filter.project_id,
         types=journal_filter.types,
+        access=actor.project_access,
         limit=limit,
     )
     return Page(
@@ -400,6 +403,7 @@ async def stream_journal(
                     task_ids=journal_filter.task_ids,
                     project_id=journal_filter.project_id,
                     types=journal_filter.types,
+                    access=journal_filter.access,
                     limit=STREAM_BATCH_SIZE,
                 )
             for entry, task_key, project_key, area, discussion in page.items:

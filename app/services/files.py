@@ -43,6 +43,7 @@ from app.db.models.entry import Entry
 from app.db.models.file import File
 from app.db.models.project import Project
 from app.db.pagination import Page
+from app.db.project_scope import access_of, require_open
 from app.db.repositories import FileRepository
 from app.domain.errors import FileDeletedError, FileFieldsInvalidError, TrackerFileNotFoundError
 from app.domain.fields import FieldProblems
@@ -55,6 +56,7 @@ from app.domain.files import (
     normalize_mime_type,
     sha256_hex,
 )
+from app.domain.project_access import is_open
 from app.services import freeze
 from app.services import projects as projects_service
 from app.services.auth import Actor
@@ -111,6 +113,7 @@ async def list_files(
     )
     page: Page[File] = await FileRepository(session).list_page(
         project_id=project_id,
+        access=actor.project_access,
         query=query,
         mime_type=mime_type,
         sort=sort,
@@ -249,6 +252,8 @@ async def require_attachable(session: AsyncSession, file_ids: Sequence[uuid.UUID
         file = found.get(file_id)
         if file is None:
             raise TrackerFileNotFoundError(details={"id": str(file_id)})
+        # Файл закрытого агенту проекта к записи не прикладывается (TRK~28#6).
+        require_open(session, await _project_of(session, file))
         if file.deleted_at is not None:
             raise FileDeletedError(details={"id": str(file.id), "name": file.name})
 
@@ -273,11 +278,18 @@ async def entry_attachments(
     if not by_entry:
         return {}
     all_ids = {file_id for ids in by_entry.values() for file_id in ids}
-    cards = {
-        card.id: card
-        for card in await _cards(session, list((await repository.get_many(all_ids)).values()))
+    access = access_of(session)
+    # Файл закрытого агенту проекта во вложениях не показывается (TRK~28#6).
+    visible = [
+        file
+        for file in (await repository.get_many(all_ids)).values()
+        if is_open(access, file.project_id)
+    ]
+    cards = {card.id: card for card in await _cards(session, visible)}
+    return {
+        entry_id: [cards[file_id] for file_id in ids if file_id in cards]
+        for entry_id, ids in by_entry.items()
     }
-    return {entry_id: [cards[file_id] for file_id in ids] for entry_id, ids in by_entry.items()}
 
 
 # --- Внутреннее -----------------------------------------------------------------------
@@ -287,6 +299,7 @@ async def _get(session: AsyncSession, file_id: uuid.UUID) -> File:
     file = await FileRepository(session).get(file_id)
     if file is None:
         raise TrackerFileNotFoundError(details={"id": str(file_id)})
+    require_open(session, await _project_of(session, file))
     return file
 
 

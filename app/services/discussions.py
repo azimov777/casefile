@@ -52,6 +52,7 @@ from app.domain.errors import (
     TaskClosedError,
 )
 from app.domain.fields import FieldProblems
+from app.domain.project_access import UNRESTRICTED, ProjectAccess, is_open
 from app.domain.tasks import is_closed
 from app.services import case as case_service
 from app.services import freeze
@@ -149,6 +150,7 @@ async def list_discussions(
     """
     return await DiscussionRepository(session).page(
         project_id=None if project is None else project.id,
+        access=actor.project_access,
         status=status,
         turn=turn,
         task_id=None if task is None else task.id,
@@ -173,7 +175,12 @@ async def task_discussions(
     второй раз их не читать и разойтись с признаками им негде. Запросов два на любое число
     обсуждений: строки с признаками и последние итоги.
     """
-    rows = await DiscussionRepository(session).of_task(task.id)
+    # Обсуждение закрытого агенту проекта, к которому привязана задача открытого, не названо.
+    rows = [
+        row
+        for row in await DiscussionRepository(session).of_task(task.id)
+        if is_open(actor.project_access, row.discussion.project_id)
+    ]
     if not rows:
         return []
     entries = EntryRepository(session)
@@ -192,9 +199,11 @@ async def task_discussions(
     ]
 
 
-async def count_waiting_on_humans(session: AsyncSession) -> int:
+async def count_waiting_on_humans(
+    session: AsyncSession, *, access: ProjectAccess = UNRESTRICTED
+) -> int:
     """Сколько незакрытых обсуждений ждут человека — число для значка входящей."""
-    return await DiscussionRepository(session).count_waiting_on_humans()
+    return await DiscussionRepository(session).count_waiting_on_humans(access)
 
 
 # --- Заведение ------------------------------------------------------------------------

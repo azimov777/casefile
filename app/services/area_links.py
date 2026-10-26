@@ -35,6 +35,7 @@ from app.db.locks import lock_changes
 from app.db.models.area import Area
 from app.db.models.area_link import AreaLink
 from app.db.models.author import created_by_columns
+from app.db.project_scope import access_of
 from app.db.repositories import AreaLinkRepository
 from app.domain.area_links import (
     AreaLinkKind,
@@ -42,6 +43,7 @@ from app.domain.area_links import (
     validate_area_link_reason,
 )
 from app.domain.errors import AreaLinkExistsError, AreaLinkNotFoundError
+from app.domain.project_access import is_open
 from app.services import case as case_service
 from app.services import freeze
 from app.services.auth import Actor
@@ -50,13 +52,23 @@ from app.services.auth import Actor
 
 
 async def list_see_also(session: AsyncSession, area: Area) -> list[AreaLink]:
-    """Исходящие связи области (`see_also`), по адресу цели."""
-    return await AreaLinkRepository(session).list_outgoing(area.id)
+    """Исходящие связи области (`see_also`), по адресу цели.
+
+    Связь с областью закрытого агенту проекта не показывается (TRK~28#6).
+    """
+    access = access_of(session)
+    links = await AreaLinkRepository(session).list_outgoing(area.id)
+    return [link for link in links if is_open(access, link.target.project_id)]
 
 
 async def list_see_also_from(session: AsyncSession, area: Area) -> list[AreaLink]:
-    """Входящие связи области (`see_also_from`), по адресу источника."""
-    return await AreaLinkRepository(session).list_incoming(area.id)
+    """Входящие связи области (`see_also_from`), по адресу источника.
+
+    Связь с областью закрытого агенту проекта не показывается (TRK~28#6).
+    """
+    access = access_of(session)
+    links = await AreaLinkRepository(session).list_incoming(area.id)
+    return [link for link in links if is_open(access, link.source.project_id)]
 
 
 # --- Изменение --------------------------------------------------------------------------

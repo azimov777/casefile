@@ -162,6 +162,7 @@
 | `journal_too_many_tasks` | Too many tasks in one journal filter | Задач в одном фильтре ленты больше потолка: потолок и присланное — в `details`. |
 | `journal_wait_too_long` | Requested wait exceeds the ceiling | Запрошенное ожидание больше потолка: потолок и запрошенное лежат в `details`. |
 | `link_self_not_allowed` | A task cannot be linked to itself | Связь задачи с самой собой запрещена — любого вида, включая `relates`. |
+| `participant_not_agent` | Project access is configured for agents only | Доступ к проектам настраивается агенту; у человека ограничений нет. |
 | `project_access_mode_invalid` | Project access mode is invalid | Режим доступа к проектам — не `all`, `except` и не `only`. |
 | `project_description_too_long` | Project description is too long | Описание проекта длиннее предела (`app/domain/projects.py`). |
 | `project_reason_required` | Archiving or restoring a project requires a reason | Архивирование и восстановление проекта требуют непустой причины `reason`. |
