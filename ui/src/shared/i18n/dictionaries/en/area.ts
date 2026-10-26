@@ -167,6 +167,15 @@ export const area = {
     pending: 'Saving…',
   },
 
+  /** Related areas block of the area page (TRK-738): read-only, links are set by agents. */
+  seeAlso: {
+    label: 'Related areas',
+    from: 'See also',
+    to: 'Linked from',
+    none: 'No related areas',
+    reason: 'Why',
+  },
+
   /** The «⋯» menu in the area page header (TRK-618). */
   menu: {
     label: 'Actions with area {{address}}',

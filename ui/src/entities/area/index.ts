@@ -9,3 +9,4 @@ export {
 } from './api/area';
 export { AREA_DESCRIPTION_LIMIT, NO_AREA } from './model/area';
 export { AreaLink } from './ui/area-link';
+export { SeeAlso } from './ui/see-also';

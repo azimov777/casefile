@@ -398,6 +398,14 @@ export const ui = {
       // Кем вторая задача приходится этой (UI-166). Только у `parent`/`child`: их
       // идентификатор, прочитанный фразой («parent DEMO-9»), называет роль наоборот —
       // у `blocks DEMO-3` и `relates DEMO-3` фраза читается верно и без слов.
+      areaLinkAdded: {
+        see_also: 'Читать также',
+        see_also_from: 'Ссылается сюда',
+      },
+      areaLinkRemoved: {
+        see_also: 'Снята связь «читать также»:',
+        see_also_from: 'Снята ссылка отсюда:',
+      },
       linkRole: {
         parent: '— дочерняя задача',
         child: '— родитель',

@@ -529,3 +529,105 @@ describe('знание области: решения и заметки (TRK-660
     expect(writes[0]?.body).toMatchObject({ type: 'finding', title: 'Факт' });
   });
 });
+
+describe('смежные области: «Читать также» и «Ссылаются сюда» (TRK-738)', () => {
+  const LINKS = {
+    see_also: [
+      {
+        address: 'DEMO/core',
+        title: 'Ядро',
+        description: 'Механики ядра.',
+        reason: 'Экраны показывают механики ядра: их правила — там.',
+        created_by: { kind: 'agent', signature: 'claude' },
+        created_at: '2026-10-20T10:00:00Z',
+      },
+    ],
+    see_also_from: [
+      {
+        address: 'OTHER/docs',
+        title: 'Документы',
+        reason: 'Документы описывают экраны.',
+        created_by: { kind: 'agent', signature: 'claude' },
+        created_at: '2026-10-21T10:00:00Z',
+      },
+    ],
+  } satisfies Partial<ReturnType<typeof detail>>;
+
+  it('обе группы: адреса ссылками на страницы областей, названия и причины; кнопок нет', async () => {
+    server.use(http.get(`${API}${PATH}`, () => data(detail(LINKS))));
+    renderApp('/projects/DEMO/areas/promotion', { language: 'ru' });
+
+    const block = await screen.findByRole('region', { name: say.area('seeAlso.label') });
+    const out = within(block)
+      .getByRole('heading', { name: say.area('seeAlso.from') })
+      .closest('div') as HTMLElement;
+    expect(within(out).getByRole('link', { name: 'DEMO/core' })).toHaveAttribute(
+      'href',
+      '/projects/DEMO/areas/core',
+    );
+    expect(within(out).getByText('Ядро')).toBeInTheDocument();
+    expect(
+      within(out).getByText('Экраны показывают механики ядра: их правила — там.'),
+    ).toBeInTheDocument();
+
+    const incoming = within(block)
+      .getByRole('heading', { name: say.area('seeAlso.to') })
+      .closest('div') as HTMLElement;
+    expect(within(incoming).getByRole('link', { name: 'OTHER/docs' })).toHaveAttribute(
+      'href',
+      '/projects/OTHER/areas/docs',
+    );
+    expect(within(incoming).getByText('Документы описывают экраны.')).toBeInTheDocument();
+    expect(within(block).queryByRole('button')).toBeNull();
+    expect(screen.queryByText(say.area('seeAlso.none'))).toBeNull();
+  });
+
+  it('группа без строк не показывается', async () => {
+    server.use(http.get(`${API}${PATH}`, () => data(detail({ ...LINKS, see_also_from: [] }))));
+    renderApp('/projects/DEMO/areas/promotion', { language: 'ru' });
+
+    await screen.findByRole('region', { name: say.area('seeAlso.label') });
+    expect(screen.queryByRole('heading', { name: say.area('seeAlso.to') })).toBeNull();
+  });
+
+  it('область без связей — одна строка «Смежных областей нет»', async () => {
+    renderApp('/projects/DEMO/areas/promotion', { language: 'ru' });
+
+    expect(await screen.findByText(say.area('seeAlso.none'))).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: say.area('seeAlso.label') })).toBeNull();
+    expect(screen.queryByRole('heading', { name: say.area('seeAlso.from') })).toBeNull();
+  });
+
+  it('запись link_added в деле читается фразой со ссылкой на область, причина — в теле', async () => {
+    const user = userEvent.setup();
+    const link = areaEntry(7, 'link_added', {
+      title: 'Link added: see_also DEMO/core',
+      body: '',
+      payload: {
+        kind: 'see_also',
+        other: 'DEMO/core',
+        reason: 'Экраны показывают механики ядра: их правила — там.',
+      },
+    } as Partial<Entry>);
+    server.use(
+      http.get(`${API}${PATH}/entries`, () => collection([link])),
+      http.get(`${API}${PATH}/entries/7`, () => data(link)),
+    );
+    renderApp('/projects/DEMO/areas/promotion?tab=case', { language: 'ru' });
+
+    const index = await screen.findByRole('table');
+    const row = within(index).getByRole('button', {
+      name: new RegExp(`^.*${say.ui('entry.headline.areaLinkAdded.see_also')}`),
+    });
+    expect(row).toHaveTextContent('DEMO/core');
+    await user.click(row);
+    expect(
+      await screen.findByText('Экраны показывают механики ядра: их правила — там.'),
+    ).toBeInTheDocument();
+    // В раскрытой записи адрес — ссылка на страницу области.
+    expect(screen.getByRole('link', { name: 'DEMO/core' })).toHaveAttribute(
+      'href',
+      '/projects/DEMO/areas/core',
+    );
+  });
+});

@@ -33,6 +33,8 @@ interface HolderScreenProps {
   menu: ReactNode;
   /** Строка счётчиков задач под ссылками, над вкладками (TRK-619, TRK#46). */
   counters?: ReactNode;
+  /** Смежные области под счётчиками (TRK-738); у проекта их нет. */
+  related?: ReactNode;
   /** Плашка под шапкой: почему на экране нет правок (архив). */
   notice: ReactNode;
   /** Имя полосы вкладок для программы чтения с экрана. */
@@ -64,6 +66,7 @@ export function HolderScreen({
   links,
   menu,
   counters,
+  related,
   notice,
   tabsLabel,
   tabs,
@@ -99,6 +102,7 @@ export function HolderScreen({
         )}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">{links}</div>
         {counters}
+        {related}
         {notice}
       </header>
 

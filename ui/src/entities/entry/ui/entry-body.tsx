@@ -194,9 +194,18 @@ export function EntryBody({ entry, checks = [] }: EntryBodyProps) {
     // вид связи и ключ задачи — всё это он и называет. Тела у них не бывает. Так же у
     // привязки задачи к обсуждению и закрытия обсуждения (TRK-669): обе стороны привязки
     // и номер итога — в заголовке и фактах.
-    case 'assignee_changed':
+    // Связь областей несёт причину (`AreaLinkPayload`): она одна фраза и читается телом;
+    // у связи задач причины нет.
     case 'link_added':
     case 'link_removed':
+      if (!('reason' in entry.payload) || entry.payload.reason === '') return null;
+      return (
+        <p className="wrap-anywhere">
+          <TaskText>{entry.payload.reason}</TaskText>
+        </p>
+      );
+
+    case 'assignee_changed':
     case 'created':
     case 'attached':
     case 'detached':
