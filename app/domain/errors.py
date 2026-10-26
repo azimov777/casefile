@@ -125,7 +125,7 @@ class ProjectNotAllowedError(PermissionDeniedError):
     """
 
     code = "project_not_allowed"
-    message = "This project is closed to the agent"
+    message = "This project is closed to the agent; the owner opens it under Access"
 
 
 class ProjectAccessModeInvalidError(ValidationError):

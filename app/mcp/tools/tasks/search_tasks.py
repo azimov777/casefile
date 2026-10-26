@@ -454,7 +454,7 @@ def register(tools: Toolset) -> None:
         ordered by `sort`, latest touched first (`-changed_at`) when it is left out. A long
         text is cut at the installation limit and marked by `<field>_truncated` and
         `<field>_length`; one task in full, with its case and links, is returned by
-        `get_task`.
+        `get_task`. A closed project has no tasks in the results.
 
         An unknown field, operator or value is refused with `search_field_unknown`,
         `search_operator_not_supported` or `search_value_invalid`, the allowed values
