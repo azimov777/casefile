@@ -399,6 +399,14 @@ export const ui = {
       taskDetached: 'Task detached',
       attachedTo: 'Attached to discussion',
       detachedFrom: 'Detached from discussion',
+      areaLinkAdded: {
+        see_also: 'Read also',
+        see_also_from: 'Linked from',
+      },
+      areaLinkRemoved: {
+        see_also: 'Read-also link removed:',
+        see_also_from: 'Link from removed:',
+      },
       linkRole: {
         parent: '— child task',
         child: '— parent',

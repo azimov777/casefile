@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { cn, ownerRefHref } from '@/shared/lib';
+import { areaHref, cn, ownerRefHref } from '@/shared/lib';
 import { Badge } from '@/shared/ui';
 import type { Headline, HeadlinePart } from '../model/headline';
 
@@ -64,6 +64,14 @@ function Piece({ part, linked }: { part: HeadlinePart; linked: boolean }) {
         </Link>
       ) : (
         <code className={KEY}>{part.key}</code>
+      );
+    case 'area':
+      return linked ? (
+        <Link className={KEY} to={areaHref(part.address)}>
+          {part.address}
+        </Link>
+      ) : (
+        <code className={KEY}>{part.address}</code>
       );
     case 'entry':
       return linked ? (

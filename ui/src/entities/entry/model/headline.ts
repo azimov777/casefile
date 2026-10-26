@@ -70,6 +70,8 @@ export type HeadlinePart =
   /** Слова, которые обязаны цеплять взгляд: исход проверки не целиком (TRK-561). */
   | { kind: 'flag'; text: string }
   | { kind: 'task'; key: string }
+  /** Другая область: адрес ссылкой на её страницу (связь `see_also`, TRK-738). */
+  | { kind: 'area'; address: string }
   | { kind: 'entry'; key: string; no: number };
 
 /**
@@ -190,6 +192,25 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
 
     case 'link_added':
     case 'link_removed':
+      // Связь областей (TRK-738): фраза из словаря и адрес второй области ссылкой, вид
+      // `see_also`/`see_also_from` словами, а не идентификатором; причина — в теле.
+      if (facts.link_kind === 'see_also' || facts.link_kind === 'see_also_from') {
+        return {
+          kind: 'built',
+          parts: [
+            words(
+              t(
+                facts.type === 'link_added'
+                  ? `entry.headline.areaLinkAdded.${facts.link_kind}`
+                  : `entry.headline.areaLinkRemoved.${facts.link_kind}`,
+              ),
+            ),
+            ...(facts.other_area == null
+              ? []
+              : [{ kind: 'area' as const, address: facts.other_area }]),
+          ],
+        };
+      }
       return {
         kind: 'built',
         parts: [
@@ -519,7 +540,9 @@ export function factsOfEntry(entry: Entry): EntryFacts {
       return {
         type: entry.type,
         link_kind: entry.payload.kind as LinkFacts['link_kind'],
-        other_key: entry.payload.other,
+        ...(entry.payload.kind === 'see_also' || entry.payload.kind === 'see_also_from'
+          ? { other_area: entry.payload.other }
+          : { other_key: entry.payload.other }),
       };
     case 'question':
       return {

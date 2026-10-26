@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { areaQueryOptions } from '@/entities/area';
+import { areaQueryOptions, SeeAlso } from '@/entities/area';
 import { areaKnowledgeQueryOptions } from '@/entities/entry';
 import { projectQueryOptions } from '@/entities/project';
 import {
@@ -129,6 +129,7 @@ export function AreaPage() {
         </>
       }
       counters={<TaskCounters project={card.project_key} area={card.address} />}
+      related={<SeeAlso area={card} />}
       menu={
         <AreaMenu
           area={card}
