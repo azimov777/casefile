@@ -14,6 +14,10 @@ interface RemarkFormProps {
    * как это выглядит, — на карточке задачи форма попросту размонтируется.
    */
   onCancel: () => void;
+  /** Подшито замечание: страница объясняет, что оно изменило там, откуда человек пришёл. */
+  onFiled?: () => void;
+  /** Форма раскрыта человеком: поле встаёт в окно и получает фокус. */
+  focusOnMount?: boolean;
 }
 
 /**
@@ -30,7 +34,7 @@ interface RemarkFormProps {
  * (`titleFromText`). Человеку, который увидел «вышло не то», надо сказать это одним
  * действием, а не заполнить два поля.
  */
-export function RemarkForm({ taskKey, onCancel }: RemarkFormProps) {
+export function RemarkForm({ taskKey, onCancel, onFiled, focusOnMount }: RemarkFormProps) {
   const remark = useLeaveRemark();
   const [filed, setFiled] = useState<{ entryNo: number; body: string } | null>(null);
   const fields = remark.error instanceof ApiError ? remark.error.fields : null;
@@ -65,6 +69,7 @@ export function RemarkForm({ taskKey, onCancel }: RemarkFormProps) {
       problem={fieldReason === undefined ? undefined : fieldReasonText(fieldReason)}
       isPending={remark.isPending}
       onCancel={onCancel}
+      focusOnMount={focusOnMount}
       failure={
         remark.isError ? (
           <>
@@ -81,6 +86,7 @@ export function RemarkForm({ taskKey, onCancel }: RemarkFormProps) {
             idempotencyKey,
           });
           setFiled({ entryNo: entry.no, body });
+          onFiled?.();
           return true;
         } catch {
           // Что случилось, скажет `failure`; черновик при этом остаётся в форме.

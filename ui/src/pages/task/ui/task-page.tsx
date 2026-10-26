@@ -22,7 +22,7 @@ import {
   withHeld,
   type Answering,
 } from '@/features/answer-question';
-import { WarningPanel } from '@/features/accept-warning';
+import { WarningPanel, WarningReturnedNote } from '@/features/accept-warning';
 import { RemarkForm } from '@/features/leave-remark';
 import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import { useProjectRights } from '@/features/manage-project';
@@ -186,6 +186,11 @@ export function TaskPage() {
    * зависит, показывать ли блок строкой (пусто и форма свёрнута) или карточкой.
    */
   const [remarkOpen, setRemarkOpen] = useState(false);
+  /**
+   * Замечание подшито, пока на карточке стояла плашка предупреждения: замечание снимает
+   * предупреждение (TRK#117), плашка уходит, и на её месте остаётся пояснение.
+   */
+  const [returned, setReturned] = useState(false);
 
   /**
    * Прыжок «В начало описи» живёт в шапке блока, а прокручиваемый узел — внутри
@@ -410,7 +415,14 @@ export function TaskPage() {
            * человек и смотрит, когда говорит «вышло не то».
            */}
           {remarkOpen && canAct ? (
-            <RemarkForm taskKey={task.key} onCancel={() => setRemarkOpen(false)} />
+            <RemarkForm
+              taskKey={task.key}
+              onCancel={() => setRemarkOpen(false)}
+              onFiled={() => {
+                if (warning !== null) setReturned(true);
+              }}
+              focusOnMount
+            />
           ) : null}
         </section>
       ),
@@ -518,6 +530,7 @@ export function TaskPage() {
               onReturn={() => setRemarkOpen(true)}
             />
           )}
+          {warning === null && returned ? <WarningReturnedNote /> : null}
 
           {renderCardBlocks(cardBlocks)}
 
