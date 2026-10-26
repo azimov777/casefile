@@ -19,6 +19,7 @@ from app.api.schemas.common import CollectionResponse
 from app.api.schemas.entries import RemarkEntryRead, entry_read
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.services import case as case_service
+from app.services import files as files_service
 from app.services import projects as projects_service
 
 router = APIRouter(prefix="/remarks", tags=["remarks"])
@@ -84,7 +85,11 @@ async def list_remarks(
         limit=limit,
         cursor=cursor,
     )
+    attached = await files_service.entry_attachments(session, [item.entry for item in page.items])
     return CollectionResponse[RemarkEntryRead].of(
-        [entry_read(item.entry, task_key=item.task_key) for item in page.items],
+        [
+            entry_read(item.entry, task_key=item.task_key, files=attached.get(item.entry.id))
+            for item in page.items
+        ],
         next_cursor=page.next_cursor,
     )

@@ -10039,6 +10039,1009 @@
         }
       }
     },
+    "/api/v1/files": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Upload a file",
+        "description": "Кладёт файл в проект: `multipart/form-data` с полями `project`, `file` и, если имя\nне то, что у части, `name`. Тип берётся из `Content-Type` части.\n\nОтказы: проект неизвестен — `404 project_not_found`, архивный — `409 project_archived`,\nимя или тип не годятся — `422 file_fields_invalid`, файл больше предела установки —\n`422 file_too_large` (`details.size`, `details.max_bytes`). Повтор с тем же\n`Idempotency-Key` и тем же содержимым отвечает первой карточкой.",
+        "operationId": "upload_file",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/FileUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_FileRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "List files of the installation",
+        "description": "Файлы установки: поиск по имени, отбор по типу и проекту, сортировка, курсор.\n\nПо умолчанию — свежие добавленные первыми, без надгробий. Номер страницы — только\nкурсор `meta.next_cursor`; он действителен при том же отборе и порядке.",
+        "operationId": "list_files",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the name, ignoring case",
+              "examples": [
+                "scheme"
+              ],
+              "title": "Q"
+            },
+            "description": "Part of the name, ignoring case"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Project key. Without it files of archived projects are left out; a project named here is listed even archived",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project"
+            },
+            "description": "Project key. Without it files of archived projects are left out; a project named here is listed even archived"
+          },
+          {
+            "name": "mime_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Type: `image/png` exactly, `image` or `image/*` for the whole family",
+              "title": "Mime Type"
+            },
+            "description": "Type: `image/png` exactly, `image` or `image/*` for the whole family"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/FileSort",
+              "description": "Order key: when added, when last opened (never opened counts as added), size, type",
+              "default": "added"
+            },
+            "description": "Order key: when added, when last opened (never opened counts as added), size, type"
+          },
+          {
+            "name": "descending",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Biggest or newest first (the default); false reverses the order",
+              "default": true,
+              "title": "Descending"
+            },
+            "description": "Biggest or newest first (the default); false reverses the order"
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also list tombstones of deleted files",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Also list tombstones of deleted files"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cursor from `meta.next_cursor` of a previous page",
+              "title": "Cursor"
+            },
+            "description": "Cursor from `meta.next_cursor` of a previous page"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse_FileRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/delete": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Delete several files",
+        "description": "Удаляет несколько файлов: выбранные (`ids`) или все под отбор (`expected_count` и\nотбор `project`, `q`, `mime_type`; без отбора — все файлы установки).\n\nБайты стираются, остаются надгробия. По отбору нужно число, которое человек\nподтвердил: не совпало с числом подходящих — `409 file_count_mismatch`\n(`details.expected`, `details.actual`), ничего не удалено. Выбранные удаляются все или\nни одного: неизвестный файл — `404 file_not_found`, уже удалённый —\n`409 file_deleted`, архивный проект — `409 project_archived`. Повтор отвечает так же,\nкак первый вызов отвечал бы на то же состояние: удалённое второй раз не удаляется.",
+        "operationId": "delete_files",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileDeletion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_FilesDeleted_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/{file_id}": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Read a file card",
+        "description": "Карточка файла: имя, тип, размер, `sha256`, кто и когда добавил, заменил, последний\nраз открыл, число ссылающихся записей и задач. У удалённого — надгробие\n(`deleted: true`). Неизвестный файл — `404 file_not_found`. Чтение карточки не считается\nоткрытием файла.",
+        "operationId": "read_file",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "File reference (`id` of a file card)",
+              "examples": [
+                "0b7d4a52-6a60-4f33-8c0b-1c2f7e6f9a10"
+              ],
+              "title": "File Id"
+            },
+            "description": "File reference (`id` of a file card)"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_FileRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Delete a file",
+        "description": "Стирает байты и оставляет надгробие; отдаёт его. Записи, которые прикладывали файл,\nпоказывают «файл удалён». Повторное удаление — `409 file_deleted`, архивный проект —\n`409 project_archived`.",
+        "operationId": "delete_file",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "File reference (`id` of a file card)",
+              "examples": [
+                "0b7d4a52-6a60-4f33-8c0b-1c2f7e6f9a10"
+              ],
+              "title": "File Id"
+            },
+            "description": "File reference (`id` of a file card)"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_FileRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/{file_id}/content": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Download the bytes of a file",
+        "description": "Байты файла с его `Content-Type` и `Content-Disposition: attachment`; ставит\n«последний раз открыт». Тело — сам файл, без оболочки `data`.\n\nУдалённый файл — `409 file_deleted`, неизвестный — `404 file_not_found`. Архивный\nпроект байтов не прячет.",
+        "operationId": "download_file",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "File reference (`id` of a file card)",
+              "examples": [
+                "0b7d4a52-6a60-4f33-8c0b-1c2f7e6f9a10"
+              ],
+              "title": "File Id"
+            },
+            "description": "File reference (`id` of a file card)"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The bytes of the file, as uploaded",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Replace the content of a file",
+        "description": "Кладёт новые байты под ту же ссылку; прежние стираются, истории версий нет. Записи,\nкоторые прикладывают файл, показывают новое содержимое.\n\n`multipart/form-data` с частью `file` и, если нужно переименовать, `name`. Тип берётся\nиз `Content-Type` части. Удалённый файл — `409 file_deleted`, архивный проект —\n`409 project_archived`, файл больше предела — `422 file_too_large`.",
+        "operationId": "replace_file",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "File reference (`id` of a file card)",
+              "examples": [
+                "0b7d4a52-6a60-4f33-8c0b-1c2f7e6f9a10"
+              ],
+              "title": "File Id"
+            },
+            "description": "File reference (`id` of a file card)"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/FileReplacement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_FileRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/journal": {
       "get": {
         "tags": [
@@ -10879,6 +11882,19 @@
     "schemas": {
       "AcceptanceEntryCreate": {
         "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Files",
+            "description": "References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`",
+            "examples": [
+              []
+            ]
+          },
           "body": {
             "type": "string",
             "maxLength": 65536,
@@ -11030,6 +12046,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -11344,6 +12368,19 @@
       },
       "AnswerEntryCreate": {
         "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Files",
+            "description": "References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`",
+            "examples": [
+              []
+            ]
+          },
           "body": {
             "type": "string",
             "maxLength": 65536,
@@ -11503,6 +12540,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -11903,6 +12948,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -12719,6 +13772,14 @@
               null
             ]
           },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
+          },
           "status": {
             "type": "null",
             "title": "Status",
@@ -12966,6 +14027,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -13219,6 +14288,14 @@
               null
             ]
           },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
+          },
           "status": {
             "type": "null",
             "title": "Status",
@@ -13431,6 +14508,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -13740,6 +14825,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -14251,6 +15344,25 @@
         ],
         "title": "CollectionResponse[EntryRead]"
       },
+      "CollectionResponse_FileRead_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "CollectionResponse[FileRead]"
+      },
       "CollectionResponse_InstallationSettingRead_": {
         "properties": {
           "data": {
@@ -14473,6 +15585,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -14713,6 +15833,30 @@
           "data"
         ],
         "title": "DataResponse[EntryRead]"
+      },
+      "DataResponse_FileRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/FileRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[FileRead]"
+      },
+      "DataResponse_FilesDeleted_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/FilesDeleted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[FilesDeleted]"
       },
       "DataResponse_InstallationArchive_": {
         "properties": {
@@ -15015,6 +16159,14 @@
               null
             ]
           },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
+          },
           "status": {
             "anyOf": [
               {
@@ -15289,6 +16441,14 @@
               null
             ]
           },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
+          },
           "status": {
             "type": "null",
             "title": "Status",
@@ -15547,6 +16707,19 @@
       },
       "DiscussionNoteCreate": {
         "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Files",
+            "description": "References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`",
+            "examples": [
+              []
+            ]
+          },
           "body": {
             "type": "string",
             "maxLength": 65536,
@@ -16275,6 +17448,14 @@
               null
             ]
           },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
+          },
           "status": {
             "type": "null",
             "title": "Status",
@@ -16400,6 +17581,328 @@
         ],
         "title": "FieldChangedPayload",
         "description": "Правка обвязки задачи: «было» и «стало» целиком.\n\nОтдельно от `SectionChangedPayload`, хотя поля похожи: там правка задания и только\nв `backlog`, здесь — то, что меняется в любом незакрытом статусе. Одна модель на\nоба случая означала бы «section» у приоритета.\n\nЗначения — строки, а не «строка либо список»: список остался здесь от снятых меток\n(TRK-18), ни одно сегодняшнее поле обвязки списком не является, и записей со списком\nв базе нет ни одной. Пока объединение было плоским, оно только расширяло тип «на\nвсякий случай»; появится поле-список — у него будет своя форма, а не общая на всех."
+      },
+      "FileDeletion": {
+        "properties": {
+          "ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array",
+                "maxItems": 1000,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ids",
+            "description": "Files picked one by one; all of them are deleted or none"
+          },
+          "expected_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Count",
+            "description": "Number of matching files the person confirmed; with the filter below"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project",
+            "description": "Filter by project",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "q": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q",
+            "description": "Filter by a part of the name"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type",
+            "description": "Filter by type: `image/png` or `image`",
+            "examples": [
+              "image"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FileDeletion",
+        "description": "Удаление нескольких файлов: выбранные по номерам или все под отбор с числом.\n\nРовно одно из двух: `ids` — выбранные файлы; либо `expected_count` — число файлов,\nкоторое человек увидел и подтвердил, вместе с отбором (`project`, `q`, `mime_type`;\nбез отбора — все файлы установки). Не совпало с числом подходящих — отказ\n`file_count_mismatch`, ничего не удалено."
+      },
+      "FileRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "File reference: stays the same when the file is replaced"
+          },
+          "project_key": {
+            "type": "string",
+            "title": "Project Key",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "examples": [
+              "scheme.png"
+            ]
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type",
+            "examples": [
+              "image/png"
+            ]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes",
+            "description": "Size of the content at the last upload",
+            "examples": [
+              48213
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256",
+            "description": "SHA-256 of the content, 64 hexadecimal characters"
+          },
+          "added_by": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "added_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Added At"
+          },
+          "replaced_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who replaced the content last; null if never replaced"
+          },
+          "replaced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced At"
+          },
+          "last_opened_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Opened At",
+            "description": "When the bytes were last served; null if never opened"
+          },
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted",
+            "description": "True for a tombstone: the bytes are gone"
+          },
+          "deleted_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "entries": {
+            "type": "integer",
+            "title": "Entries",
+            "description": "Case entries that attach the file"
+          },
+          "tasks": {
+            "type": "integer",
+            "title": "Tasks",
+            "description": "Distinct tasks among those entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_key",
+          "name",
+          "mime_type",
+          "size_bytes",
+          "sha256",
+          "added_by",
+          "added_at",
+          "deleted",
+          "entries",
+          "tasks"
+        ],
+        "title": "FileRead",
+        "description": "Карточка файла без байтов — живого или надгробие."
+      },
+      "FileReplacement": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "The new content. Its `Content-Type` becomes the type of the file"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "New name of the file; without it the name stays"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "FileReplacement",
+        "description": "Части формы `PUT /files/{id}/content`: `multipart/form-data`."
+      },
+      "FileSort": {
+        "type": "string",
+        "enum": [
+          "added",
+          "opened",
+          "size",
+          "type"
+        ],
+        "title": "FileSort",
+        "description": "По чему упорядочен список файлов. Направление — отдельно (`descending`)."
+      },
+      "FileUpload": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project",
+            "description": "Key of the project the file belongs to",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "The file itself. Its `filename` and `Content-Type` name the file and its type"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Name of the file; without it the `filename` of the part is used"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project",
+          "file"
+        ],
+        "title": "FileUpload",
+        "description": "Части формы `POST /files`: `multipart/form-data`. Лишняя часть — отказ."
+      },
+      "FilesDeleted": {
+        "properties": {
+          "deleted": {
+            "type": "integer",
+            "title": "Deleted"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted",
+          "files"
+        ],
+        "title": "FilesDeleted",
+        "description": "Итог удаления нескольких файлов: надгробия."
       },
       "FindingEntryRead": {
         "properties": {
@@ -16537,6 +18040,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "anyOf": [
@@ -17091,6 +18602,14 @@
               null
             ]
           },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
+          },
           "status": {
             "type": "null",
             "title": "Status",
@@ -17394,6 +18913,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -17932,6 +19459,19 @@
       },
       "PlainEntryCreate": {
         "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Files",
+            "description": "References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`",
+            "examples": [
+              []
+            ]
+          },
           "body": {
             "type": "string",
             "maxLength": 65536,
@@ -18118,6 +19658,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -18369,6 +19917,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -18703,6 +20259,19 @@
       },
       "ProjectEntryCreate": {
         "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Files",
+            "description": "References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`",
+            "examples": [
+              []
+            ]
+          },
           "body": {
             "type": "string",
             "maxLength": 65536,
@@ -19004,6 +20573,14 @@
               null
             ]
           },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
+          },
           "status": {
             "type": "null",
             "title": "Status",
@@ -19056,6 +20633,19 @@
       },
       "QuestionEntryCreate": {
         "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Files",
+            "description": "References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`",
+            "examples": [
+              []
+            ]
+          },
           "body": {
             "type": "string",
             "maxLength": 65536,
@@ -19226,6 +20816,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -19491,6 +21089,19 @@
       },
       "RemarkEntryCreate": {
         "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Files",
+            "description": "References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`",
+            "examples": [
+              []
+            ]
+          },
           "body": {
             "type": "string",
             "maxLength": 65536,
@@ -19643,6 +21254,14 @@
               null
             ]
           },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
+          },
           "status": {
             "type": "null",
             "title": "Status",
@@ -19738,6 +21357,19 @@
       },
       "ResolutionEntryCreate": {
         "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Files",
+            "description": "References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`",
+            "examples": [
+              []
+            ]
+          },
           "body": {
             "type": "string",
             "maxLength": 65536,
@@ -19882,6 +21514,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -20139,6 +21779,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -20674,6 +22322,14 @@
               null
             ]
           },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
+          },
           "status": {
             "type": "null",
             "title": "Status",
@@ -20816,6 +22472,19 @@
       },
       "SummaryEntryCreate": {
         "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Files",
+            "description": "References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`",
+            "examples": [
+              []
+            ]
+          },
           "body": {
             "type": "string",
             "maxLength": 65536,
@@ -20960,6 +22629,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -22188,6 +23865,14 @@
               null
             ]
           },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
+          },
           "status": {
             "type": "null",
             "title": "Status",
@@ -23304,6 +24989,19 @@
       },
       "VerdictEntryCreate": {
         "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Files",
+            "description": "References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`",
+            "examples": [
+              []
+            ]
+          },
           "body": {
             "type": "string",
             "maxLength": 65536,
@@ -23448,6 +25146,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",
@@ -23728,6 +25434,14 @@
             "examples": [
               null
             ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
           },
           "status": {
             "type": "null",

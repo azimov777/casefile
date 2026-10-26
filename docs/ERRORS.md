@@ -93,6 +93,7 @@
 | `discussion_closed` | Discussion is closed: its case and its tasks are frozen | Обсуждение закрыто: любая запись, привязка, отвязка и повторное закрытие — отказ. |
 | `discussion_has_open_questions` | Discussion has questions with no answer | Закрытие обсуждения, в деле которого есть вопрос без ответа: адреса вопросов (`TRK~7#3`) — в `details.questions`. |
 | `discussion_task_exists` | Task is already attached to the discussion | Задача уже привязана к этому обсуждению: привязка хранится одной строкой. |
+| `file_count_mismatch` | The number of matching files differs from the confirmed one; nothing was deleted | Число файлов под отбор не совпало с тем, что подтвердил человек: ничего не удалено. |
 | `file_deleted` | File was deleted: only its tombstone remains | Файл удалён: от него осталось надгробие, байтов нет. |
 | `finding_not_in_force` | Finding is superseded by a later finding | Заметка дела проекта или области уже заменена другой, а её заменяют снова. |
 | `idempotency_key_reused` | Idempotency key was used for a different request | Ключ идемпотентности уже использован другим запросом. |

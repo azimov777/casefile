@@ -59,6 +59,7 @@ from app.api.schemas.tasks import (
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.tasks import CheckEdit, clip_parent_goal
 from app.services import case as case_service
+from app.services import files as files_service
 from app.services import projects as projects_service
 from app.services import search as search_service
 from app.services import tasks as service
@@ -282,6 +283,8 @@ async def read_task(
             )
         )
     key = package.task.key
+    shown = [package.summary] if package.summary is not None else []
+    attached = await files_service.entry_attachments(session, [*shown, *package.remarks])
     return DataResponse[TaskPackageRead | TaskBriefRead](
         data=TaskPackageRead(
             state=state,
@@ -294,11 +297,16 @@ async def read_task(
             # `entry_read` отдаёт вариант по типу записи, а сценарий гарантирует, что
             # сюда попали именно сводка, вопросы и замечания: сузить тип здесь нечем и
             # незачем.
-            summary=None if package.summary is None else entry_read(package.summary, task_key=key),
+            summary=None
+            if package.summary is None
+            else entry_read(package.summary, task_key=key, files=attached.get(package.summary.id)),
             questions=[
                 task_question_read(question, task_key=key) for question in package.questions
             ],
-            remarks=[entry_read(remark, task_key=key) for remark in package.remarks],
+            remarks=[
+                entry_read(remark, task_key=key, files=attached.get(remark.id))
+                for remark in package.remarks
+            ],
             discussions=[task_discussion_read(item) for item in package.discussions],
             transitions=list(package.transitions),
             index=[EntryHeadingRead.model_validate(heading) for heading in package.index],
@@ -559,8 +567,12 @@ async def create_task_entry(
             body=given.get("body", ""),
             payload=given.get("payload"),
             refs=given.get("refs", []),
+            files=given.get("files", []),
         )
-        return DataResponse[EntryRead](data=entry_read(appended, task_key=task.key))
+        attached = await files_service.entry_attachments(session, [appended])
+        return DataResponse[EntryRead](
+            data=entry_read(appended, task_key=task.key, files=attached.get(appended.id))
+        )
 
     return await once.run(
         DataResponse[EntryRead],
@@ -600,9 +612,15 @@ async def list_task_entries(
         limit=limit,
         cursor=cursor,
     )
+    attached = await files_service.entry_attachments(session, page.items)
     return CollectionResponse[EntryRead].of(
         [
-            entry_read(entry, task_key=task.key, lifted_by=page.lifts.get(entry.no))
+            entry_read(
+                entry,
+                task_key=task.key,
+                lifted_by=page.lifts.get(entry.no),
+                files=attached.get(entry.id),
+            )
             for entry in page.items
         ],
         next_cursor=page.next_cursor,
@@ -624,6 +642,9 @@ async def read_task_entry(
     task = await service.get_task(session, task_key)
     entry = await case_service.read_entry(session, task, entry_no, actor=actor)
     lifts = await case_service.draft_lifts(session, task, [entry])
+    attached = await files_service.entry_attachments(session, [entry])
     return DataResponse[EntryRead](
-        data=entry_read(entry, task_key=task.key, lifted_by=lifts.get(entry.no))
+        data=entry_read(
+            entry, task_key=task.key, lifted_by=lifts.get(entry.no), files=attached.get(entry.id)
+        )
     )

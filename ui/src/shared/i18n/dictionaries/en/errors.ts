@@ -61,6 +61,7 @@ export const errors = {
   discussion_task_not_found: 'This task is not attached to the discussion.',
   entry_fields_invalid: 'The entry did not pass validation.',
   entry_not_found: 'This task has no entry with that number.',
+  file_count_mismatch: 'The number of matching files has changed: nothing was deleted.',
   file_deleted: 'The file was deleted: only its tombstone remains.',
   file_fields_invalid: 'The file name or type is invalid.',
   file_not_found: 'There is no such file.',

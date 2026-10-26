@@ -1468,6 +1468,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List files of the installation
+         * @description Файлы установки: поиск по имени, отбор по типу и проекту, сортировка, курсор.
+         *
+         *     По умолчанию — свежие добавленные первыми, без надгробий. Номер страницы — только
+         *     курсор `meta.next_cursor`; он действителен при том же отборе и порядке.
+         */
+        get: operations["list_files"];
+        put?: never;
+        /**
+         * Upload a file
+         * @description Кладёт файл в проект: `multipart/form-data` с полями `project`, `file` и, если имя
+         *     не то, что у части, `name`. Тип берётся из `Content-Type` части.
+         *
+         *     Отказы: проект неизвестен — `404 project_not_found`, архивный — `409 project_archived`,
+         *     имя или тип не годятся — `422 file_fields_invalid`, файл больше предела установки —
+         *     `422 file_too_large` (`details.size`, `details.max_bytes`). Повтор с тем же
+         *     `Idempotency-Key` и тем же содержимым отвечает первой карточкой.
+         */
+        post: operations["upload_file"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/files/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete several files
+         * @description Удаляет несколько файлов: выбранные (`ids`) или все под отбор (`expected_count` и
+         *     отбор `project`, `q`, `mime_type`; без отбора — все файлы установки).
+         *
+         *     Байты стираются, остаются надгробия. По отбору нужно число, которое человек
+         *     подтвердил: не совпало с числом подходящих — `409 file_count_mismatch`
+         *     (`details.expected`, `details.actual`), ничего не удалено. Выбранные удаляются все или
+         *     ни одного: неизвестный файл — `404 file_not_found`, уже удалённый —
+         *     `409 file_deleted`, архивный проект — `409 project_archived`. Повтор отвечает так же,
+         *     как первый вызов отвечал бы на то же состояние: удалённое второй раз не удаляется.
+         */
+        post: operations["delete_files"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a file card
+         * @description Карточка файла: имя, тип, размер, `sha256`, кто и когда добавил, заменил, последний
+         *     раз открыл, число ссылающихся записей и задач. У удалённого — надгробие
+         *     (`deleted: true`). Неизвестный файл — `404 file_not_found`. Чтение карточки не считается
+         *     открытием файла.
+         */
+        get: operations["read_file"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a file
+         * @description Стирает байты и оставляет надгробие; отдаёт его. Записи, которые прикладывали файл,
+         *     показывают «файл удалён». Повторное удаление — `409 file_deleted`, архивный проект —
+         *     `409 project_archived`.
+         */
+        delete: operations["delete_file"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/files/{file_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the bytes of a file
+         * @description Байты файла с его `Content-Type` и `Content-Disposition: attachment`; ставит
+         *     «последний раз открыт». Тело — сам файл, без оболочки `data`.
+         *
+         *     Удалённый файл — `409 file_deleted`, неизвестный — `404 file_not_found`. Архивный
+         *     проект байтов не прячет.
+         */
+        get: operations["download_file"];
+        /**
+         * Replace the content of a file
+         * @description Кладёт новые байты под ту же ссылку; прежние стираются, истории версий нет. Записи,
+         *     которые прикладывают файл, показывают новое содержимое.
+         *
+         *     `multipart/form-data` с частью `file` и, если нужно переименовать, `name`. Тип берётся
+         *     из `Content-Type` части. Удалённый файл — `409 file_deleted`, архивный проект —
+         *     `409 project_archived`, файл больше предела — `422 file_too_large`.
+         */
+        put: operations["replace_file"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/journal": {
         parameters: {
             query?: never;
@@ -1612,6 +1735,12 @@ export interface components {
          */
         AcceptanceEntryCreate: {
             /**
+             * Files
+             * @description References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`
+             * @example []
+             */
+            files?: string[];
+            /**
              * Body
              * @description Markdown body of the entry
              * @default
@@ -1713,6 +1842,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -1915,6 +2049,12 @@ export interface components {
          */
         AnswerEntryCreate: {
             /**
+             * Files
+             * @description References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`
+             * @example []
+             */
+            files?: string[];
+            /**
              * Body
              * @description Markdown body of the entry
              * @default
@@ -2013,6 +2153,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -2251,6 +2396,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -2779,6 +2929,11 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
+            /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
@@ -2919,6 +3074,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -3065,6 +3225,11 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
+            /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
@@ -3196,6 +3361,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -3381,6 +3551,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -3649,6 +3824,12 @@ export interface components {
             data: components["schemas"]["EntryRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
+        /** CollectionResponse[FileRead] */
+        CollectionResponse_FileRead_: {
+            /** Data */
+            data: components["schemas"]["FileRead"][];
+            meta?: components["schemas"]["PageMeta"];
+        };
         /** CollectionResponse[InstallationSettingRead] */
         CollectionResponse_InstallationSettingRead_: {
             /** Data */
@@ -3765,6 +3946,11 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
+            /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
@@ -3878,6 +4064,14 @@ export interface components {
         /** DataResponse[EntryRead] */
         DataResponse_EntryRead_: {
             data: components["schemas"]["EntryRead"];
+        };
+        /** DataResponse[FileRead] */
+        DataResponse_FileRead_: {
+            data: components["schemas"]["FileRead"];
+        };
+        /** DataResponse[FilesDeleted] */
+        DataResponse_FilesDeleted_: {
+            data: components["schemas"]["FilesDeleted"];
         };
         /** DataResponse[InstallationArchive] */
         DataResponse_InstallationArchive_: {
@@ -4015,6 +4209,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * @description Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's case, in the journal and in the answer that files the entry
              * @example in_force
@@ -4185,6 +4384,11 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
+            /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
@@ -4336,6 +4540,12 @@ export interface components {
          *     Свободная запись человека задаёт работу привязанных задач, как ответ (`TRK#51`, п. 5).
          */
         DiscussionNoteCreate: {
+            /**
+             * Files
+             * @description References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`
+             * @example []
+             */
+            files?: string[];
             /**
              * Body
              * @description Markdown body of the entry
@@ -4645,6 +4855,11 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
+            /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
@@ -4712,6 +4927,169 @@ export interface components {
              * @description New value
              */
             after?: string | null;
+        };
+        /**
+         * FileDeletion
+         * @description Удаление нескольких файлов: выбранные по номерам или все под отбор с числом.
+         *
+         *     Ровно одно из двух: `ids` — выбранные файлы; либо `expected_count` — число файлов,
+         *     которое человек увидел и подтвердил, вместе с отбором (`project`, `q`, `mime_type`;
+         *     без отбора — все файлы установки). Не совпало с числом подходящих — отказ
+         *     `file_count_mismatch`, ничего не удалено.
+         */
+        FileDeletion: {
+            /**
+             * Ids
+             * @description Files picked one by one; all of them are deleted or none
+             */
+            ids?: string[] | null;
+            /**
+             * Expected Count
+             * @description Number of matching files the person confirmed; with the filter below
+             */
+            expected_count?: number | null;
+            /**
+             * Project
+             * @description Filter by project
+             * @example TRK
+             */
+            project?: string | null;
+            /**
+             * Q
+             * @description Filter by a part of the name
+             */
+            q?: string | null;
+            /**
+             * Mime Type
+             * @description Filter by type: `image/png` or `image`
+             * @example image
+             */
+            mime_type?: string | null;
+        };
+        /**
+         * FileRead
+         * @description Карточка файла без байтов — живого или надгробие.
+         */
+        FileRead: {
+            /**
+             * Id
+             * Format: uuid
+             * @description File reference: stays the same when the file is replaced
+             */
+            id: string;
+            /**
+             * Project Key
+             * @example TRK
+             */
+            project_key: string;
+            /**
+             * Name
+             * @example scheme.png
+             */
+            name: string;
+            /**
+             * Mime Type
+             * @example image/png
+             */
+            mime_type: string;
+            /**
+             * Size Bytes
+             * @description Size of the content at the last upload
+             * @example 48213
+             */
+            size_bytes: number;
+            /**
+             * Sha256
+             * @description SHA-256 of the content, 64 hexadecimal characters
+             */
+            sha256: string;
+            added_by: components["schemas"]["AuthorRead"];
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+            /** @description Who replaced the content last; null if never replaced */
+            replaced_by?: components["schemas"]["AuthorRead"] | null;
+            /** Replaced At */
+            replaced_at?: string | null;
+            /**
+             * Last Opened At
+             * @description When the bytes were last served; null if never opened
+             */
+            last_opened_at?: string | null;
+            /**
+             * Deleted
+             * @description True for a tombstone: the bytes are gone
+             */
+            deleted: boolean;
+            deleted_by?: components["schemas"]["AuthorRead"] | null;
+            /** Deleted At */
+            deleted_at?: string | null;
+            /**
+             * Entries
+             * @description Case entries that attach the file
+             */
+            entries: number;
+            /**
+             * Tasks
+             * @description Distinct tasks among those entries
+             */
+            tasks: number;
+        };
+        /**
+         * FileReplacement
+         * @description Части формы `PUT /files/{id}/content`: `multipart/form-data`.
+         */
+        FileReplacement: {
+            /**
+             * File
+             * @description The new content. Its `Content-Type` becomes the type of the file
+             */
+            file: string;
+            /**
+             * Name
+             * @description New name of the file; without it the name stays
+             */
+            name?: string | null;
+        };
+        /**
+         * FileSort
+         * @description По чему упорядочен список файлов. Направление — отдельно (`descending`).
+         * @enum {string}
+         */
+        FileSort: "added" | "opened" | "size" | "type";
+        /**
+         * FileUpload
+         * @description Части формы `POST /files`: `multipart/form-data`. Лишняя часть — отказ.
+         */
+        FileUpload: {
+            /**
+             * Project
+             * @description Key of the project the file belongs to
+             * @example TRK
+             */
+            project: string;
+            /**
+             * File
+             * @description The file itself. Its `filename` and `Content-Type` name the file and its type
+             */
+            file: string;
+            /**
+             * Name
+             * @description Name of the file; without it the `filename` of the part is used
+             */
+            name?: string | null;
+        };
+        /**
+         * FilesDeleted
+         * @description Итог удаления нескольких файлов: надгробия.
+         */
+        FilesDeleted: {
+            /** Deleted */
+            deleted: number;
+            /** Files */
+            files: components["schemas"]["FileRead"][];
         };
         /**
          * FindingEntryRead
@@ -4793,6 +5171,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * @description Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's case, in the journal and in the answer that files the entry
              * @example in_force
@@ -5087,6 +5470,11 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
+            /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
@@ -5268,6 +5656,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -5606,6 +5999,12 @@ export interface components {
          */
         PlainEntryCreate: {
             /**
+             * Files
+             * @description References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`
+             * @example []
+             */
+            files?: string[];
+            /**
              * Body
              * @description Markdown body of the entry
              * @default
@@ -5708,6 +6107,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -5861,6 +6265,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -6079,6 +6488,12 @@ export interface components {
          */
         ProjectEntryCreate: {
             /**
+             * Files
+             * @description References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`
+             * @example []
+             */
+            files?: string[];
+            /**
              * Body
              * @description Markdown body of the entry
              * @default
@@ -6284,6 +6699,11 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
+            /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
@@ -6313,6 +6733,12 @@ export interface components {
          * @description Вопрос участникам реестра.
          */
         QuestionEntryCreate: {
+            /**
+             * Files
+             * @description References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`
+             * @example []
+             */
+            files?: string[];
             /**
              * Body
              * @description Markdown body of the entry
@@ -6417,6 +6843,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -6560,6 +6991,12 @@ export interface components {
          */
         RemarkEntryCreate: {
             /**
+             * Files
+             * @description References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`
+             * @example []
+             */
+            files?: string[];
+            /**
              * Body
              * @description Markdown body of the entry
              * @default
@@ -6662,6 +7099,11 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
+            /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
@@ -6722,6 +7164,12 @@ export interface components {
          * @description Резолюция. Заголовок не принимается: он собирается из ссылки на замечание и исхода.
          */
         ResolutionEntryCreate: {
+            /**
+             * Files
+             * @description References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`
+             * @example []
+             */
+            files?: string[];
             /**
              * Body
              * @description Markdown body of the entry
@@ -6819,6 +7267,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -6970,6 +7423,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -7268,6 +7726,11 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
+            /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
@@ -7342,6 +7805,12 @@ export interface components {
          *     своя дверь (`POST /tasks/{key}/close`) и своя модель с `unmeasured`.
          */
         SummaryEntryCreate: {
+            /**
+             * Files
+             * @description References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`
+             * @example []
+             */
+            files?: string[];
             /**
              * Body
              * @description Markdown body of the entry
@@ -7439,6 +7908,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -8152,6 +8626,11 @@ export interface components {
              */
             action_id?: string | null;
             /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
+            /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
              * @example null
@@ -8678,6 +9157,12 @@ export interface components {
          */
         VerdictEntryCreate: {
             /**
+             * Files
+             * @description References of uploaded files to attach, at most 10, no repeats; the order is kept. A file of any project of the installation may be attached; an unknown one answers `file_not_found`, a deleted one `file_deleted`
+             * @example []
+             */
+            files?: string[];
+            /**
              * Body
              * @description Markdown body of the entry
              * @default
@@ -8774,6 +9259,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -8955,6 +9445,11 @@ export interface components {
              * @example null
              */
             action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
             /**
              * Status
              * @description Always `null`: only decisions and findings of a project's or an area's case have a status
@@ -14284,6 +14779,588 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CollectionResponse_RemarkEntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_files: {
+        parameters: {
+            query?: {
+                /** @description Part of the name, ignoring case */
+                q?: string | null;
+                /** @description Project key. Without it files of archived projects are left out; a project named here is listed even archived */
+                project?: string | null;
+                /** @description Type: `image/png` exactly, `image` or `image/*` for the whole family */
+                mime_type?: string | null;
+                /** @description Order key: when added, when last opened (never opened counts as added), size, type */
+                sort?: components["schemas"]["FileSort"];
+                /** @description Biggest or newest first (the default); false reverses the order */
+                descending?: boolean;
+                /** @description Also list tombstones of deleted files */
+                include_deleted?: boolean;
+                /** @description Page size */
+                limit?: number;
+                /** @description Cursor from `meta.next_cursor` of a previous page */
+                cursor?: string | null;
+            };
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse_FileRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    upload_file: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["FileUpload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_FileRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_files: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileDeletion"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_FilesDeleted_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_file: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description File reference (`id` of a file card) */
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_FileRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_file: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description File reference (`id` of a file card) */
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_FileRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    download_file: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description File reference (`id` of a file card) */
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bytes of the file, as uploaded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    replace_file: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description File reference (`id` of a file card) */
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["FileReplacement"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_FileRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
