@@ -69,6 +69,8 @@ a rule that was replaced. Read them every time you enter a task, a small one too
    besides the task's own area, read its area the same way. Do not read all of them, and
    do not stop at the task's own: a task that changes the importer and the schema binds
    `TRK/importer` and `TRK/schema` alike.
+   Your area's `see_also` in `get_project` names the areas its readers also read, each
+   with a reason: open the ones whose reason fits your work, titles first.
 4. Titles first, bodies only of the entries you need. `get_project` gives titles and
    addresses, not bodies. Pick the entries whose title is about your work and read just
    them: `read_project_entries(key="TRK/importer", nos=[3, 7])`. Do not read the whole

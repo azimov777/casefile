@@ -1360,6 +1360,14 @@ async def add_discussion_entry(
     )
 
 
+async def latest_area_entry_no(session: AsyncSession, area: Area) -> int:
+    """Номер последней записи дела области — двойник `latest_entry_no` у задачи: годится
+    сразу после подшивки связи области, в той же транзакции под очередью изменений."""
+    no = await EntryRepository(session).latest_area_no(area.id)
+    assert no is not None  # у любой области есть хотя бы `created`
+    return no
+
+
 async def latest_discussion_entry_no(session: AsyncSession, discussion: Discussion) -> int:
     """Номер последней записи дела обсуждения — двойник `latest_entry_no` у задачи: годится
     сразу после подшивки, в той же транзакции под очередью изменений."""
