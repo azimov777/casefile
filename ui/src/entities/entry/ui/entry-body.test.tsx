@@ -101,6 +101,7 @@ function expected(): Record<EntryType, (string | RegExp)[]> {
     ],
     archived: [say.ui('entry.headline.projectArchived'), /Демо отложено/],
     restored: [say.ui('entry.headline.projectRestored'), /Демо отложено/],
+    decision_review: [/Тело записи/],
     // Обсуждение (TRK-669): в деле задачи привязка называет адрес обсуждения; итог —
     // три части подписями; закрытие — одной строкой.
     attached: [say.ui('entry.headline.attachedTo'), 'DEMO~1'],

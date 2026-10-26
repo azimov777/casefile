@@ -67,7 +67,7 @@ from app.domain.case import (
     VerdictOutcome,
     read_payload,
 )
-from app.domain.decisions import DecisionStatus
+from app.domain.decisions import DecisionStatus, ReviewOutcome, ReviewState
 from app.domain.files import MAX_ENTRY_FILES, FileCard
 from app.domain.links import LinkKind
 from app.domain.tasks import FIRST_CHECK_NUMBER, TaskField, TaskStatus
@@ -120,6 +120,7 @@ class NoFactsRead(_EntryFactsBase):
         EntryType.CLOSED,
         EntryType.ARCHIVED,
         EntryType.RESTORED,
+        EntryType.DECISION_REVIEW,
     ]
 
 
@@ -893,6 +894,24 @@ class AttributeRemovedPayload(BaseModel):
     )
 
 
+class DecisionReviewPayload(BaseModel):
+    """Проверка решения человеком: номер решения в деле и исход (TRK-755)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: int = Field(
+        examples=[15], description="Number of the reviewed `decision` entry in the same case"
+    )
+    outcome: ReviewOutcome = Field(
+        examples=[ReviewOutcome.CONFIRMED],
+        description=(
+            "`confirmed`: the person saw the decision and agrees; `rejected`: disagrees; "
+            "`removed`: out of date. The last two take the decision out of force with no "
+            "replacement, the entry stays in the case"
+        ),
+    )
+
+
 class WarningPayload(BaseModel):
     """Предупреждение закрытия: проверки, чей последний вердикт закрывающего захода —
     `partial` или `unverifiable`."""
@@ -1014,6 +1033,22 @@ class _EntryReadBase(BaseModel):
         description=(
             "Always `null`: only decisions and findings of a project's or an area's case "
             "are superseded"
+        ),
+    )
+    # Состояние проверки человеком есть только у решения дела проекта или области
+    # (`_ReplaceableEntryRead`, TRK-755); у остальных типов поля стоят ради одной формы.
+    review_state: None = Field(
+        default=None,
+        examples=[None],
+        description=(
+            "Always `null`: only decisions of a project's or an area's case have a review state"
+        ),
+    )
+    review_entry: None = Field(
+        default=None,
+        examples=[None],
+        description=(
+            "Always `null`: only decisions of a project's or an area's case have a review state"
         ),
     )
     # Подъём есть только у черновика — решения и находки дела задачи с `draft_for`
@@ -1145,9 +1180,28 @@ class _ReplaceableEntryRead(_ProjectOwnableEntryRead):
         examples=[DecisionStatus.IN_FORCE],
         description=(
             "Computed on read of a project's or an area's case: `superseded` once a later "
-            "entry of the same type in the case names this one in `supersedes`, `in_force` "
-            "until then. `null` in a task's case, in the journal and in the answer that "
-            "files the entry"
+            "entry of the same type in the case names this one in `supersedes`; for a "
+            "decision also `rejected` or `removed` once a person took it out of force with "
+            "a `decision_review` entry; `in_force` otherwise. `null` in a task's case, in "
+            "the journal and in the answer that files the entry"
+        ),
+    )
+    review_state: ReviewState | None = Field(  # type: ignore[assignment]
+        default=None,
+        examples=[ReviewState.UNCONFIRMED],
+        description=(
+            "Computed on read of a project's or an area's case, for a decision only: "
+            "`confirmed` if a person confirmed it with a `decision_review` entry or signed "
+            "it, `unconfirmed` otherwise (every decision an agent filed). `null` for a "
+            "finding, in a task's case, in the journal and in the answer that files the entry"
+        ),
+    )
+    review_entry: int | None = Field(  # type: ignore[assignment]
+        default=None,
+        examples=[None],
+        description=(
+            "Number of the `decision_review` entry that confirmed the decision; `null` if "
+            "it is unconfirmed, was signed by a person (no entry) or `review_state` is `null`"
         ),
     )
     superseded_by: int | None = Field(  # type: ignore[assignment]
@@ -1407,6 +1461,13 @@ class AttributeRemovedEntryRead(_ProjectEntryRead):
     payload: AttributeRemovedPayload
 
 
+class DecisionReviewEntryRead(_ProjectEntryRead):
+    """Служебная запись: человек проверил решение проекта или области (TRK-755)."""
+
+    type: Literal[EntryType.DECISION_REVIEW]
+    payload: DecisionReviewPayload
+
+
 class ProjectArchiveEntryRead(_ProjectEntryRead):
     """Служебная запись: проект архивирован (`archived`) или восстановлен (`restored`)."""
 
@@ -1436,6 +1497,7 @@ type EntryRead = Annotated[
     | AttributeChangedEntryRead
     | AttributeRemovedEntryRead
     | ProjectArchiveEntryRead
+    | DecisionReviewEntryRead
     | ConclusionEntryRead
     | AttachmentEntryRead
     | DiscussionClosedEntryRead,
@@ -1485,6 +1547,7 @@ _READ_MODELS: dict[EntryType, type[_EntryReadBase]] = {
     EntryType.ATTRIBUTE_REMOVED: AttributeRemovedEntryRead,
     EntryType.ARCHIVED: ProjectArchiveEntryRead,
     EntryType.RESTORED: ProjectArchiveEntryRead,
+    EntryType.DECISION_REVIEW: DecisionReviewEntryRead,
     EntryType.CONCLUSION: ConclusionEntryRead,
     EntryType.ATTACHED: AttachmentEntryRead,
     EntryType.DETACHED: AttachmentEntryRead,
@@ -1542,6 +1605,8 @@ def entry_read(
         action_id=entry.action_id,
         status=None if standing is None else standing.status,
         superseded_by=None if standing is None else standing.superseded_by,
+        review_state=None if standing is None else standing.review_state,
+        review_entry=None if standing is None else standing.review_entry,
         lifted_by=None if lifted_by is None else list(lifted_by),
         files=[] if files is None else [file_read(card) for card in files],
     )
@@ -1707,8 +1772,8 @@ class ProjectEntryCreate(_TitledEntryCreate, _AttachmentsField):
             "Numbers of earlier entries of the same type in this project's case that the new "
             "entry supersedes; only with `decision` and `finding`. A number outside the "
             "project's case or of another type answers `entry_fields_invalid`; an entry "
-            "superseded already, `decision_not_in_force` or `finding_not_in_force` with its "
-            "successor"
+            "superseded already (or, for a decision, rejected or removed), "
+            "`decision_not_in_force` or `finding_not_in_force` with its successor"
         ),
     )
 
@@ -1716,9 +1781,8 @@ class ProjectEntryCreate(_TitledEntryCreate, _AttachmentsField):
 class AreaEntryCreate(_TitledEntryCreate):
     """Запись агента или человека в деле области: заметка, решение, находка, артефакт.
 
-    Те же типы, что у дела проекта (TRK#57), но без `supersedes`: замену у
-    дела области ведёт агент через MCP, интерфейс записей не заменяет, и поля без вызова
-    REST не держит (решение TRK#53). Лишнее поле схема отвергает до сценария.
+    Те же типы и та же замена, что у дела проекта (TRK#57, TRK-755): `supersedes` — у
+    решения и находки, человек исправляет решение области новым решением.
     """
 
     type: Literal[
@@ -1727,6 +1791,17 @@ class AreaEntryCreate(_TitledEntryCreate):
         EntryType.FINDING,
         EntryType.ARTIFACT,
     ]
+    supersedes: list[int] = Field(
+        default_factory=list,
+        examples=[[12]],
+        description=(
+            "Numbers of earlier entries of the same type in this area's case that the new "
+            "entry supersedes; only with `decision` and `finding`. A number outside the "
+            "area's case or of another type answers `entry_fields_invalid`; an entry "
+            "superseded already, rejected or removed, `decision_not_in_force` or "
+            "`finding_not_in_force`"
+        ),
+    )
 
 
 class DiscussionNoteCreate(_TitledEntryCreate, _AttachmentsField):

@@ -27,6 +27,8 @@ function decision(no: number, overrides: Partial<ProjectDecision> = {}): Project
     author: { kind: 'agent', signature: 'demo_agent' },
     created_at: CREATED,
     status: 'in_force',
+    review_state: 'unconfirmed',
+    review_entry: null,
     supersedes: [],
     superseded_by: null,
     tasks: 0,

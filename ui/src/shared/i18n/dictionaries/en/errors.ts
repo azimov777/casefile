@@ -52,8 +52,9 @@ export const errors = {
   current_password_mismatch: 'The current password is wrong.',
   cursor_with_offset: 'The page is addressed two ways at once: by cursor and by offset.',
   database_unavailable: 'The database is unavailable.',
+  decision_already_confirmed: 'This decision is already confirmed.',
   decision_not_in_force:
-    'This project decision has been superseded: refer to the one that replaced it.',
+    'This decision no longer applies: it was superseded, rejected or removed. Refer to the one that replaced it, if there is one.',
   discussion_closed: 'The discussion is closed: nothing in it changes any more.',
   discussion_has_open_questions: 'The discussion still has a question with no answer.',
   discussion_not_found: 'There is no discussion with that number in this project.',

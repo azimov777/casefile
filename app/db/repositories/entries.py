@@ -17,6 +17,7 @@ GIN-индекс по нагрузке вопросов (миграция `case 
 
 import uuid
 from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -110,6 +111,28 @@ def _in_project_or_active(project_id: uuid.UUID | None) -> ColumnElement[bool]:
     if project_id is not None:
         return Task.project_id == project_id
     return in_active_project(Task.project_id)
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionFact:
+    """Запись `decision` или `decision_review` дела проекта или области, без тела.
+
+    `owner` — ключ проекта или адрес области, голова ссылки на запись; `area` — адрес
+    области или `None` у записи дела проекта; `owner_id` — идентификатор владельца дела.
+    """
+
+    id: uuid.UUID
+    seq: int
+    no: int
+    type: EntryType
+    title: str
+    author: Author
+    created_at: datetime
+    refs: list[str]
+    payload: dict[str, Any]
+    owner_id: uuid.UUID
+    owner: str
+    area: str | None
 
 
 class EntryRepository:
@@ -513,6 +536,131 @@ class EntryRepository:
             select(Entry).where(owned, Entry.type == EntryType.DECISION).order_by(owner, Entry.no)
         )
         return list(await self._session.scalars(statement))
+
+    async def project_decision_reviews(self, project_ids: Sequence[uuid.UUID]) -> list[Entry]:
+        """Записи `decision_review` дел этих проектов — проверки решений человеком (TRK-755)."""
+        if not project_ids:
+            return []
+        return await self._reviews(Entry.project_id.in_(list(project_ids)), Entry.project_id)
+
+    async def area_decision_reviews(self, area_ids: Sequence[uuid.UUID]) -> list[Entry]:
+        """То же, что `project_decision_reviews`, для дел областей."""
+        if not area_ids:
+            return []
+        return await self._reviews(Entry.area_id.in_(list(area_ids)), Entry.area_id)
+
+    async def _reviews(self, owned: ColumnElement[bool], owner: Any) -> list[Entry]:
+        statement = (
+            select(Entry)
+            .where(owned, Entry.type == EntryType.DECISION_REVIEW)
+            .order_by(owner, Entry.no)
+        )
+        return list(await self._session.scalars(statement))
+
+    async def decision_facts(
+        self, *, project_id: uuid.UUID | None, access: ProjectAccess = UNRESTRICTED
+    ) -> list[DecisionFact]:
+        """Решения и проверки решений дел проектов и их областей, без тел, по `seq`.
+
+        Для списка решений и счётчика непроверенных (TRK-755). Названный проект читается
+        любой, в том числе архивный; без названия — только неархивные проекты, открытые
+        доступу вызова. Области — только неархивные: решения архивной области в списке
+        не нужны. Статус считает вызывающий (`app/services/decisions.py`): ему нужны
+        записи `decision` и `decision_review` дела целиком.
+        """
+        types = [EntryType.DECISION, EntryType.DECISION_REVIEW]
+        columns = (
+            Entry.id,
+            Entry.seq,
+            Entry.no,
+            Entry.type,
+            Entry.title,
+            Entry.created_by_kind,
+            Entry.created_by_signature,
+            Entry.created_at,
+            Entry.refs,
+            Entry.payload,
+        )
+        scope = open_to(access, Project.id)
+        if project_id is not None:
+            scope = and_(scope, Project.id == project_id)
+        else:
+            scope = and_(scope, Project.archived_at.is_(None))
+        in_project = (
+            select(*columns, Project.key.label("project_key"), Entry.project_id.label("owner_id"))
+            .join(Project, Project.id == Entry.project_id)
+            .where(Entry.type.in_(types), scope)
+        )
+        in_area = (
+            select(
+                *columns,
+                Project.key.label("project_key"),
+                Area.key.label("area_key"),
+                Entry.area_id.label("owner_id"),
+            )
+            .join(Area, Area.id == Entry.area_id)
+            .join(Project, Project.id == Area.project_id)
+            .where(Entry.type.in_(types), Area.archived_at.is_(None), scope)
+        )
+        facts: list[DecisionFact] = []
+        for area_key, statement in ((False, in_project), (True, in_area)):
+            for row in await self._session.execute(statement):
+                facts.append(
+                    DecisionFact(
+                        id=row.id,
+                        seq=row.seq,
+                        no=row.no,
+                        type=row.type,
+                        title=row.title,
+                        author=Author(kind=row.created_by_kind, signature=row.created_by_signature),
+                        created_at=row.created_at,
+                        refs=list(row.refs),
+                        payload=row.payload,
+                        owner_id=row.owner_id,
+                        owner=(
+                            format_area_address(row.project_key, row.area_key)
+                            if area_key
+                            else row.project_key
+                        ),
+                        area=format_area_address(row.project_key, row.area_key)
+                        if area_key
+                        else None,
+                    )
+                )
+        return sorted(facts, key=lambda fact: fact.seq)
+
+    async def project_review_facts(
+        self, project_id: uuid.UUID
+    ) -> list[tuple[int, EntryType, dict[str, Any]]]:
+        """Факты проверки решений дела проекта: записи `decision_review` и номера решений,
+        подписанных человеком, — номер, тип и нагрузка, без тел."""
+        return await self._review_facts(Entry.project_id == project_id)
+
+    async def area_review_facts(
+        self, area_id: uuid.UUID
+    ) -> list[tuple[int, EntryType, dict[str, Any]]]:
+        """То же, что `project_review_facts`, для дела области."""
+        return await self._review_facts(Entry.area_id == area_id)
+
+    async def _review_facts(
+        self, owned: ColumnElement[bool]
+    ) -> list[tuple[int, EntryType, dict[str, Any]]]:
+        statement = (
+            select(Entry.no, Entry.type, Entry.payload)
+            .where(
+                owned,
+                or_(
+                    Entry.type == EntryType.DECISION_REVIEW,
+                    and_(
+                        Entry.type == EntryType.DECISION,
+                        Entry.created_by_kind == AuthorKind.HUMAN,
+                    ),
+                ),
+            )
+            .order_by(Entry.no)
+        )
+        rows: list[Any] = list(await self._session.execute(statement))
+        return [(row.no, row.type, row.payload) for row in rows]
 
     async def project_replaceables(
         self, project_id: uuid.UUID

@@ -116,6 +116,11 @@ class AreaDetailRead(AreaRead):
             "`attribute_removed`"
         )
     )
+    unconfirmed_decisions: int = Field(
+        default=0,
+        examples=[3],
+        description="How many decisions in force of this area no person has confirmed yet",
+    )
     see_also: list[AreaSeeAlsoRead] = Field(
         default_factory=list,
         description=(

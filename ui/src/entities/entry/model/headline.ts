@@ -407,6 +407,7 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
     case 'remark':
     case 'acceptance':
     case 'note':
+    case 'decision_review':
       return { kind: 'author' };
 
     /*

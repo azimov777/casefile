@@ -681,6 +681,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_key}/decisions/{decision_no}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review a project decision
+         * @description Человек подтверждает, отклоняет или удаляет действующее решение проекта (TRK-755).
+         *
+         *     Тело — `{outcome, reason}`, ответ — подшитая запись `decision_review`. Набор `task`,
+         *     но писать проверку может только человек с учётной записью: агенту — `403
+         *     permission_denied` с `details.reason: account_required`. Решения нет или оно не
+         *     действует — `409 decision_not_in_force` (у заменённого — с преемником), повторное
+         *     `confirmed` — `409 decision_already_confirmed`, архивный проект — `409
+         *     project_archived`. `rejected` и `removed` выводят решение из силы без замены, а то,
+         *     что оно когда-то заменило, не возвращают; запись остаётся в деле.
+         *
+         *     Повтор с тем же `Idempotency-Key` отвечает первой записью, а не подшивает вторую.
+         */
+        post: operations["review_project_decision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_key}/entries/{entry_no}": {
         parameters: {
             query?: never;
@@ -879,12 +909,35 @@ export interface paths {
          * @description Подшивает запись в дело области: заметку, решение, находку или артефакт.
          *
          *     Номер `no` считается внутри области, ссылка на запись — `TRK/promotion#3`.
-         *     `supersedes` в теле нет: замену у дела области ведёт агент через MCP, а интерфейс
-         *     записей не заменяет, и поле без вызова в REST не держат (решение TRK#53). Замечания к
-         *     форме и ссылкам — разом в `422 entry_fields_invalid`. Архивная область — `409
-         *     area_archived`.
+         *     `supersedes` называет решения и находки области, которые новая запись заменяет:
+         *     человек исправляет решение области новым решением (TRK-755). Замечания к форме и
+         *     ссылкам — разом в `422 entry_fields_invalid`. Архивная область — `409 area_archived`.
          */
         post: operations["create_area_entry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_key}/areas/{area_key}/decisions/{decision_no}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review an area decision
+         * @description Человек подтверждает, отклоняет или удаляет действующее решение области (TRK-755).
+         *
+         *     То же, что `POST /projects/{project_key}/decisions/{decision_no}/review`, для дела
+         *     области: тело `{outcome, reason}`, ответ — запись `decision_review`. Архивная область —
+         *     `409 area_archived`.
+         */
+        post: operations["review_area_decision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1269,6 +1322,34 @@ export interface paths {
          *     отвечает первой связью, а не `409 link_exists`.
          */
         post: operations["create_task_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List decisions
+         * @description Решения проекта и его неархивных областей или всех неархивных проектов, старые первыми.
+         *
+         *     Каждая строка — адрес решения, область (`null` у решения проекта), название, автор,
+         *     время, `status`, `review_state` и `review_entry`, `supersedes` и `superseded_by`
+         *     ссылками, `refs` самого решения и число задач, которые на него ссылаются. Тело
+         *     решения — в записи дела (`GET /projects/{key}/entries/{no}`). Отборы `status` и
+         *     `review_state` складываются по «и». `unconfirmed` в ответе — сколько действующих
+         *     решений не проверено во всей области списка; отборы его не меняют. Страницы
+         *     курсорные, как у других списков. Закрытый вызову проект в список не входит.
+         */
+        get: operations["list_decisions"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1861,6 +1942,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -2172,6 +2265,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -2415,6 +2520,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -2616,6 +2733,13 @@ export interface components {
              */
             attributes: components["schemas"]["AttributeRead"][];
             /**
+             * Unconfirmed Decisions
+             * @description How many decisions in force of this area no person has confirmed yet
+             * @default 0
+             * @example 3
+             */
+            unconfirmed_decisions: number;
+            /**
              * See Also
              * @description Areas this one refers to — "who works here, reads there too" — ordered by address; may lie in another project. The link is set by agents through MCP; an archived area stays listed. Each link is also an entry `link_added` or `link_removed` in the case of both areas
              */
@@ -2630,9 +2754,8 @@ export interface components {
          * AreaEntryCreate
          * @description Запись агента или человека в деле области: заметка, решение, находка, артефакт.
          *
-         *     Те же типы, что у дела проекта (TRK#57), но без `supersedes`: замену у
-         *     дела области ведёт агент через MCP, интерфейс записей не заменяет, и поля без вызова
-         *     REST не держит (решение TRK#53). Лишнее поле схема отвергает до сценария.
+         *     Те же типы и та же замена, что у дела проекта (TRK#57, TRK-755): `supersedes` — у
+         *     решения и находки, человек исправляет решение области новым решением.
          */
         AreaEntryCreate: {
             /**
@@ -2658,6 +2781,14 @@ export interface components {
              * @enum {string}
              */
             type: "note" | "decision" | "finding" | "artifact";
+            /**
+             * Supersedes
+             * @description Numbers of earlier entries of the same type in this area's case that the new entry supersedes; only with `decision` and `finding`. A number outside the area's case or of another type answers `entry_fields_invalid`; an entry superseded already, rejected or removed, `decision_not_in_force` or `finding_not_in_force`
+             * @example [
+             *       12
+             *     ]
+             */
+            supersedes?: number[];
         };
         /**
          * AreaLinkKind
@@ -2947,6 +3078,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -3092,6 +3235,18 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
             /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
@@ -3243,6 +3398,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -3379,6 +3546,18 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
             /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
@@ -3570,6 +3749,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -3686,6 +3877,13 @@ export interface components {
              * @example 2
              */
             open_discussions: number;
+            /**
+             * Unconfirmed Decisions
+             * @description Decisions in force that no person has confirmed yet, in the cases of projects that are not archived and their active areas — the inbox of decisions awaiting review. The same number as `unconfirmed` of `GET /api/v1/decisions` without `project`
+             * @default 0
+             * @example 12
+             */
+            unconfirmed_decisions: number;
         };
         /**
          * CheckUpdate
@@ -3731,7 +3929,7 @@ export interface components {
              */
             title: string;
             /**
-             * @description Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then
+             * @description Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`; `rejected` or `removed` once a person took it out of force with a `decision_review` entry (no successor); `in_force` otherwise
              * @example in_force
              */
             status: components["schemas"]["DecisionStatus"];
@@ -3963,6 +4161,18 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
             /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
@@ -4216,7 +4426,7 @@ export interface components {
              */
             files?: components["schemas"]["FileRead"][];
             /**
-             * @description Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's case, in the journal and in the answer that files the entry
+             * @description Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`; for a decision also `rejected` or `removed` once a person took it out of force with a `decision_review` entry; `in_force` otherwise. `null` in a task's case, in the journal and in the answer that files the entry
              * @example in_force
              */
             status?: components["schemas"]["DecisionStatus"] | null;
@@ -4226,6 +4436,17 @@ export interface components {
              * @example null
              */
             superseded_by?: number | null;
+            /**
+             * @description Computed on read of a project's or an area's case, for a decision only: `confirmed` if a person confirmed it with a `decision_review` entry or signed it, `unconfirmed` otherwise (every decision an agent filed). `null` for a finding, in a task's case, in the journal and in the answer that files the entry
+             * @example unconfirmed
+             */
+            review_state?: components["schemas"]["ReviewState"] | null;
+            /**
+             * Review Entry
+             * @description Number of the `decision_review` entry that confirmed the decision; `null` if it is unconfirmed, was signed by a person (no entry) or `review_state` is `null`
+             * @example null
+             */
+            review_entry?: number | null;
             /**
              * Lifted By
              * @description Computed on read of a task's case for a draft (`payload.draft_for` set): the entries of the named project's or area's case that reference this draft in `refs`, as `TRK/mcp#5`; empty while the draft is not lifted. `null` for an entry that is not a draft, in the journal and in the answer that files the entry
@@ -4240,6 +4461,94 @@ export interface components {
              * @enum {string}
              */
             type: "decision";
+        };
+        /**
+         * DecisionListRead
+         * @description Решение в списке решений поперёк проектов и областей.
+         */
+        DecisionListRead: {
+            /**
+             * Ref
+             * @description Address of the `decision` entry in its project's case (`TRK#15`) or area's case (`TRK/mcp#3`)
+             * @example TRK/mcp#3
+             */
+            ref: string;
+            /**
+             * Area
+             * @description Address of the area whose case holds the decision; `null` for a project's
+             * @example TRK/mcp
+             */
+            area: string | null;
+            /**
+             * Title
+             * @example Сервис не строим до сигнала спроса
+             */
+            title: string;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * @description Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`; `rejected` or `removed` once a person took it out of force with a `decision_review` entry (no successor); `in_force` otherwise
+             * @example in_force
+             */
+            status: components["schemas"]["DecisionStatus"];
+            /**
+             * @description Computed on read: `confirmed` if a person confirmed the decision with a `decision_review` entry or signed it, `unconfirmed` otherwise — every decision an agent filed before a person looked at it
+             * @example unconfirmed
+             */
+            review_state: components["schemas"]["ReviewState"];
+            /**
+             * Review Entry
+             * @description Number of the `decision_review` entry that confirmed the decision in the same case; `null` if it is unconfirmed or was signed by a person (no entry is needed)
+             * @example null
+             */
+            review_entry: number | null;
+            /**
+             * Supersedes
+             * @description Addresses of the decisions this one superseded
+             * @example [
+             *       "TRK#12"
+             *     ]
+             */
+            supersedes: string[];
+            /**
+             * Superseded By
+             * @description Address of the decision that superseded this one; `null` while in force
+             * @example null
+             */
+            superseded_by: string | null;
+            /**
+             * Refs
+             * @description References of the decision itself — where it came from
+             * @example [
+             *       "TRK-42#3"
+             *     ]
+             */
+            refs: string[];
+            /**
+             * Tasks
+             * @description How many tasks name this decision in their `decisions` field
+             * @example 3
+             */
+            tasks: number;
+        };
+        /**
+         * DecisionListResponse
+         * @description Страница списка решений и число непроверенных действующих.
+         */
+        DecisionListResponse: {
+            /** Data */
+            data: components["schemas"]["DecisionListRead"][];
+            meta?: components["schemas"]["PageMeta"];
+            /**
+             * Unconfirmed
+             * @description How many decisions in force are `unconfirmed` in the whole scope of the list (the named project with its active areas, or every active project): the filters `status` and `review_state` do not change it. The same number as `unconfirmed_decisions` of the project card and of `GET /api/v1/bootstrap`
+             * @example 12
+             */
+            unconfirmed: number;
         };
         /**
          * DecisionRefRead
@@ -4258,20 +4567,178 @@ export interface components {
              */
             title: string;
             /**
-             * @description Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then
+             * @description Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`; `rejected` or `removed` once a person took it out of force with a `decision_review` entry (no successor); `in_force` otherwise
              * @example in_force
              */
             status: components["schemas"]["DecisionStatus"];
+        };
+        /**
+         * DecisionReview
+         * @description Проверка решения человеком: исход и причина (TRK-755).
+         */
+        DecisionReview: {
+            /**
+             * @description `confirmed`: the person saw the decision and agrees (a second `confirmed` of a confirmed decision answers `decision_already_confirmed`); `rejected`: disagrees; `removed`: out of date. The last two take the decision out of force with no replacement and bring back nothing it replaced; the entry stays in the case. Only a decision in force is reviewed (`decision_not_in_force`); only a person with an account reviews (`403 permission_denied`, `details.reason: account_required`)
+             * @example confirmed
+             */
+            outcome: components["schemas"]["ReviewOutcome"];
+            /**
+             * Reason
+             * @description Why; free text, may be empty. It becomes the body of the review entry
+             * @default
+             * @example Устарело после перехода на новую схему
+             */
+            reason: string;
+        };
+        /**
+         * DecisionReviewEntryRead
+         * @description Служебная запись: человек проверил решение проекта или области (TRK-755).
+         */
+        DecisionReviewEntryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seq
+             * @description Tracker-wide monotonic number; journal cursor
+             * @example 1024
+             */
+            seq: number;
+            /**
+             * No
+             * @description Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry
+             * @example 12
+             */
+            no: number;
+            /**
+             * Task Key
+             * @description Always `null`: entries of this type belong to a project or an area, never to a task
+             * @example null
+             */
+            task_key: null;
+            /**
+             * Project Key
+             * @description Key of the owning project; the entry address is `TRK#7`. `null` for an area entry
+             * @example TRK
+             */
+            project_key: string | null;
+            /**
+             * Area
+             * @description Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry
+             * @example null
+             */
+            area?: string | null;
+            /**
+             * Discussion
+             * @description Always `null`: entries of this type never belong to a discussion
+             * @example null
+             */
+            discussion?: null;
+            author: components["schemas"]["AuthorRead"];
+            /**
+             * Title
+             * @description One line; this is what the case index shows
+             * @example Status changed: backlog -> open
+             */
+            title: string;
+            /**
+             * Body
+             * @description Markdown; empty for service entries, whose content is the payload
+             * @example
+             */
+            body: string;
+            /**
+             * Refs
+             * @description References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked
+             * @example [
+             *       "TRK-42#3",
+             *       "TRK-7"
+             *     ]
+             */
+            refs?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Action Id
+             * @description Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed
+             * @example null
+             */
+            action_id?: string | null;
+            /**
+             * Files
+             * @description Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none
+             */
+            files?: components["schemas"]["FileRead"][];
+            /**
+             * Status
+             * @description Always `null`: only decisions and findings of a project's or an area's case have a status
+             * @example null
+             */
+            status?: null;
+            /**
+             * Superseded By
+             * @description Always `null`: only decisions and findings of a project's or an area's case are superseded
+             * @example null
+             */
+            superseded_by?: null;
+            /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
+             * Lifted By
+             * @description Always `null`: only a draft decision or finding of a task's case is lifted
+             * @example null
+             */
+            lifted_by?: null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "decision_review";
+            payload: components["schemas"]["DecisionReviewPayload"];
+        };
+        /**
+         * DecisionReviewPayload
+         * @description Проверка решения человеком: номер решения в деле и исход (TRK-755).
+         */
+        DecisionReviewPayload: {
+            /**
+             * Decision
+             * @description Number of the reviewed `decision` entry in the same case
+             * @example 15
+             */
+            decision: number;
+            /**
+             * @description `confirmed`: the person saw the decision and agrees; `rejected`: disagrees; `removed`: out of date. The last two take the decision out of force with no replacement, the entry stays in the case
+             * @example confirmed
+             */
+            outcome: components["schemas"]["ReviewOutcome"];
         };
         /**
          * DecisionStatus
          * @description Действует ли запись знания — решение или заметка дела проекта или области.
          *
          *     Хранимым значением не бывает: только при чтении. Имя осталось от решений, первых
-         *     записей с заменой; у заметки те же два значения (TRK#48).
+         *     записей с заменой; у заметки два значения — `in_force` и `superseded` (TRK#48).
+         *     Решение, кроме них, бывает `rejected` и `removed` — человек отклонил его или удалил
+         *     (TRK-755): оба выводят решение из силы, преемника у них нет.
          * @enum {string}
          */
-        DecisionStatus: "in_force" | "superseded";
+        DecisionStatus: "in_force" | "superseded" | "rejected" | "removed";
         /**
          * DecisionsChangedPayload
          * @description Правка решений проекта задачи (`decisions`): списки ссылок «было» и «стало».
@@ -4401,6 +4868,18 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
             /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
@@ -4738,13 +5217,13 @@ export interface components {
             /** @description Length-bounded facts of the entry: enough to name it in any language without reading the English title the tracker builds. Which fields there are follows from `type`; entries whose title is written by their author have none */
             facts: components["schemas"]["EntryFactsRead"];
         };
-        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["FindingEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"] | components["schemas"]["ConclusionEntryRead"] | components["schemas"]["AttachmentEntryRead"] | components["schemas"]["DiscussionClosedEntryRead"];
+        EntryRead: components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["FindingEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"] | components["schemas"]["DecisionReviewEntryRead"] | components["schemas"]["ConclusionEntryRead"] | components["schemas"]["AttachmentEntryRead"] | components["schemas"]["DiscussionClosedEntryRead"];
         /**
          * EntryType
          * @description Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после.
          * @enum {string}
          */
-        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "remark" | "resolution" | "acceptance" | "conclusion" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed" | "moved" | "warning" | "attached" | "detached" | "closed" | "attribute_created" | "attribute_changed" | "attribute_removed" | "archived" | "restored";
+        EntryType: "summary" | "decision" | "attempt" | "finding" | "artifact" | "question" | "answer" | "verdict" | "remark" | "resolution" | "acceptance" | "conclusion" | "note" | "created" | "status_changed" | "section_changed" | "field_changed" | "assignee_changed" | "link_added" | "link_removed" | "moved" | "warning" | "attached" | "detached" | "closed" | "attribute_created" | "attribute_changed" | "attribute_removed" | "archived" | "restored" | "decision_review";
         /**
          * ErrorDetail
          * @description Тело ошибки. `code` — стабильный идентификатор, на него завязывается фронтенд.
@@ -4872,6 +5351,18 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
             /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
@@ -5188,7 +5679,7 @@ export interface components {
              */
             files?: components["schemas"]["FileRead"][];
             /**
-             * @description Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's case, in the journal and in the answer that files the entry
+             * @description Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`; for a decision also `rejected` or `removed` once a person took it out of force with a `decision_review` entry; `in_force` otherwise. `null` in a task's case, in the journal and in the answer that files the entry
              * @example in_force
              */
             status?: components["schemas"]["DecisionStatus"] | null;
@@ -5198,6 +5689,17 @@ export interface components {
              * @example null
              */
             superseded_by?: number | null;
+            /**
+             * @description Computed on read of a project's or an area's case, for a decision only: `confirmed` if a person confirmed it with a `decision_review` entry or signed it, `unconfirmed` otherwise (every decision an agent filed). `null` for a finding, in a task's case, in the journal and in the answer that files the entry
+             * @example unconfirmed
+             */
+            review_state?: components["schemas"]["ReviewState"] | null;
+            /**
+             * Review Entry
+             * @description Number of the `decision_review` entry that confirmed the decision; `null` if it is unconfirmed, was signed by a person (no entry) or `review_state` is `null`
+             * @example null
+             */
+            review_entry?: number | null;
             /**
              * Lifted By
              * @description Computed on read of a task's case for a draft (`payload.draft_for` set): the entries of the named project's or area's case that reference this draft in `refs`, as `TRK/mcp#5`; empty while the draft is not lifted. `null` for an entry that is not a draft, in the journal and in the answer that files the entry
@@ -5498,6 +6000,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -5685,6 +6199,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -5765,7 +6291,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "acceptance" | "archived" | "artifact" | "attempt" | "closed" | "conclusion" | "created" | "decision" | "finding" | "note" | "remark" | "restored" | "summary";
+            type: "acceptance" | "archived" | "artifact" | "attempt" | "closed" | "conclusion" | "created" | "decision" | "decision_review" | "finding" | "note" | "remark" | "restored" | "summary";
         };
         /**
          * OnboardingHintsRead
@@ -6136,6 +6662,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -6294,6 +6832,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -6391,10 +6941,21 @@ export interface components {
              */
             created_at: string;
             /**
-             * @description Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then
+             * @description Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`; `rejected` or `removed` once a person took it out of force with a `decision_review` entry (no successor); `in_force` otherwise
              * @example in_force
              */
             status: components["schemas"]["DecisionStatus"];
+            /**
+             * @description Computed on read: `confirmed` if a person confirmed the decision with a `decision_review` entry or signed it, `unconfirmed` otherwise — every decision an agent filed before a person looked at it
+             * @example unconfirmed
+             */
+            review_state: components["schemas"]["ReviewState"];
+            /**
+             * Review Entry
+             * @description Number of the `decision_review` entry that confirmed the decision in the same case; `null` if it is unconfirmed or was signed by a person (no entry is needed)
+             * @example null
+             */
+            review_entry: number | null;
             /**
              * Supersedes
              * @description Numbers of the earlier decisions of this project that this one superseded
@@ -6483,6 +7044,13 @@ export interface components {
              * @description Active areas of the project — endless parts of its work — ordered by key. Archived ones are listed by `/projects/{key}/areas?include_archived=true`
              */
             areas: components["schemas"]["AreaRefRead"][];
+            /**
+             * Unconfirmed Decisions
+             * @description How many decisions in force no person has confirmed yet, counted in the project's case and the cases of its active areas
+             * @default 0
+             * @example 12
+             */
+            unconfirmed_decisions: number;
         };
         /**
          * ProjectEntryCreate
@@ -6529,7 +7097,7 @@ export interface components {
             type: "note" | "decision" | "finding" | "artifact";
             /**
              * Supersedes
-             * @description Numbers of earlier entries of the same type in this project's case that the new entry supersedes; only with `decision` and `finding`. A number outside the project's case or of another type answers `entry_fields_invalid`; an entry superseded already, `decision_not_in_force` or `finding_not_in_force` with its successor
+             * @description Numbers of earlier entries of the same type in this project's case that the new entry supersedes; only with `decision` and `finding`. A number outside the project's case or of another type answers `entry_fields_invalid`; an entry superseded already (or, for a decision, rejected or removed), `decision_not_in_force` or `finding_not_in_force` with its successor
              * @example [
              *       12
              *     ]
@@ -6727,6 +7295,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -6871,6 +7451,18 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
             /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
@@ -7127,6 +7719,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -7296,6 +7900,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -7356,6 +7972,23 @@ export interface components {
              */
             task?: string | null;
         };
+        /**
+         * ReviewOutcome
+         * @description Исход проверки решения человеком: поле `outcome` записи `decision_review`.
+         *
+         *     `rejected` — «не согласен», `removed` — «устарело»; для действия они одно и то же:
+         *     решение больше не действует, запись остаётся в деле (слово владельца, TRK-755).
+         * @enum {string}
+         */
+        ReviewOutcome: "confirmed" | "rejected" | "removed";
+        /**
+         * ReviewState
+         * @description Видел ли решение человек: `confirmed` — да, `unconfirmed` — нет.
+         *
+         *     Считается при чтении у решения дела проекта или области; у заметки состояния нет.
+         * @enum {string}
+         */
+        ReviewState: "confirmed" | "unconfirmed";
         /**
          * SectionChangedEntryRead
          * @description Служебная запись о правке названия, описания или раздела.
@@ -7451,6 +8084,18 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
             /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
@@ -7754,6 +8399,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -7936,6 +8593,18 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
             /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
@@ -8654,6 +9323,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -9288,6 +9969,18 @@ export interface components {
              */
             superseded_by?: null;
             /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
+            /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
              * @example null
@@ -9473,6 +10166,18 @@ export interface components {
              * @example null
              */
             superseded_by?: null;
+            /**
+             * Review State
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_state?: null;
+            /**
+             * Review Entry
+             * @description Always `null`: only decisions of a project's or an area's case have a review state
+             * @example null
+             */
+            review_entry?: null;
             /**
              * Lifted By
              * @description Always `null`: only a draft decision or finding of a task's case is lifted
@@ -12049,6 +12754,94 @@ export interface operations {
             };
         };
     };
+    review_project_decision: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Entry number inside the project, from 1 */
+                decision_no: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionReview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_EntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     read_project_entry: {
         parameters: {
             query?: never;
@@ -12941,6 +13734,96 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AreaEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_EntryRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    review_area_decision: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+                /** @description Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Project key; matching ignores case */
+                project_key: string;
+                /** @description Area key inside the project; matching ignores case */
+                area_key: string;
+                /** @description Entry number inside the area, from 1 */
+                decision_no: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionReview"];
             };
         };
         responses: {
@@ -14010,6 +14893,94 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataResponse_TaskLinkRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_decisions: {
+        parameters: {
+            query?: {
+                /** @description Project key; matching ignores case. With it the list holds the decisions of this project and of its active areas, even if the project is archived. Without it — the decisions of every project that is not archived and of their active areas */
+                project?: string | null;
+                /** @description Keep only decisions with this status */
+                status?: components["schemas"]["DecisionStatus"] | null;
+                /** @description Keep only decisions with this review state; `unconfirmed` with `status=in_force` is the decisions that await a person */
+                review_state?: components["schemas"]["ReviewState"] | null;
+                /** @description Page size */
+                limit?: number;
+                /** @description Cursor from `meta.next_cursor` of a previous page */
+                cursor?: string | null;
+            };
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionListResponse"];
                 };
             };
             /** @description Token is missing, unknown or revoked */
@@ -15554,7 +16525,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["FindingEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"] | components["schemas"]["ConclusionEntryRead"] | components["schemas"]["AttachmentEntryRead"] | components["schemas"]["DiscussionClosedEntryRead"];
+                    "text/event-stream": components["schemas"]["PlainEntryRead"] | components["schemas"]["DecisionEntryRead"] | components["schemas"]["FindingEntryRead"] | components["schemas"]["SummaryEntryRead"] | components["schemas"]["QuestionEntryRead"] | components["schemas"]["AnswerEntryRead"] | components["schemas"]["VerdictEntryRead"] | components["schemas"]["RemarkEntryRead"] | components["schemas"]["ResolutionEntryRead"] | components["schemas"]["AcceptanceEntryRead"] | components["schemas"]["WarningEntryRead"] | components["schemas"]["StatusChangedEntryRead"] | components["schemas"]["SectionChangedEntryRead"] | components["schemas"]["FieldChangedEntryRead"] | components["schemas"]["AssigneeChangedEntryRead"] | components["schemas"]["LinkEntryRead"] | components["schemas"]["MovedEntryRead"] | components["schemas"]["AttributeCreatedEntryRead"] | components["schemas"]["AttributeChangedEntryRead"] | components["schemas"]["AttributeRemovedEntryRead"] | components["schemas"]["ProjectArchiveEntryRead"] | components["schemas"]["DecisionReviewEntryRead"] | components["schemas"]["ConclusionEntryRead"] | components["schemas"]["AttachmentEntryRead"] | components["schemas"]["DiscussionClosedEntryRead"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

@@ -25,6 +25,7 @@ from app.domain.authors import ACTOR_LABEL_HEADER
 from app.domain.case import (
     ARCHIVE_ENTRY_TYPES,
     ATTRIBUTE_ENTRY_TYPES,
+    DECISION_REVIEW_ENTRY_TYPES,
     DISCUSSION_ONLY_ENTRY_TYPES,
     FACTS_BY_ENTRY_TYPE,
     EntryType,
@@ -388,9 +389,14 @@ async def test_the_index_carries_only_the_fields_of_its_own_type(
     # Записи об атрибутах и об архиве бывают только в деле проекта (TRK-157, TRK-159): их
     # факты сверяют `tests/test_project_attributes.py` и `tests/test_project_archive.py`
     # по описи `get_project`. Итог и закрытие — только в деле обсуждения (TRK-669), их
-    # факты сверяет `tests/test_discussions.py`.
+    # факты сверяет `tests/test_discussions.py`. Проверка решения (`decision_review`) — тоже
+    # только в деле проекта и области (TRK-755): её факты сверяет `tests/test_decision_review.py`.
     in_a_task_case = (
-        set(EntryType) - ATTRIBUTE_ENTRY_TYPES - ARCHIVE_ENTRY_TYPES - DISCUSSION_ONLY_ENTRY_TYPES
+        set(EntryType)
+        - ATTRIBUTE_ENTRY_TYPES
+        - ARCHIVE_ENTRY_TYPES
+        - DISCUSSION_ONLY_ENTRY_TYPES
+        - DECISION_REVIEW_ENTRY_TYPES
     )
     assert seen == {entry_type.value for entry_type in in_a_task_case}, sorted(seen)
 

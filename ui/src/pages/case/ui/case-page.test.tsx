@@ -37,7 +37,7 @@ beforeEach(() => {
  * Типы записей, которые бывают в деле задачи: записи об атрибутах (TRK-157) и об архиве
  * (TRK-159) принадлежат только делу проекта, и в ленте задачи их не бывает.
  */
-const PROJECT_ONLY_TYPES: EntryType[] = ['archived', 'restored'];
+const PROJECT_ONLY_TYPES: EntryType[] = ['archived', 'restored', 'decision_review'];
 /** Итог и закрытие бывают только в деле обсуждения (TRK-669), в деле задачи — нет. */
 const DISCUSSION_ONLY_TYPES: EntryType[] = ['conclusion', 'closed'];
 const TASK_CASE_TYPES = ENTRY_TYPES.filter(

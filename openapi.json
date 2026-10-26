@@ -4208,6 +4208,176 @@
         }
       }
     },
+    "/api/v1/projects/{project_key}/decisions/{decision_no}/review": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Review a project decision",
+        "description": "Человек подтверждает, отклоняет или удаляет действующее решение проекта (TRK-755).\n\nТело — `{outcome, reason}`, ответ — подшитая запись `decision_review`. Набор `task`,\nно писать проверку может только человек с учётной записью: агенту — `403\npermission_denied` с `details.reason: account_required`. Решения нет или оно не\nдействует — `409 decision_not_in_force` (у заменённого — с преемником), повторное\n`confirmed` — `409 decision_already_confirmed`, архивный проект — `409\nproject_archived`. `rejected` и `removed` выводят решение из силы без замены, а то,\nчто оно когда-то заменило, не возвращают; запись остаётся в деле.\n\nПовтор с тем же `Idempotency-Key` отвечает первой записью, а не подшивает вторую.",
+        "operationId": "review_project_decision",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "decision_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Entry number inside the project, from 1",
+              "examples": [
+                7
+              ],
+              "title": "Decision No"
+            },
+            "description": "Entry number inside the project, from 1"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_EntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project_key}/entries/{entry_no}": {
       "get": {
         "tags": [
@@ -5620,7 +5790,7 @@
           "areas"
         ],
         "summary": "Append an area case entry",
-        "description": "Подшивает запись в дело области: заметку, решение, находку или артефакт.\n\nНомер `no` считается внутри области, ссылка на запись — `TRK/promotion#3`.\n`supersedes` в теле нет: замену у дела области ведёт агент через MCP, а интерфейс\nзаписей не заменяет, и поле без вызова в REST не держат (решение TRK#53). Замечания к\nформе и ссылкам — разом в `422 entry_fields_invalid`. Архивная область — `409\narea_archived`.",
+        "description": "Подшивает запись в дело области: заметку, решение, находку или артефакт.\n\nНомер `no` считается внутри области, ссылка на запись — `TRK/promotion#3`.\n`supersedes` называет решения и находки области, которые новая запись заменяет:\nчеловек исправляет решение области новым решением (TRK-755). Замечания к форме и\nссылкам — разом в `422 entry_fields_invalid`. Архивная область — `409 area_archived`.",
         "operationId": "create_area_entry",
         "security": [
           {
@@ -6002,6 +6172,190 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CollectionResponse_EntryRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_key}/areas/{area_key}/decisions/{decision_no}/review": {
+      "post": {
+        "tags": [
+          "areas"
+        ],
+        "summary": "Review an area decision",
+        "description": "Человек подтверждает, отклоняет или удаляет действующее решение области (TRK-755).\n\nТо же, что `POST /projects/{project_key}/decisions/{decision_no}/review`, для дела\nобласти: тело `{outcome, reason}`, ответ — запись `decision_review`. Архивная область —\n`409 area_archived`.",
+        "operationId": "review_area_decision",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project key; matching ignores case",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project Key"
+            },
+            "description": "Project key; matching ignores case"
+          },
+          {
+            "name": "area_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Area key inside the project; matching ignores case",
+              "examples": [
+                "promotion"
+              ],
+              "title": "Area Key"
+            },
+            "description": "Area key inside the project; matching ignores case"
+          },
+          {
+            "name": "decision_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Entry number inside the area, from 1",
+              "examples": [
+                3
+              ],
+              "title": "Decision No"
+            },
+            "description": "Entry number inside the area, from 1"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours",
+              "examples": [
+                "6b1f0c34-9b2e-4b0a-9a5f-3f1d6c8e0a11"
+              ],
+              "title": "Idempotency-Key"
+            },
+            "description": "Makes this creating call safe to repeat. A retry with the same key and the same request answers with the first response instead of creating a second object; the same key with a different request answers 409 idempotency_key_reused. Keys are paired with the token, are at most 255 characters long and are forgotten after 24 hours"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_EntryRead_"
                 }
               }
             }
@@ -8360,6 +8714,205 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DataResponse_TaskLinkRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/decisions": {
+      "get": {
+        "tags": [
+          "decisions"
+        ],
+        "summary": "List decisions",
+        "description": "Решения проекта и его неархивных областей или всех неархивных проектов, старые первыми.\n\nКаждая строка — адрес решения, область (`null` у решения проекта), название, автор,\nвремя, `status`, `review_state` и `review_entry`, `supersedes` и `superseded_by`\nссылками, `refs` самого решения и число задач, которые на него ссылаются. Тело\nрешения — в записи дела (`GET /projects/{key}/entries/{no}`). Отборы `status` и\n`review_state` складываются по «и». `unconfirmed` в ответе — сколько действующих\nрешений не проверено во всей области списка; отборы его не меняют. Страницы\nкурсорные, как у других списков. Закрытый вызову проект в список не входит.",
+        "operationId": "list_decisions",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Project key; matching ignores case. With it the list holds the decisions of this project and of its active areas, even if the project is archived. Without it — the decisions of every project that is not archived and of their active areas",
+              "examples": [
+                "TRK"
+              ],
+              "title": "Project"
+            },
+            "description": "Project key; matching ignores case. With it the list holds the decisions of this project and of its active areas, even if the project is archived. Without it — the decisions of every project that is not archived and of their active areas"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/DecisionStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keep only decisions with this status",
+              "title": "Status"
+            },
+            "description": "Keep only decisions with this status"
+          },
+          {
+            "name": "review_state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ReviewState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keep only decisions with this review state; `unconfirmed` with `status=in_force` is the decisions that await a person",
+              "title": "Review State"
+            },
+            "description": "Keep only decisions with this review state; `unconfirmed` with `status=in_force` is the decisions that await a person"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cursor from `meta.next_cursor` of a previous page",
+              "title": "Cursor"
+            },
+            "description": "Cursor from `meta.next_cursor` of a previous page"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionListResponse"
                 }
               }
             }
@@ -11494,6 +12047,7 @@
                       "conclusion": "#/components/schemas/ConclusionEntryRead",
                       "created": "#/components/schemas/PlainEntryRead",
                       "decision": "#/components/schemas/DecisionEntryRead",
+                      "decision_review": "#/components/schemas/DecisionReviewEntryRead",
                       "detached": "#/components/schemas/AttachmentEntryRead",
                       "field_changed": "#/components/schemas/FieldChangedEntryRead",
                       "finding": "#/components/schemas/FindingEntryRead",
@@ -11576,6 +12130,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/ProjectArchiveEntryRead"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DecisionReviewEntryRead"
                     },
                     {
                       "$ref": "#/components/schemas/ConclusionEntryRead"
@@ -12083,6 +12640,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -12577,6 +13150,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -12985,6 +13574,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -13304,6 +13909,15 @@
             "title": "Attributes",
             "description": "Current attribute values, ordered by name ignoring case. Every change is an entry of the area's case: `attribute_created`, `attribute_changed`, `attribute_removed`"
           },
+          "unconfirmed_decisions": {
+            "type": "integer",
+            "title": "Unconfirmed Decisions",
+            "description": "How many decisions in force of this area no person has confirmed yet",
+            "default": 0,
+            "examples": [
+              3
+            ]
+          },
           "see_also": {
             "items": {
               "$ref": "#/components/schemas/AreaSeeAlsoRead"
@@ -13378,6 +13992,19 @@
               "artifact"
             ],
             "title": "Type"
+          },
+          "supersedes": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Supersedes",
+            "description": "Numbers of earlier entries of the same type in this area's case that the new entry supersedes; only with `decision` and `finding`. A number outside the area's case or of another type answers `entry_fields_invalid`; an entry superseded already, rejected or removed, `decision_not_in_force` or `finding_not_in_force`",
+            "examples": [
+              [
+                12
+              ]
+            ]
           }
         },
         "additionalProperties": false,
@@ -13387,7 +14014,7 @@
           "type"
         ],
         "title": "AreaEntryCreate",
-        "description": "Запись агента или человека в деле области: заметка, решение, находка, артефакт.\n\nТе же типы, что у дела проекта (TRK#57), но без `supersedes`: замену у\nдела области ведёт агент через MCP, интерфейс записей не заменяет, и поля без вызова\nREST не держит (решение TRK#53). Лишнее поле схема отвергает до сценария."
+        "description": "Запись агента или человека в деле области: заметка, решение, находка, артефакт.\n\nТе же типы и та же замена, что у дела проекта (TRK#57, TRK-755): `supersedes` — у\nрешения и находки, человек исправляет решение области новым решением."
       },
       "AreaLinkKind": {
         "type": "string",
@@ -13808,6 +14435,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -14060,6 +14703,22 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
             "examples": [
               null
             ]
@@ -14324,6 +14983,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -14541,6 +15216,22 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
             "examples": [
               null
             ]
@@ -14862,6 +15553,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -15065,6 +15772,15 @@
             "examples": [
               2
             ]
+          },
+          "unconfirmed_decisions": {
+            "type": "integer",
+            "title": "Unconfirmed Decisions",
+            "description": "Decisions in force that no person has confirmed yet, in the cases of projects that are not archived and their active areas — the inbox of decisions awaiting review. The same number as `unconfirmed` of `GET /api/v1/decisions` without `project`",
+            "default": 0,
+            "examples": [
+              12
+            ]
           }
         },
         "type": "object",
@@ -15128,7 +15844,7 @@
           },
           "status": {
             "$ref": "#/components/schemas/DecisionStatus",
-            "description": "Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then",
+            "description": "Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`; `rejected` or `removed` once a person took it out of force with a `decision_review` entry (no successor); `in_force` otherwise",
             "examples": [
               "in_force"
             ]
@@ -15618,6 +16334,22 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
             "examples": [
               null
             ]
@@ -16188,7 +16920,7 @@
                 "type": "null"
               }
             ],
-            "description": "Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's case, in the journal and in the answer that files the entry",
+            "description": "Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`; for a decision also `rejected` or `removed` once a person took it out of force with a `decision_review` entry; `in_force` otherwise. `null` in a task's case, in the journal and in the answer that files the entry",
             "examples": [
               "in_force"
             ]
@@ -16204,6 +16936,35 @@
             ],
             "title": "Superseded By",
             "description": "Number of the entry in the same case that superseded this one, the direct successor rather than the end of a chain; `null` while in force and wherever `status` is `null`",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Computed on read of a project's or an area's case, for a decision only: `confirmed` if a person confirmed it with a `decision_review` entry or signed it, `unconfirmed` otherwise (every decision an agent filed). `null` for a finding, in a task's case, in the journal and in the answer that files the entry",
+            "examples": [
+              "unconfirmed"
+            ]
+          },
+          "review_entry": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Entry",
+            "description": "Number of the `decision_review` entry that confirmed the decision; `null` if it is unconfirmed, was signed by a person (no entry) or `review_state` is `null`",
             "examples": [
               null
             ]
@@ -16253,6 +17014,172 @@
         "title": "DecisionEntryRead",
         "description": "Решение: в деле задачи — решение задачи, в деле проекта — решение проекта, в деле\nобласти — решение области.\n\nЧисло задач, которые на решение проекта ссылаются, — в чтении проекта\n(`ProjectDecisionRead`), а не здесь."
       },
+      "DecisionListRead": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "title": "Ref",
+            "description": "Address of the `decision` entry in its project's case (`TRK#15`) or area's case (`TRK/mcp#3`)",
+            "examples": [
+              "TRK/mcp#3"
+            ]
+          },
+          "area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area",
+            "description": "Address of the area whose case holds the decision; `null` for a project's",
+            "examples": [
+              "TRK/mcp"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "Сервис не строим до сигнала спроса"
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DecisionStatus",
+            "description": "Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`; `rejected` or `removed` once a person took it out of force with a `decision_review` entry (no successor); `in_force` otherwise",
+            "examples": [
+              "in_force"
+            ]
+          },
+          "review_state": {
+            "$ref": "#/components/schemas/ReviewState",
+            "description": "Computed on read: `confirmed` if a person confirmed the decision with a `decision_review` entry or signed it, `unconfirmed` otherwise — every decision an agent filed before a person looked at it",
+            "examples": [
+              "unconfirmed"
+            ]
+          },
+          "review_entry": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Entry",
+            "description": "Number of the `decision_review` entry that confirmed the decision in the same case; `null` if it is unconfirmed or was signed by a person (no entry is needed)",
+            "examples": [
+              null
+            ]
+          },
+          "supersedes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supersedes",
+            "description": "Addresses of the decisions this one superseded",
+            "examples": [
+              [
+                "TRK#12"
+              ]
+            ]
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By",
+            "description": "Address of the decision that superseded this one; `null` while in force",
+            "examples": [
+              null
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References of the decision itself — where it came from",
+            "examples": [
+              [
+                "TRK-42#3"
+              ]
+            ]
+          },
+          "tasks": {
+            "type": "integer",
+            "title": "Tasks",
+            "description": "How many tasks name this decision in their `decisions` field",
+            "examples": [
+              3
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref",
+          "area",
+          "title",
+          "author",
+          "created_at",
+          "status",
+          "review_state",
+          "review_entry",
+          "supersedes",
+          "superseded_by",
+          "refs",
+          "tasks"
+        ],
+        "title": "DecisionListRead",
+        "description": "Решение в списке решений поперёк проектов и областей."
+      },
+      "DecisionListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionListRead"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          },
+          "unconfirmed": {
+            "type": "integer",
+            "title": "Unconfirmed",
+            "description": "How many decisions in force are `unconfirmed` in the whole scope of the list (the named project with its active areas, or every active project): the filters `status` and `review_state` do not change it. The same number as `unconfirmed_decisions` of the project card and of `GET /api/v1/bootstrap`",
+            "examples": [
+              12
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "unconfirmed"
+        ],
+        "title": "DecisionListResponse",
+        "description": "Страница списка решений и число непроверенных действующих."
+      },
       "DecisionRefRead": {
         "properties": {
           "ref": {
@@ -16272,7 +17199,7 @@
           },
           "status": {
             "$ref": "#/components/schemas/DecisionStatus",
-            "description": "Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then",
+            "description": "Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`; `rejected` or `removed` once a person took it out of force with a `decision_review` entry (no successor); `in_force` otherwise",
             "examples": [
               "in_force"
             ]
@@ -16287,14 +17214,268 @@
         "title": "DecisionRefRead",
         "description": "Решение проекта или области, названное ссылкой: адрес, заголовок и статус."
       },
+      "DecisionReview": {
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/ReviewOutcome",
+            "description": "`confirmed`: the person saw the decision and agrees (a second `confirmed` of a confirmed decision answers `decision_already_confirmed`); `rejected`: disagrees; `removed`: out of date. The last two take the decision out of force with no replacement and bring back nothing it replaced; the entry stays in the case. Only a decision in force is reviewed (`decision_not_in_force`); only a person with an account reviews (`403 permission_denied`, `details.reason: account_required`)",
+            "examples": [
+              "confirmed"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Reason",
+            "description": "Why; free text, may be empty. It becomes the body of the review entry",
+            "default": "",
+            "examples": [
+              "Устарело после перехода на новую схему"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "outcome"
+        ],
+        "title": "DecisionReview",
+        "description": "Проверка решения человеком: исход и причина (TRK-755)."
+      },
+      "DecisionReviewEntryRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq",
+            "description": "Tracker-wide monotonic number; journal cursor",
+            "examples": [
+              1024
+            ]
+          },
+          "no": {
+            "type": "integer",
+            "title": "No",
+            "description": "Number inside the owning task, project, area or discussion, from 1; `TRK-42#12` for a task entry, `TRK#7` for a project entry, `TRK/promotion#3` for an area entry, `TRK~7#3` for a discussion entry",
+            "examples": [
+              12
+            ]
+          },
+          "task_key": {
+            "type": "null",
+            "title": "Task Key",
+            "description": "Always `null`: entries of this type belong to a project or an area, never to a task",
+            "examples": [
+              null
+            ]
+          },
+          "project_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Key",
+            "description": "Key of the owning project; the entry address is `TRK#7`. `null` for an area entry",
+            "examples": [
+              "TRK"
+            ]
+          },
+          "area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area",
+            "description": "Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry",
+            "examples": [
+              null
+            ]
+          },
+          "discussion": {
+            "type": "null",
+            "title": "Discussion",
+            "description": "Always `null`: entries of this type never belong to a discussion",
+            "examples": [
+              null
+            ]
+          },
+          "author": {
+            "$ref": "#/components/schemas/AuthorRead"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "One line; this is what the case index shows",
+            "examples": [
+              "Status changed: backlog -> open"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "Markdown; empty for service entries, whose content is the payload",
+            "examples": [
+              ""
+            ]
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs",
+            "description": "References to task entries `KEY-N#M`, project entries `KEY#M`, area entries `KEY/area#M`, discussion entries `KEY~N#M`, tasks `KEY-N`, discussions `KEY~N` and URLs with a scheme (`https://…`). Any other string is refused; entry, task and discussion references must exist, URLs are not checked",
+            "examples": [
+              [
+                "TRK-42#3",
+                "TRK-7"
+              ]
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Marks the single call (`update_task`, `close_task`, `link`, ...) that filed this entry: entries of one call share the same value, entries of another call never do. A client groups entries by it instead of guessing from a matching `created_at`. `null` on entries filed before this field existed",
+            "examples": [
+              null
+            ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileRead"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files the entry attaches, in the order attached: the card of each file as it is now (a replaced file shows its new content, a deleted one is a tombstone). Empty if there are none"
+          },
+          "status": {
+            "type": "null",
+            "title": "Status",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case have a status",
+            "examples": [
+              null
+            ]
+          },
+          "superseded_by": {
+            "type": "null",
+            "title": "Superseded By",
+            "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "lifted_by": {
+            "type": "null",
+            "title": "Lifted By",
+            "description": "Always `null`: only a draft decision or finding of a task's case is lifted",
+            "examples": [
+              null
+            ]
+          },
+          "type": {
+            "type": "string",
+            "const": "decision_review",
+            "title": "Type"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/DecisionReviewPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "no",
+          "task_key",
+          "project_key",
+          "author",
+          "title",
+          "body",
+          "created_at",
+          "type",
+          "payload"
+        ],
+        "title": "DecisionReviewEntryRead",
+        "description": "Служебная запись: человек проверил решение проекта или области (TRK-755)."
+      },
+      "DecisionReviewPayload": {
+        "properties": {
+          "decision": {
+            "type": "integer",
+            "title": "Decision",
+            "description": "Number of the reviewed `decision` entry in the same case",
+            "examples": [
+              15
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ReviewOutcome",
+            "description": "`confirmed`: the person saw the decision and agrees; `rejected`: disagrees; `removed`: out of date. The last two take the decision out of force with no replacement, the entry stays in the case",
+            "examples": [
+              "confirmed"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision",
+          "outcome"
+        ],
+        "title": "DecisionReviewPayload",
+        "description": "Проверка решения человеком: номер решения в деле и исход (TRK-755)."
+      },
       "DecisionStatus": {
         "type": "string",
         "enum": [
           "in_force",
-          "superseded"
+          "superseded",
+          "rejected",
+          "removed"
         ],
         "title": "DecisionStatus",
-        "description": "Действует ли запись знания — решение или заметка дела проекта или области.\n\nХранимым значением не бывает: только при чтении. Имя осталось от решений, первых\nзаписей с заменой; у заметки те же два значения (TRK#48)."
+        "description": "Действует ли запись знания — решение или заметка дела проекта или области.\n\nХранимым значением не бывает: только при чтении. Имя осталось от решений, первых\nзаписей с заменой; у заметки два значения — `in_force` и `superseded` (TRK#48).\nРешение, кроме них, бывает `rejected` и `removed` — человек отклонил его или удалил\n(TRK-755): оба выводят решение из силы, преемника у них нет."
       },
       "DecisionsChangedPayload": {
         "properties": {
@@ -16473,6 +17654,22 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
             "examples": [
               null
             ]
@@ -17049,6 +18246,7 @@
             "conclusion": "#/components/schemas/NoFactsRead",
             "created": "#/components/schemas/NoFactsRead",
             "decision": "#/components/schemas/NoFactsRead",
+            "decision_review": "#/components/schemas/NoFactsRead",
             "detached": "#/components/schemas/AttachmentFactsRead",
             "field_changed": "#/components/schemas/FieldChangedFactsRead",
             "finding": "#/components/schemas/NoFactsRead",
@@ -17198,6 +18396,9 @@
             "$ref": "#/components/schemas/ProjectArchiveEntryRead"
           },
           {
+            "$ref": "#/components/schemas/DecisionReviewEntryRead"
+          },
+          {
             "$ref": "#/components/schemas/ConclusionEntryRead"
           },
           {
@@ -17224,6 +18425,7 @@
             "conclusion": "#/components/schemas/ConclusionEntryRead",
             "created": "#/components/schemas/PlainEntryRead",
             "decision": "#/components/schemas/DecisionEntryRead",
+            "decision_review": "#/components/schemas/DecisionReviewEntryRead",
             "detached": "#/components/schemas/AttachmentEntryRead",
             "field_changed": "#/components/schemas/FieldChangedEntryRead",
             "finding": "#/components/schemas/FindingEntryRead",
@@ -17275,7 +18477,8 @@
           "attribute_changed",
           "attribute_removed",
           "archived",
-          "restored"
+          "restored",
+          "decision_review"
         ],
         "title": "EntryType",
         "description": "Тип записи дела. Записи агента и человека — до `NOTE`, служебные — после."
@@ -17480,6 +18683,22 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
             "examples": [
               null
             ]
@@ -18088,7 +19307,7 @@
                 "type": "null"
               }
             ],
-            "description": "Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`, `in_force` until then. `null` in a task's case, in the journal and in the answer that files the entry",
+            "description": "Computed on read of a project's or an area's case: `superseded` once a later entry of the same type in the case names this one in `supersedes`; for a decision also `rejected` or `removed` once a person took it out of force with a `decision_review` entry; `in_force` otherwise. `null` in a task's case, in the journal and in the answer that files the entry",
             "examples": [
               "in_force"
             ]
@@ -18104,6 +19323,35 @@
             ],
             "title": "Superseded By",
             "description": "Number of the entry in the same case that superseded this one, the direct successor rather than the end of a chain; `null` while in force and wherever `status` is `null`",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Computed on read of a project's or an area's case, for a decision only: `confirmed` if a person confirmed it with a `decision_review` entry or signed it, `unconfirmed` otherwise (every decision an agent filed). `null` for a finding, in a task's case, in the journal and in the answer that files the entry",
+            "examples": [
+              "unconfirmed"
+            ]
+          },
+          "review_entry": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Entry",
+            "description": "Number of the `decision_review` entry that confirmed the decision; `null` if it is unconfirmed, was signed by a person (no entry) or `review_state` is `null`",
             "examples": [
               null
             ]
@@ -18656,6 +19904,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -18968,6 +20232,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -19119,7 +20399,8 @@
               "created",
               "closed",
               "archived",
-              "restored"
+              "restored",
+              "decision_review"
             ],
             "title": "Type"
           }
@@ -19713,6 +20994,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -19972,6 +21269,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -20122,9 +21435,31 @@
           },
           "status": {
             "$ref": "#/components/schemas/DecisionStatus",
-            "description": "Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`, `in_force` until then",
+            "description": "Computed on read: `superseded` once a later decision of the same case names this one in `supersedes`; `rejected` or `removed` once a person took it out of force with a `decision_review` entry (no successor); `in_force` otherwise",
             "examples": [
               "in_force"
+            ]
+          },
+          "review_state": {
+            "$ref": "#/components/schemas/ReviewState",
+            "description": "Computed on read: `confirmed` if a person confirmed the decision with a `decision_review` entry or signed it, `unconfirmed` otherwise — every decision an agent filed before a person looked at it",
+            "examples": [
+              "unconfirmed"
+            ]
+          },
+          "review_entry": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Entry",
+            "description": "Number of the `decision_review` entry that confirmed the decision in the same case; `null` if it is unconfirmed or was signed by a person (no entry is needed)",
+            "examples": [
+              null
             ]
           },
           "supersedes": {
@@ -20172,6 +21507,8 @@
           "author",
           "created_at",
           "status",
+          "review_state",
+          "review_entry",
           "supersedes",
           "superseded_by",
           "tasks"
@@ -20268,6 +21605,15 @@
             "type": "array",
             "title": "Areas",
             "description": "Active areas of the project — endless parts of its work — ordered by key. Archived ones are listed by `/projects/{key}/areas?include_archived=true`"
+          },
+          "unconfirmed_decisions": {
+            "type": "integer",
+            "title": "Unconfirmed Decisions",
+            "description": "How many decisions in force no person has confirmed yet, counted in the project's case and the cases of its active areas",
+            "default": 0,
+            "examples": [
+              12
+            ]
           }
         },
         "type": "object",
@@ -20347,7 +21693,7 @@
             },
             "type": "array",
             "title": "Supersedes",
-            "description": "Numbers of earlier entries of the same type in this project's case that the new entry supersedes; only with `decision` and `finding`. A number outside the project's case or of another type answers `entry_fields_invalid`; an entry superseded already, `decision_not_in_force` or `finding_not_in_force` with its successor",
+            "description": "Numbers of earlier entries of the same type in this project's case that the new entry supersedes; only with `decision` and `finding`. A number outside the project's case or of another type answers `entry_fields_invalid`; an entry superseded already (or, for a decision, rejected or removed), `decision_not_in_force` or `finding_not_in_force` with its successor",
             "examples": [
               [
                 12
@@ -20627,6 +21973,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -20867,6 +22229,22 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
             "examples": [
               null
             ]
@@ -21308,6 +22686,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -21569,6 +22963,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -21702,6 +23112,25 @@
         "title": "ResolutionPayload",
         "description": "Нагрузка резолюции: какое замечание разобрано, чем и куда ушла работа."
       },
+      "ReviewOutcome": {
+        "type": "string",
+        "enum": [
+          "confirmed",
+          "rejected",
+          "removed"
+        ],
+        "title": "ReviewOutcome",
+        "description": "Исход проверки решения человеком: поле `outcome` записи `decision_review`.\n\n`rejected` — «не согласен», `removed` — «устарело»; для действия они одно и то же:\nрешение больше не действует, запись остаётся в деле (слово владельца, TRK-755)."
+      },
+      "ReviewState": {
+        "type": "string",
+        "enum": [
+          "confirmed",
+          "unconfirmed"
+        ],
+        "title": "ReviewState",
+        "description": "Видел ли решение человек: `confirmed` — да, `unconfirmed` — нет.\n\nСчитается при чтении у решения дела проекта или области; у заметки состояния нет."
+      },
       "SectionChangedEntryRead": {
         "properties": {
           "id": {
@@ -21830,6 +23259,22 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
             "examples": [
               null
             ]
@@ -22376,6 +23821,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -22680,6 +24141,22 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
             "examples": [
               null
             ]
@@ -23915,6 +25392,22 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
             "examples": [
               null
             ]
@@ -25201,6 +26694,22 @@
               null
             ]
           },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
           "lifted_by": {
             "type": "null",
             "title": "Lifted By",
@@ -25485,6 +26994,22 @@
             "type": "null",
             "title": "Superseded By",
             "description": "Always `null`: only decisions and findings of a project's or an area's case are superseded",
+            "examples": [
+              null
+            ]
+          },
+          "review_state": {
+            "type": "null",
+            "title": "Review State",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
+            "examples": [
+              null
+            ]
+          },
+          "review_entry": {
+            "type": "null",
+            "title": "Review Entry",
+            "description": "Always `null`: only decisions of a project's or an area's case have a review state",
             "examples": [
               null
             ]

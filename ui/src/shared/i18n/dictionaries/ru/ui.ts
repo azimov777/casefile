@@ -41,6 +41,8 @@ export const ui = {
     status: {
       in_force: 'действует',
       superseded: 'заменено',
+      rejected: 'отклонено',
+      removed: 'удалено',
     } satisfies Record<DecisionStatus, string>,
   },
   /** Черновик знания в деле задачи (TRK-661): ждёт подъёма в дело проекта или области. */
@@ -357,6 +359,7 @@ export const ui = {
       attribute_removed: 'атрибут снят',
       archived: 'архивирование',
       restored: 'восстановление',
+      decision_review: 'проверка решения',
     } satisfies Record<EntryType, string>,
     remarkOutcome: {
       fixed: 'поправлено',

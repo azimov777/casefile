@@ -33,6 +33,7 @@ BOOTSTRAP_FIELDS = [
     "participant",
     "projects",
     "token",
+    "unconfirmed_decisions",
 ]
 
 #: Поля токена в первом кадре: чем узнать его в списке и что он открывает. Имя, автор

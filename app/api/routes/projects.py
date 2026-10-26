@@ -28,7 +28,7 @@ from app.api.idempotency import OnceDep
 from app.api.schemas.areas import area_ref
 from app.api.schemas.authors import AuthorRead
 from app.api.schemas.common import CollectionResponse, DataResponse
-from app.api.schemas.decisions import ProjectDecisionRead
+from app.api.schemas.decisions import DecisionReview, ProjectDecisionRead
 from app.api.schemas.entries import EntryRead, ProjectEntryCreate, entry_read
 from app.api.schemas.projects import (
     AttributeRead,
@@ -42,6 +42,7 @@ from app.api.schemas.projects import (
 )
 from app.db.models.project import Project
 from app.db.pagination import DEFAULT_PAGE_SIZE
+from app.domain.decisions import ReviewOutcome
 from app.services import areas as areas_service
 from app.services import attributes as attributes_service
 from app.services import case as case_service
@@ -316,6 +317,52 @@ async def create_project_entry(
     )
 
 
+@router.post(
+    "/{project_key}/decisions/{decision_no}/review",
+    status_code=status.HTTP_201_CREATED,
+    summary="Review a project decision",
+)
+async def review_project_decision(
+    project_key: ProjectKeyPath,
+    decision_no: ProjectEntryNoPath,
+    review: DecisionReview,
+    session: SessionDep,
+    actor: ActorDep,
+    once: OnceDep,
+) -> DataResponse[EntryRead]:
+    """Человек подтверждает, отклоняет или удаляет действующее решение проекта (TRK-755).
+
+    Тело — `{outcome, reason}`, ответ — подшитая запись `decision_review`. Набор `task`,
+    но писать проверку может только человек с учётной записью: агенту — `403
+    permission_denied` с `details.reason: account_required`. Решения нет или оно не
+    действует — `409 decision_not_in_force` (у заменённого — с преемником), повторное
+    `confirmed` — `409 decision_already_confirmed`, архивный проект — `409
+    project_archived`. `rejected` и `removed` выводят решение из силы без замены, а то,
+    что оно когда-то заменило, не возвращают; запись остаётся в деле.
+
+    Повтор с тем же `Idempotency-Key` отвечает первой записью, а не подшивает вторую.
+    """
+    project = await service.get_project(session, project_key)
+    given = review.model_dump(mode="json")
+
+    async def file_review() -> DataResponse[EntryRead]:
+        entry = await decisions_service.review_decision(
+            session,
+            project,
+            decision_no,
+            actor=actor,
+            outcome=ReviewOutcome(given["outcome"]),
+            reason=given["reason"],
+        )
+        return DataResponse[EntryRead](data=entry_read(entry, project_key=project.key))
+
+    return await once.run(
+        DataResponse[EntryRead],
+        request={"project": project.key, "decision": decision_no, "review": given},
+        build=file_review,
+    )
+
+
 @router.get("/{project_key}/entries", summary="Read project case entries")
 async def list_project_entries(
     project_key: ProjectKeyPath,
@@ -412,6 +459,9 @@ async def _detail(
                 "attributes": [AttributeRead.model_validate(item) for item in attributes],
                 "decisions": [_decision(item, counts) for item in decisions],
                 "areas": [area_ref(item) for item in areas],
+                "unconfirmed_decisions": await decisions_service.count_unconfirmed(
+                    session, actor=actor, project_id=project.id
+                ),
             }
         )
     )
@@ -426,6 +476,8 @@ def _decision(item: CaseDecision, counts: dict[str, int]) -> ProjectDecisionRead
         author=AuthorRead.model_validate(item.entry.author),
         created_at=item.entry.created_at,
         status=item.status,
+        review_state=item.review_state,
+        review_entry=item.review_entry,
         supersedes=list(item.supersedes),
         superseded_by=None if item.superseded_by is None else item.superseded_by.no,
         tasks=counts.get(item.ref, 0),

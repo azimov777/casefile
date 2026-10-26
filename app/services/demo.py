@@ -58,6 +58,7 @@ from app.db.models.task import Task
 from app.db.repositories import ParticipantRepository, ProjectRepository, TaskRepository
 from app.domain.authors import label_author
 from app.domain.case import EntryType, RemarkOutcome, VerdictOutcome
+from app.domain.decisions import ReviewOutcome
 from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.projects import normalize_project_key
@@ -66,13 +67,14 @@ from app.services import area_links as area_links_service
 from app.services import areas as areas_service
 from app.services import attributes as attributes_service
 from app.services import case as case_service
+from app.services import decisions as decisions_service
 from app.services import discussions as discussions_service
 from app.services import links as links_service
 from app.services import participants as participants_service
 from app.services import projects as projects_service
 from app.services import tasks as tasks_service
 from app.services.auth import TRACKER_ACTOR, Actor
-from app.services.setup import DEFAULT_OWNER_NAME
+from app.services.setup import DEFAULT_OWNER_NAME, ensure_admin_account
 from app.services.tasks import TaskChanges
 
 #: Ключ демонстрационного проекта. Он же признак «демо уже наполнено».
@@ -217,6 +219,7 @@ async def seed_demo(session: AsyncSession) -> DemoData:
     await _area_knowledge(session, agent=agent, owner=owner)
 
     await _knowledge_drafts(session, lifted=done, unlifted=accepted, agent=agent)
+    await _decision_reviews(session, project, agent=agent, owner=owner)
 
     return DemoData(
         project=project,
@@ -328,6 +331,89 @@ async def _area_knowledge(session: AsyncSession, *, agent: Actor, owner: Actor) 
     )
 
 
+async def _decision_reviews(
+    session: AsyncSession, project: Project, *, agent: Actor, owner: Actor
+) -> None:
+    """Решения дела проекта в разных состояниях проверки человеком (TRK-755).
+
+    Подшиваются последними, в конец дела проекта, — номера прежних записей не сдвигаются.
+    Подтверждённое человеком; отклонённое, которое заменяло другое (прежнее остаётся
+    заменённым и не возвращается); удалённое; подписанное самим человеком (подтверждено
+    без записи проверки); неподтверждённые — все остальные решения, подшитые агентом.
+    """
+
+    async def decide(
+        actor: Actor, title: str, body: str, supersedes: list[int] | None = None
+    ) -> int:
+        entry = await case_service.append_project_entry(
+            session,
+            project,
+            actor=actor,
+            type=EntryType.DECISION,
+            title=title,
+            body=body,
+            supersedes=supersedes,
+        )
+        return entry.no
+
+    confirmed = await decide(
+        agent,
+        "Журнал записей только дополняется: запись не правится и не стирается",
+        "Правка задним числом ломает дело: преемник не узнал бы, что было на самом деле.",
+    )
+    old = await decide(
+        agent,
+        "Лента отдаёт записи страницами по сто",
+        "Страница в сто записей умещается в один кадр интерфейса.",
+    )
+    replacing = await decide(
+        agent,
+        "Лента отдаёт записи страницами по двести",
+        "Сто записей мельче одной смены агента; страница в двести читается одним запросом.",
+        supersedes=[old],
+    )
+    outdated = await decide(
+        agent,
+        "Демо-данные пересеваются при каждом запуске",
+        "Так проще вернуть демо к исходному виду; позже решено не трогать данные.",
+    )
+    await decide(
+        owner,
+        "Тексты ошибок пишем по-английски, перевод — в интерфейсе",
+        "Решение человека: подтверждения в деле не требует.",
+    )
+    await decide(
+        agent,
+        "Проект — один на репозиторий, а не по проекту на часть",
+        "Части репозитория различаются областями; второй проект рвёт сквозные ссылки.",
+    )
+    await decide(
+        agent,
+        "Вложения хранятся в базе, а не на диске установки",
+        "Копия базы переносит установку целиком, без отдельной папки с файлами.",
+    )
+
+    await decisions_service.review_decision(
+        session, project, confirmed, actor=owner, outcome=ReviewOutcome.CONFIRMED
+    )
+    await decisions_service.review_decision(
+        session,
+        project,
+        replacing,
+        actor=owner,
+        outcome=ReviewOutcome.REJECTED,
+        reason="Не согласен: двести записей тяжелы для телефона.",
+    )
+    await decisions_service.review_decision(
+        session,
+        project,
+        outdated,
+        actor=owner,
+        outcome=ReviewOutcome.REMOVED,
+        reason="Устарело: демо больше не пересевается.",
+    )
+
+
 async def _knowledge_drafts(
     session: AsyncSession, *, lifted: Task, unlifted: Task, agent: Actor
 ) -> None:
@@ -422,16 +508,19 @@ async def _human(session: AsyncSession) -> Participant:
     вопрос ушёл бы участнику, чьего токена ни у кого нет, и первый экран владельца
     показал бы ноль вопросов — ровно то, что демо обязано показать ненулевым.
     """
-    existing = await ParticipantRepository(session).get_by_name(DEFAULT_OWNER_NAME)
-    if existing is not None:
-        return existing
-    return await participants_service.register_participant(
-        session,
-        actor=TRACKER_ACTOR,
-        kind=ParticipantKind.HUMAN,
-        name=DEFAULT_OWNER_NAME,
-        description="Владелец установки: смотрит задачи и отвечает на вопросы",
-    )
+    human = await ParticipantRepository(session).get_by_name(DEFAULT_OWNER_NAME)
+    if human is None:
+        human = await participants_service.register_participant(
+            session,
+            actor=TRACKER_ACTOR,
+            kind=ParticipantKind.HUMAN,
+            name=DEFAULT_OWNER_NAME,
+            description="Владелец установки: смотрит задачи и отвечает на вопросы",
+        )
+    # Учётная запись, как у владельца настоящей установки: человек демо проверяет решения
+    # (TRK-755), а проверку пишет только человек с учётной записью.
+    await ensure_admin_account(session, human)
+    return human
 
 
 async def _agent(session: AsyncSession, owner: Actor) -> Participant:

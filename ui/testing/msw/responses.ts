@@ -93,6 +93,7 @@ export function bootstrap(overrides: Partial<Bootstrap> = {}): Bootstrap {
     open_questions: 2,
     open_warnings: 0,
     open_discussions: 0,
+    unconfirmed_decisions: 0,
     ...overrides,
   };
 }
@@ -602,6 +603,15 @@ export function entryOfType(no: number, taskKey: string, type: Entry['type']): E
         type,
         payload: { reason: 'Демо отложено до выпуска' },
       };
+    // Проверка решения человеком (TRK-755) бывает только в деле проекта или области.
+    case 'decision_review':
+      return {
+        ...base,
+        task_key: null,
+        project_key: 'DEMO',
+        type,
+        payload: { decision: 3, outcome: 'confirmed' },
+      };
     // Привязка к обсуждению (TRK-669) лежит и в деле задачи: здесь — оно.
     case 'attached':
     case 'detached':
@@ -650,6 +660,7 @@ export function projectDetail(key: string, overrides: Partial<ProjectDetail> = {
     attributes: [],
     decisions: [],
     areas: [],
+    unconfirmed_decisions: 0,
     ...overrides,
   };
 }
@@ -677,7 +688,7 @@ export function areaCard(address: string, overrides: Partial<AreaCard> = {}): Ar
 
 /** Область одним ответом: карточка и атрибуты (`GET …/areas/{key}`). */
 export function areaDetail(address: string, overrides: Partial<AreaDetail> = {}): AreaDetail {
-  return { ...areaCard(address), attributes: [], ...overrides };
+  return { ...areaCard(address), attributes: [], unconfirmed_decisions: 0, ...overrides };
 }
 
 /**

@@ -45,6 +45,8 @@ export const ui = {
     status: {
       in_force: 'in force',
       superseded: 'superseded',
+      rejected: 'rejected',
+      removed: 'removed',
     } satisfies Record<DecisionStatus, string>,
   },
   /** A knowledge draft in a task's case (TRK-661): waits to be lifted into the project's or area's case. */
@@ -357,6 +359,7 @@ export const ui = {
       attribute_removed: 'attribute removed',
       archived: 'archiving',
       restored: 'restoring',
+      decision_review: 'decision review',
     } satisfies Record<EntryType, string>,
     // Исход разбора замечания — словами, а не идентификатором контракта: замечание
     // оставляет человек, и это единственный ответ, которого он ждал.
