@@ -32,6 +32,7 @@ from app.domain.case import (
     WarningFacts,
     read_payload,
 )
+from app.domain.files import FileCard
 from app.mcp.enums import (
     AnswerOutcomeSchema,
     DecisionStatusSchema,
@@ -42,7 +43,7 @@ from app.mcp.enums import (
     TaskStatusSchema,
     VerdictOutcomeSchema,
 )
-from app.mcp.views import AuthorView, author
+from app.mcp.views import AttachedFileView, AuthorView, attached_file, author
 from app.services.decisions import Standing
 
 
@@ -377,6 +378,10 @@ class EntryView(BaseModel):
             "`null` while in force"
         ),
     )
+    files: list[AttachedFileView] | None = Field(
+        default=None,
+        description="Present only on an entry that attaches files, in order",
+    )
     lifted_by: list[str] | None = Field(
         default=None,
         description=(
@@ -406,6 +411,8 @@ class EntryView(BaseModel):
             dumped.pop("superseded_by", None)
         if self.lifted_by is None:
             dumped.pop("lifted_by", None)
+        if not self.files:
+            dumped.pop("files", None)
         return dumped
 
 
@@ -418,6 +425,7 @@ def entry(
     discussion: str | None = None,
     standing: Standing | None = None,
     lifted_by: Sequence[str] | None = None,
+    files: Sequence[FileCard] | None = None,
 ) -> EntryView:
     """Запись дела целиком. Ключ владельца приходит извне: у записи только `task_id`,
     `project_id`, `area_id` или `discussion_id`. Передаётся ровно один — как и в REST
@@ -426,7 +434,8 @@ def entry(
     исходов, приходит с `outcome: answered`, а не без ключа. `standing` — статус решения
     или заметки, посчитанный чтением дела проекта или области; без него `status` и
     `superseded_by` в ответе MCP нет вовсе (в REST — `null`). `lifted_by` — подъёмы
-    черновика, посчитанные чтением дела задачи; без него поля в ответе MCP нет."""
+    черновика, посчитанные чтением дела задачи; без него поля в ответе MCP нет. `files` —
+    карточки вложений записи (`files_service.entry_attachments`); у записи без вложений поля нет."""
     owners = [key for key in (task_key, project_key, area, discussion) if key is not None]
     assert len(owners) == 1, "entry owner is exactly one key"
     return EntryView(
@@ -448,6 +457,7 @@ def entry(
         status=None if standing is None else standing.status,
         superseded_by=None if standing is None else standing.superseded_by,
         lifted_by=None if lifted_by is None else list(lifted_by),
+        files=None if not files else [attached_file(card) for card in files],
     )
 
 

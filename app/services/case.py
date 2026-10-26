@@ -769,6 +769,7 @@ async def answer(
     relayed_from: Any = None,
     choice: Any = None,
     refs: Any = (),
+    files: Any = (),
     action_id: uuid.UUID | None = None,
 ) -> Entry:
     """Ответ на вопрос той же задачи. Ответить может кто угодно, ответов может быть много.
@@ -789,6 +790,7 @@ async def answer(
         type=EntryType.ANSWER,
         body=body,
         refs=refs,
+        files=files,
         payload={
             "question_no": question_no,
             "outcome": outcome,
@@ -1280,6 +1282,7 @@ async def ask_in_discussion(
     body: Any = "",
     options: Any = None,
     refs: Any = (),
+    files: Any = (),
 ) -> Entry:
     """Вопрос участникам в существующем обсуждении (`TRK#51`, п. 6).
 
@@ -1296,6 +1299,7 @@ async def ask_in_discussion(
         body=body,
         payload={"addressees": addressees, "options": options},
         refs=refs,
+        files=files,
     )
 
 
@@ -1311,6 +1315,7 @@ async def answer_in_discussion(
     relayed_from: Any = None,
     choice: Any = None,
     refs: Any = (),
+    files: Any = (),
 ) -> Entry:
     """Ответ на вопрос **этого** обсуждения, его снятие или замена — правила те же, что у
     ответа в деле задачи (`answer`), номер вопроса ищется в деле обсуждения."""
@@ -1328,6 +1333,7 @@ async def answer_in_discussion(
             "choice": choice,
         },
         refs=refs,
+        files=files,
     )
 
 

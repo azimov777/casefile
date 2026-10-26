@@ -10,6 +10,7 @@ from app.mcp.tools.case.arguments import EntryTypesArg
 from app.mcp.tools.case.views import EntryView, entry
 from app.mcp.toolset import READ_ONLY, Toolset
 from app.mcp.views import PageView, page
+from app.services import files as files_service
 from app.services import journal as journal_service
 
 AfterArg = Annotated[
@@ -95,10 +96,14 @@ def register(tools: Toolset) -> None:
                 limit=limit or settings.mcp_page_size,
                 wait=timeout,
             )
+            attached = await files_service.entry_attachments(
+                session, [item.entry for item in listed.items]
+            )
             return page(
                 (
                     entry(
                         item.entry,
+                        files=attached.get(item.entry.id),
                         task_key=item.task_key,
                         project_key=item.project_key,
                         area=item.area,

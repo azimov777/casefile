@@ -239,6 +239,7 @@ async def ask_about_task(
     body: Any = "",
     options: Any = None,
     refs: Any = (),
+    files: Any = (),
 ) -> DiscussionOpening:
     """Вопрос по задаче: заводит обсуждение этим вопросом в проекте задачи и привязывает к
     нему задачу — одним действием (`TRK#51`, п. 6), как `create_task(parent)` рождает связь.
@@ -254,6 +255,7 @@ async def ask_about_task(
         opening=EntryType.QUESTION,
         body=body,
         refs=refs,
+        files=files,
         addressees=addressees,
         options=options,
         tasks=[task],
@@ -272,6 +274,7 @@ async def open_discussion(
     addressees: Any = None,
     options: Any = None,
     tasks: Sequence[Task] = (),
+    files: Any = (),
 ) -> DiscussionOpening:
     """Заводит обсуждение первой записью — запиской или вопросом — и привязывает задачи
     тем же действием (`TRK#51`, пункты 1, 3 и 6); ответ несёт и первую запись.
@@ -343,6 +346,7 @@ async def open_discussion(
         body=draft.body,
         payload=payload,
         refs=draft.refs,
+        files=files,
         action_id=action_id,
     )
     for task in attached:

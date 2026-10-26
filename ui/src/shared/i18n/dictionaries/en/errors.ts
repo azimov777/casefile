@@ -63,6 +63,10 @@ export const errors = {
   entry_not_found: 'This task has no entry with that number.',
   file_deleted: 'The file was deleted: only its tombstone remains.',
   file_fields_invalid: 'The file name or type is invalid.',
+  file_link_expired: 'This file link has expired; take a new one.',
+  file_link_not_found: 'There is no such file link.',
+  file_link_used: 'This file link was already used; take a new one.',
+  file_link_wrong_kind: 'This file link opens another action.',
   file_not_found: 'There is no such file.',
   file_too_large: 'The file is larger than this installation allows.',
   finding_not_in_force:
@@ -138,6 +142,7 @@ export const errors = {
   token_not_found: 'There is no token with that id.',
   token_not_header_safe:
     'A token of this kind cannot be sent: it contains characters a token never has — most likely something extra was picked up while copying. Copy the token whole and try again.',
+  too_many_file_links: 'Too many unused file links are open; wait for them to expire.',
   too_many_requests: 'Too many requests. Try again later.',
   transition_not_allowed: 'The status table has no such transition.',
   transition_reason_required: 'This transition requires a reason.',

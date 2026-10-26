@@ -54,6 +54,7 @@ from app import __version__
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.mcp.consent import ConsentPage, consent_page_url
+from app.mcp.file_links import register_file_routes
 from app.mcp.oauth import (
     CasefileAuthorization,
     PresentedToken,
@@ -103,6 +104,7 @@ def create_server(
     tools = Toolset(server=_bare_server(settings, runtime), runtime=runtime, settings=settings)
 
     register_tools(tools)
+    register_file_routes(tools.server, runtime=runtime, settings=settings, links=tools.links)
     _register_health(tools.server, runtime)
     tools.server.middleware.append(tools.middleware())
     tools.server.middleware.append(advertise_on_handshake)

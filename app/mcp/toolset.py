@@ -39,6 +39,7 @@ from app.core.errors import AppError
 from app.domain.idempotency import IDEMPOTENCY_KEY_ARGUMENT
 from app.mcp.argument_refusal import install as enrich_argument_refusals
 from app.mcp.errors import describe
+from app.mcp.file_links import FileLinks
 from app.mcp.runtime import Runtime
 
 #: Метод, которому нужен разобранный токен до ответа.
@@ -114,6 +115,26 @@ OVERWRITING_UPDATE = ToolAnnotations(
 )
 
 
+#: Выдача файла (`read_file`): байты читаются без изменения содержимого, повтор даёт то же,
+#: но каждая выдача ставит файлу отметку «последний раз открыт» (`app/services/files.py`,
+#: `open_file`) — поэтому `readOnlyHint` честно `false`, а не удобно `true` (TRK/mcp#25).
+READ_MARKING = ToolAnnotations(
+    read_only_hint=False,
+    destructive_hint=False,
+    idempotent_hint=True,
+    open_world_hint=False,
+)
+
+#: Стирающий инструмент (`delete_file`): байты исчезают, остаётся надгробие; повтор отказывает
+#: `file_deleted`, то есть не идемпотентен.
+DESTRUCTIVE = ToolAnnotations(
+    read_only_hint=False,
+    destructive_hint=True,
+    idempotent_hint=False,
+    open_world_hint=False,
+)
+
+
 @dataclass(slots=True)
 class Toolset:
     """Сервер, контекст вызова и имена зарегистрированных инструментов.
@@ -126,6 +147,9 @@ class Toolset:
     runtime: Runtime
     settings: Settings
     names: list[str] = field(default_factory=list)
+    #: Одноразовые ссылки на файлы этого сервера: выдают инструменты, предъявляют маршруты
+    #: `PUT`/`GET` (`app/mcp/file_links.py`). Одно хранилище на сервер.
+    links: FileLinks = field(default_factory=FileLinks)
 
     def tool(
         self,

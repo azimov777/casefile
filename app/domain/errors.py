@@ -17,6 +17,7 @@
 """
 
 from app.core.errors import (
+    AppError,
     ConflictError,
     NotFoundError,
     PermissionDeniedError,
@@ -1181,3 +1182,41 @@ class FileDeletedError(ConflictError):
 
     code = "file_deleted"
     message = "File was deleted: only its tombstone remains"
+
+
+class TooManyFileLinksError(ConflictError):
+    """Живых одноразовых ссылок на файлы слишком много; ждать срока жизни прежних."""
+
+    code = "too_many_file_links"
+    message = "Too many unused file links are open; wait for them to expire"
+
+
+class FileLinkNotFoundError(NotFoundError):
+    """Такой одноразовой ссылки на файл не выдавали."""
+
+    code = "file_link_not_found"
+    message = "No such file link"
+
+
+class FileLinkUsedError(AppError):
+    """Ссылка уже использована: она одноразовая."""
+
+    code = "file_link_used"
+    status_code = 410
+    message = "This file link was already used; take a new one"
+
+
+class FileLinkExpiredError(AppError):
+    """Ссылка просрочена."""
+
+    code = "file_link_expired"
+    status_code = 410
+    message = "This file link has expired; take a new one"
+
+
+class FileLinkWrongKindError(AppError):
+    """Ссылка открывает другое действие: скачивание не принимает загрузку и наоборот."""
+
+    code = "file_link_wrong_kind"
+    status_code = 405
+    message = "This file link opens another action"

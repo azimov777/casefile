@@ -17,7 +17,12 @@ from app.domain.case import (
 from app.domain.discussions import is_discussion_address
 from app.mcp.arguments import IdempotencyKeyArg
 from app.mcp.idempotency import Once
-from app.mcp.tools.case.arguments import EntryBodyArg, EntryRefsArg, EntryTitleArg
+from app.mcp.tools.case.arguments import (
+    EntryBodyArg,
+    EntryFilesArg,
+    EntryRefsArg,
+    EntryTitleArg,
+)
 from app.mcp.tools.case.views import AppendedDiscussionEntryView, appended_discussion_entry
 from app.mcp.toolset import FILING, Toolset
 from app.services import case as case_service
@@ -90,6 +95,7 @@ def register(tools: Toolset) -> None:
         body: EntryBodyArg = "",
         options: OptionsArg = None,
         refs: EntryRefsArg = None,
+        files: EntryFilesArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedDiscussionEntryView:
         """Files a question to registry participants in a discussion. The tracker delivers
@@ -127,6 +133,7 @@ def register(tools: Toolset) -> None:
                         body=body,
                         options=option_pairs,
                         refs=refs or (),
+                        files=files or (),
                     )
                     return appended_discussion_entry(entry, discussion=discussion.address)
 
@@ -144,6 +151,7 @@ def register(tools: Toolset) -> None:
                         body=body,
                         options=option_pairs,
                         refs=refs or (),
+                        files=files or (),
                     )
                     return appended_discussion_entry(
                         opened.entry, discussion=opened.discussion.address, attached_task=task.key
@@ -158,6 +166,7 @@ def register(tools: Toolset) -> None:
                     "body": body,
                     "refs": refs,
                     **({"options": option_pairs} if option_pairs is not None else {}),
+                    **({"files": files} if files else {}),
                 },
                 build=append,
             )
