@@ -2,6 +2,7 @@ import { access } from './access';
 import { account } from './account';
 import { caseScreen } from './case';
 import { connect } from './connect';
+import { decisions } from './decisions';
 import { discussions } from './discussions';
 import { area } from './area';
 import { errors } from './errors';
@@ -37,6 +38,7 @@ export const en = {
   account,
   case: caseScreen,
   connect,
+  decisions,
   discussions,
   area,
   errors,

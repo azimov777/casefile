@@ -2,8 +2,9 @@ import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { areaQueryOptions, SeeAlso } from '@/entities/area';
-import { areaKnowledgeQueryOptions } from '@/entities/entry';
 import { projectQueryOptions } from '@/entities/project';
+import { areaKnowledgeQueryOptions } from '@/entities/entry';
+import { decisionTasksQuery } from '@/entities/project';
 import {
   AttributesSection,
   CaseSection,
@@ -16,6 +17,7 @@ import {
   useProjectRights,
   type HolderTabLink,
 } from '@/features/manage-project';
+import { DecisionsReview, decisionsFilterHref, UnconfirmedLine } from '@/features/decisions/review';
 import { TaskCounters, tasksHref } from '@/features/task-filters';
 import { ApiError } from '@/shared/api';
 import { useLanguage } from '@/shared/i18n';
@@ -128,7 +130,15 @@ export function AreaPage() {
           </Link>
         </>
       }
-      counters={<TaskCounters project={card.project_key} area={card.address} />}
+      counters={
+        <>
+          <TaskCounters project={card.project_key} area={card.address} />
+          <UnconfirmedLine
+            count={card.unconfirmed_decisions}
+            to={decisionsFilterHref(place.tabHref('decisions'), 'unconfirmed')}
+          />
+        </>
+      }
       related={<SeeAlso area={card} />}
       menu={
         <AreaMenu
@@ -169,6 +179,21 @@ export function AreaPage() {
           search={place.search}
           onSearch={place.rememberSearch}
           entryHref={place.entryHref}
+          renderList={
+            place.tab === 'decisions'
+              ? (matches) => (
+                  <DecisionsReview
+                    project={card.project_key}
+                    area={card.address}
+                    matches={matches}
+                    canReview={canWrite}
+                    tasksHref={(ref) =>
+                      tasksHref('', { query: decisionTasksQuery(ref), showArchive: true })
+                    }
+                  />
+                )
+              : undefined
+          }
         />
       ) : place.tab === 'attributes' ? (
         <AttributesSection

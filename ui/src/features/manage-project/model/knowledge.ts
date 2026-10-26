@@ -33,7 +33,10 @@ export function knowledgeLists(entries: readonly Entry[]): Record<KnowledgeKind,
           : null;
     if (kind === null) continue;
     const state = stateOfEntry(entry);
-    (state?.status === 'superseded' ? lists[kind].superseded : lists[kind].inForce).push({
+    (state !== null && state.status !== 'in_force'
+      ? lists[kind].superseded
+      : lists[kind].inForce
+    ).push({
       entry,
       state,
     });

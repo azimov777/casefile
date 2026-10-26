@@ -11,6 +11,7 @@ type LinkKind = components['schemas']['LinkKind'];
 type HierarchyKind = Extract<LinkKind, 'parent' | 'child'>;
 type AuthorKind = components['schemas']['AuthorKind'];
 type DecisionStatus = components['schemas']['DecisionStatus'];
+type ReviewOutcome = components['schemas']['ReviewOutcome'];
 
 /**
  * Подписи кирпичей интерфейса: то, что говорит не экран, а сам механизм, — и потому
@@ -407,6 +408,12 @@ export const ui = {
         see_also: 'Читать также',
         see_also_from: 'Ссылается сюда',
       },
+      // Проверка решения человеком (TRK-758): исход словами, решение — ссылкой за ним.
+      decisionReview: {
+        confirmed: 'Подтверждено решение',
+        rejected: 'Отклонено решение',
+        removed: 'Удалено решение',
+      } satisfies Record<ReviewOutcome, string>,
       areaLinkRemoved: {
         see_also: 'Снята связь «читать также»:',
         see_also_from: 'Снята ссылка отсюда:',

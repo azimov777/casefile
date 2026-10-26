@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, type To } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -30,6 +30,13 @@ interface KnowledgeSectionProps {
   onSearch: (text: string) => void;
   /** Адрес записи в «Деле» этой страницы: тело читается там. */
   entryHref: (no: number) => To;
+  /**
+   * Свой список вместо списка действующих и заменённых — у «Решений» (TRK-758): их рисует и
+   * проверяет `features/decisions/review`, а срезы одного слоя друг друга не импортируют, так
+   * что список приходит от страницы. Получает номера решений, найденных поиском бэкенда, или
+   * `null`, когда поиска нет: заголовок, «Решение» и поле поиска остаются здесь.
+   */
+  renderList?: (matches: ReadonlySet<number> | null) => ReactNode;
 }
 
 /**
@@ -49,6 +56,7 @@ export function KnowledgeSection({
   search,
   onSearch,
   entryHref,
+  renderList,
 }: KnowledgeSectionProps) {
   const { t } = useTranslation('area');
   const feed = useQuery(areaKnowledgeQueryOptions(holder.key, search));
@@ -116,6 +124,14 @@ export function KnowledgeSection({
         <div className="px-3 py-2">
           <QueryState query={feed} loading={t('knowledge.loading')} />
         </div>
+      ) : renderList !== undefined ? (
+        renderList(
+          search === ''
+            ? null
+            : new Set(
+                (feed.data ?? []).filter((item) => item.type === 'decision').map((item) => item.no),
+              ),
+        )
       ) : (
         <>
           {list.inForce.length === 0 ? (

@@ -2,7 +2,15 @@ import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { API, bootstrap, collection, data, entryOfType, failure } from '@testing/msw/responses';
+import {
+  API,
+  bootstrap,
+  collection,
+  data,
+  decisionsPage,
+  entryOfType,
+  failure,
+} from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
@@ -79,6 +87,7 @@ beforeEach(() => {
   setToken('trk_test');
   server.use(
     http.get(`${API}/api/v1/tasks`, () => collection([])),
+    http.get(`${API}/api/v1/decisions`, () => decisionsPage([])),
     http.get(`${API}/api/v1/projects/DEMO`, () => data(projectDetail())),
     http.get(`${API}/api/v1/projects/NEW`, () =>
       data(projectDetail({ key: 'NEW', title: 'Новый', attributes: [] })),

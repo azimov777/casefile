@@ -109,6 +109,8 @@ describe('ссылки на обсуждения (TRK-672)', () => {
     expect(ownerRefHref('TRK-42', 3)).toBe('/tasks/TRK-42?entry=3');
     expect(ownerRefHref('TRK~7', 3)).toBe('/discussions/TRK~7?entry=3');
     expect(ownerRefHref('TRK~7', null)).toBe('/discussions/TRK~7');
+    expect(ownerRefHref('TRK', 15)).toBe('/projects/TRK?entry=15');
+    expect(ownerRefHref('TRK/mcp', 3)).toBe('/projects/TRK/areas/mcp?entry=3');
     expect(discussionHref('TRK~7')).toBe('/discussions/TRK~7');
   });
 });

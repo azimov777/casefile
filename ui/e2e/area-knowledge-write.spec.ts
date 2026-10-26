@@ -39,7 +39,7 @@ test('«Решение» на странице области записывае
 
   const title = `Правила пишем по вторникам, прогон ${RUN}`;
   await page.goto(`/projects/${KEY}/areas/know`);
-  await expect(page.getByText('Решений у области пока нет.')).toBeVisible();
+  await expect(page.getByText('Действующих решений нет.')).toBeVisible();
 
   await page.getByRole('button', { name: 'Решение', exact: true }).click();
   const form = page.getByRole('form', { name: `Запись в дело ${ADDRESS}` });
@@ -49,10 +49,12 @@ test('«Решение» на странице области записывае
     page.getByRole('region', { name: `Решение в дело ${ADDRESS} подшито` }),
   ).toBeVisible();
 
-  // Среди действующих: в списке со статусом «действует», число вкладки — единица.
-  const row = page.locator('li[data-knowledge]', { hasText: title });
+  // Среди действующих: решение человека читается подтверждённым (оно подписано человеком),
+  // число вкладки — единица.
+  const row = page.locator('li[data-decision]', { hasText: title });
   await expect(row).toHaveAttribute('data-status', 'in_force');
-  await expect(row.locator('[data-entry-state]')).toContainText('действует');
+  await expect(row).toHaveAttribute('data-review', 'confirmed');
+  await expect(row).toContainText('подтверждено');
   await expect(
     page
       .getByRole('navigation', { name: 'Разделы области' })

@@ -7,6 +7,8 @@ import {
   bootstrap,
   collection,
   data,
+  decisionRow,
+  decisionsPage,
   areaDetail,
   entryOfType,
   failure,
@@ -111,6 +113,18 @@ beforeEach(() => {
     // Счётчики шапки (TRK-619) читают список задач; их числа здесь не проверяются.
     http.get(`${API}/api/v1/tasks`, () => collection([], { total: 0 })),
     http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
+    // Решения проекта и всех его областей: страница оставляет только свои (TRK-758).
+    http.get(`${API}/api/v1/decisions`, () =>
+      decisionsPage([
+        decisionRow(`${ADDRESS}#3`, { title: 'Пишем только в каналы, где есть агенты' }),
+        decisionRow(`${ADDRESS}#4`, {
+          title: 'Пишем в любые каналы',
+          status: 'superseded',
+          superseded_by: `${ADDRESS}#3`,
+        }),
+        decisionRow('DEMO/sales#1', { title: 'Решение другой области' }),
+      ]),
+    ),
     http.get(`${API}/api/v1/projects/DEMO`, () => data(projectDetail('DEMO'))),
     http.get(`${API}${PATH}`, () => data(detail())),
     http.get(`${API}${PATH}/entries`, ({ request }) => {
@@ -196,9 +210,7 @@ describe('страница области', () => {
   it('`tab=areas` у области — «Решения»: этой вкладки у неё нет', async () => {
     renderApp('/projects/DEMO/areas/promotion?tab=areas', { language: 'ru' });
 
-    expect(
-      await screen.findByRole('list', { name: say.area('knowledge.decisions.list') }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('list', { name: say.decisions('list') })).toBeInTheDocument();
     expect(tab(say.area('tabs.decisions'))).toHaveAttribute('aria-current', 'true');
   });
 
@@ -295,7 +307,7 @@ describe('страница области', () => {
     expect(await screen.findByText(/Область в архиве с/)).toBeInTheDocument();
     // «Восстановить» — за «⋯»: у архивной области активного проекта меню есть.
     expect(await menuButton()).toBeInTheDocument();
-    await screen.findByRole('list', { name: say.area('knowledge.decisions.list') });
+    await screen.findByRole('list', { name: say.decisions('list') });
     expect(screen.queryByRole('button', { name: say.area('knowledge.openDecision') })).toBeNull();
     expect(screen.queryByRole('button', { name: say.area('knowledge.openNote') })).toBeNull();
     // Атрибуты при этом читаются, но без правки.
@@ -429,8 +441,10 @@ describe('знание области: решения и заметки (TRK-660
   it('«Решения»: действующие в списке, заменённых нет; число на вкладке — действующих', async () => {
     renderApp('/projects/DEMO/areas/promotion', { language: 'ru' });
 
-    const decisions = await list(say.area('knowledge.decisions.list'));
+    const decisions = await list(say.decisions('list'));
+    // Своих действующих одно: заменённое — в «Показать снятые», чужой области нет вовсе.
     expect(within(decisions).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(decisions).queryByText('Решение другой области')).toBeNull();
     expect(
       within(decisions).getByText('Пишем только в каналы, где есть агенты'),
     ).toBeInTheDocument();

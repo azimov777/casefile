@@ -132,12 +132,17 @@ export function discussionHref(address: string, entryNo: number | null = null): 
 }
 
 /**
- * Куда ведёт ключ из заголовка записи: задача `TRK-42` или обсуждение `TRK~7`. Заголовок
- * ответа и записи в деле обсуждения называют вопрос ключом владельца дела, а владелец у
- * дела бывает и обсуждением.
+ * Куда ведёт ключ из заголовка записи: задача `TRK-42`, обсуждение `TRK~7`, проект `TRK` или
+ * область `TRK/mcp`. Заголовок ответа и записи в деле обсуждения называют вопрос ключом
+ * владельца дела, а заголовок проверки решения (TRK-758) — решение в деле проекта или
+ * области; владелец у дела бывает и тем, и другим. Дефис есть только в ключе задачи,
+ * косая черта — только в адресе области, тильда — в адресе обсуждения (TRK#129).
  */
 export function ownerRefHref(key: string, entryNo: number | null): string {
-  return key.includes('~') ? discussionHref(key, entryNo) : taskRefHref({ key, entryNo });
+  if (key.includes('~')) return discussionHref(key, entryNo);
+  if (key.includes('/')) return areaHref(key, entryNo);
+  if (!key.includes('-')) return projectHref(key, entryNo);
+  return taskRefHref({ key, entryNo });
 }
 
 /**
