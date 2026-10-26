@@ -96,6 +96,7 @@ export const errors = {
   link_cycle_detected: 'Связь замкнула бы кольцо.',
   link_exists: 'Такая связь между этими задачами уже есть.',
   link_not_found: 'Такой связи между задачами нет.',
+  link_reason_not_allowed: 'Причину можно указать только у связи областей.',
   link_self_not_allowed: 'Задачу нельзя связать с самой собой.',
   malformed_response: 'Ответ сервера не соответствует контракту.',
   method_not_allowed: 'Такое действие у этого адреса не поддерживается.',

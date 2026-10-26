@@ -696,6 +696,17 @@ class LinkNotFoundError(NotFoundError):
     message = "Link not found"
 
 
+class LinkReasonNotAllowedError(ValidationError):
+    """Причину прислали связи задачи: она есть только у связи областей.
+
+    Присланное не проглатывается (TRK/api#49): агент, поставивший причину задаче, решил бы,
+    что она сохранена.
+    """
+
+    code = "link_reason_not_allowed"
+    message = "Only an area link takes a reason"
+
+
 class AreaLinkSelfError(ValidationError):
     """Связь области с самой собой запрещена (`app/domain/area_links.py`)."""
 

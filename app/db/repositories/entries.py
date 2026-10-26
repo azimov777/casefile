@@ -213,6 +213,12 @@ class EntryRepository:
             select(func.max(Entry.no)).where(Entry.discussion_id == discussion_id)
         )
 
+    async def latest_area_no(self, area_id: uuid.UUID) -> int | None:
+        """Номер последней записи дела области — по тому же правилу, что `latest_no`."""
+        return await self._session.scalar(
+            select(func.max(Entry.no)).where(Entry.area_id == area_id)
+        )
+
     async def get_by_no(self, task_id: uuid.UUID, no: int) -> Entry | None:
         """Одна запись по её номеру внутри задачи — адрес из ссылки `TRK-42#12`."""
         return await self._get(Entry.task_id == task_id, no)

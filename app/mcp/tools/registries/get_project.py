@@ -11,6 +11,10 @@
 заметками стоила ≈ 87 тыс. токенов на вызов (TRK-598#11). Действующие приходят списками
 «ссылка и заголовок», число всех по типам — в `index_omitted`, тела и заменённые —
 `read_project_entries`. Режима «опись целиком» рядом не оставлено (TRK#12).
+
+Поле `see_also` — исходящие связи области с другими областями (TRK~24#12, TRK-735): адрес,
+название, описание, причина. Входящих связей и соседей соседа в MCP нет, у проекта поле
+пустое.
 """
 
 from datetime import datetime
@@ -19,12 +23,14 @@ from typing import Annotated
 from pydantic import BaseModel, Field
 
 from app.db.models.area import Area
+from app.db.models.area_link import AreaLink
 from app.db.models.attribute import Attribute
 from app.domain.case import EntryHeading
 from app.domain.projects import MAX_PROJECT_DESCRIPTION_LENGTH
 from app.mcp.arguments import CaseOwnerKeyArg
 from app.mcp.tools.case.views import HeadingView, heading
 from app.mcp.toolset import READ_ONLY, Toolset
+from app.services import area_links as area_links_service
 from app.services import areas as areas_service
 from app.services import attributes as attributes_service
 from app.services import case as case_service
@@ -51,6 +57,13 @@ class AreaRefView(BaseModel):
     address: str
     title: str
     archived_at: datetime | None
+
+
+class SeeAlsoView(BaseModel):
+    address: str
+    title: str
+    description: str
+    reason: str
 
 
 class InForceView(BaseModel):
@@ -106,6 +119,12 @@ class ProjectView(BaseModel):
     areas: list[AreaRefView] = Field(
         description=("Areas of the project by key, created by `create_project`; empty for an area")
     )
+    see_also: list[SeeAlsoView] = Field(
+        description=(
+            "Areas whoever works in this area also reads, each with the reason; their own "
+            "`see_also` is not followed; empty for a project"
+        )
+    )
     index: list[HeadingView] = Field(
         description=(
             "Index of the case, titles only, in number order: artifacts and notes and the "
@@ -129,6 +148,7 @@ def project(
     attributes: list[Attribute],
     knowledge: CaseKnowledge,
     areas: list[Area],
+    see_also: list[AreaLink],
     index: list[EntryHeading],
 ) -> ProjectView:
     """Проект (или область) с описанием — общим контекстом всех его задач — и описью
@@ -149,6 +169,15 @@ def project(
         findings=[InForceView(ref=f.ref, title=f.title) for f in knowledge.findings],
         areas=[
             AreaRefView(address=d.address, title=d.title, archived_at=d.archived_at) for d in areas
+        ],
+        see_also=[
+            SeeAlsoView(
+                address=link.target.address,
+                title=link.target.title,
+                description=link.target.description,
+                reason=link.reason,
+            )
+            for link in see_also
         ],
         index=[heading(line) for line in index],
         index_omitted={kind.value: count for kind, count in knowledge.totals.items()},
@@ -183,5 +212,10 @@ def register(tools: Toolset) -> None:
                     session, found, actor=actor, include_archived=include_archived_areas
                 )
             )
+            see_also = (
+                await area_links_service.list_see_also(session, found)
+                if isinstance(found, Area)
+                else []
+            )
             index = await case_service.project_case_index(session, found, actor=actor)
-            return project(found, attributes, knowledge, areas, index)
+            return project(found, attributes, knowledge, areas, see_also, index)

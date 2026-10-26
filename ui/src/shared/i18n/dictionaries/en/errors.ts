@@ -99,6 +99,7 @@ export const errors = {
   link_cycle_detected: 'The link would close a ring.',
   link_exists: 'These two tasks are already linked that way.',
   link_not_found: 'There is no such link between tasks.',
+  link_reason_not_allowed: 'Only a link between areas takes a reason.',
   link_self_not_allowed: 'A task cannot be linked to itself.',
   malformed_response: 'The server reply does not match the contract.',
   method_not_allowed: 'This address does not support that action.',

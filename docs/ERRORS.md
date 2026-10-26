@@ -161,6 +161,7 @@
 | `invalid_task_key` | Task key is invalid | Ключ задачи не разбирается как `КЛЮЧ-НОМЕР`. |
 | `journal_too_many_tasks` | Too many tasks in one journal filter | Задач в одном фильтре ленты больше потолка: потолок и присланное — в `details`. |
 | `journal_wait_too_long` | Requested wait exceeds the ceiling | Запрошенное ожидание больше потолка: потолок и запрошенное лежат в `details`. |
+| `link_reason_not_allowed` | Only an area link takes a reason | Причину прислали связи задачи: она есть только у связи областей. |
 | `link_self_not_allowed` | A task cannot be linked to itself | Связь задачи с самой собой запрещена — любого вида, включая `relates`. |
 | `project_access_mode_invalid` | Project access mode is invalid | Режим доступа к проектам — не `all`, `except` и не `only`. |
 | `project_description_too_long` | Project description is too long | Описание проекта длиннее предела (`app/domain/projects.py`). |
