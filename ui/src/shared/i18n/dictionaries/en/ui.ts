@@ -100,6 +100,7 @@ export const ui = {
     // агента и доступы касаются установки целиком.
     installation: 'Installation',
     connect: 'Connect an agent',
+    files: 'Files',
     settings: 'Settings',
     access: 'Access',
     // Перенос — тоже действие над установкой целиком, и тоже только администратору

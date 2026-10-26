@@ -5,6 +5,7 @@ import { connect } from './connect';
 import { discussions } from './discussions';
 import { area } from './area';
 import { errors } from './errors';
+import { files } from './files';
 import { fieldReasons } from './field-reasons';
 import { login } from './login';
 import { moving } from './moving';
@@ -26,6 +27,7 @@ export const ru = {
   discussions,
   area,
   errors,
+  files,
   fieldReasons,
   login,
   moving,
