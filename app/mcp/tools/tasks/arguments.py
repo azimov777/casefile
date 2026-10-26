@@ -18,8 +18,9 @@ DECISIONS_RULE = (
     f"area's case, up to {MAX_DECISIONS}: the decisions the task relies on. A task entry "
     "such as `TRK-42#7` is refused with `task_fields_invalid` (`task_entry`), a project or "
     "area entry of another type with `not_a_decision`. A reference not yet in the field "
-    "leads to a decision in force; a superseded one is refused with "
-    "`decision_not_in_force`, its successor in `details`"
+    "leads to a decision in force; one that is not in force is refused with "
+    "`decision_not_in_force`: a superseded one names its successor in `details`, a "
+    "rejected or removed one has none"
 )
 
 #: Область задачи (TRK#57): адрес области её проекта. Ставит

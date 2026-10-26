@@ -46,8 +46,8 @@ SupersedesArg = Annotated[
             "that the new entry supersedes: decisions for a `decision`, findings for a "
             "`finding`; accepted only with these two types. A number outside this case or of "
             "another entry type is refused with `entry_fields_invalid`; an entry superseded "
-            "already with `decision_not_in_force` or `finding_not_in_force`, its successor "
-            "in `details`"
+            "already, or a decision a human rejected or removed, with `decision_not_in_force` "
+            "or `finding_not_in_force`: its successor, if any, in `details`"
         )
     ),
 ]

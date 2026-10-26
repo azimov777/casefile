@@ -131,7 +131,7 @@ class TaskChanges(BaseModel):
             "The whole new list, editable in any status but `done` and `cancelled`. "
             + DECISIONS_RULE
             + ". A reference already in the field stays there after its decision is "
-            "superseded"
+            "superseded, rejected or removed"
         ),
         examples=[["TRK#15"]],
     )

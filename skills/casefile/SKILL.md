@@ -82,7 +82,10 @@ a rule that was replaced. Read them every time you enter a task, a small one too
 6. Only an entry in force counts. Every decision and finding you read carries a `status`;
    a superseded one names its successor in `superseded_by`. An entry you reached by its
    number, from a reference or a search without `in_force`, may be superseded: look at its
-   `status` before you rely on it, and take the successor instead.
+   `status` before you rely on it, and take the successor instead. An entry with status
+   `rejected` or `removed` was withdrawn by a human and has no successor: do not rely on
+   it and do not restore it. A reference to it, or a replacement of it, is refused with
+   `decision_not_in_force`.
 
 **Check:** you can say in two sentences what the goal is, where the work stands and what
 your next action is, and you know the open questions, the conclusions of the discussions

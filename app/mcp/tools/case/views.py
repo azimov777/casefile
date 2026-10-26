@@ -372,7 +372,8 @@ class EntryView(BaseModel):
         description=(
             "Present only on a `decision` or `finding` of a project's or an area's case read "
             "by `read_project_entries`: `superseded` once a later entry of the same type in "
-            "the case names this one in `supersedes`, `in_force` until then. Absent on "
+            "the case names this one in `supersedes`, `rejected` or `removed` on a decision a "
+            "human withdrew, `in_force` until then. Absent on "
             "other types, in a task's case and in `wait_journal`"
         ),
     )
@@ -381,7 +382,7 @@ class EntryView(BaseModel):
         description=(
             "Present together with `status`: number of the entry in the same case that "
             "superseded this one, the direct successor rather than the end of a chain; "
-            "`null` while in force"
+            "`null` while in force and on a `rejected` or `removed` decision"
         ),
     )
     files: list[AttachedFileView] | None = Field(

@@ -66,7 +66,8 @@ DecisionStatusSchema = Annotated[
         DecisionStatus,
         "Status of a decision or finding of a project's or an area's case, computed on read: "
         "`superseded` once a later entry of the same type in the case names it in "
-        "`supersedes`",
+        "`supersedes`; a decision a human withdrew is `rejected` or `removed`, with no "
+        "successor",
     ),
 ]
 DiscussionStatusSchema = Annotated[DiscussionStatus, described(DiscussionStatus, "Status")]
