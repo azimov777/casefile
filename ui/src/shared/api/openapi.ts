@@ -2381,6 +2381,16 @@ export interface components {
              * @description Current attribute values, ordered by name ignoring case. Every change is an entry of the area's case: `attribute_created`, `attribute_changed`, `attribute_removed`
              */
             attributes: components["schemas"]["AttributeRead"][];
+            /**
+             * See Also
+             * @description Areas this one refers to — "who works here, reads there too" — ordered by address; may lie in another project. The link is set by agents through MCP; an archived area stays listed. Each link is also an entry `link_added` or `link_removed` in the case of both areas
+             */
+            see_also?: components["schemas"]["AreaSeeAlsoRead"][];
+            /**
+             * See Also From
+             * @description Areas that refer to this one, ordered by address: the same links read from the other side
+             */
+            see_also_from?: components["schemas"]["AreaSeeAlsoFromRead"][];
         };
         /**
          * AreaEntryCreate
@@ -2414,6 +2424,42 @@ export interface components {
              * @enum {string}
              */
             type: "note" | "decision" | "finding" | "artifact";
+        };
+        /**
+         * AreaLinkKind
+         * @description Вид связи областей **со стороны области**, чьё дело или чью карточку читают.
+         *
+         *     В таблицу попадает только `see_also`; `see_also_from` — то же ребро, прочитанное из
+         *     области-цели (в payload записи дела цели и в `link_kind` описи).
+         * @enum {string}
+         */
+        AreaLinkKind: "see_also" | "see_also_from";
+        /**
+         * AreaLinkPayload
+         * @description Связь областей `see_also`. Подшивается в дело обеих областей под своим именем.
+         *
+         *     Отдельная модель от `LinkPayload`: у связи задач причины нет, и добавлять ей пустое
+         *     поле значило бы менять нагрузку уже записанных записей. Объединение различает их по
+         *     набору ключей (`extra="forbid"`).
+         */
+        AreaLinkPayload: {
+            /**
+             * @description `see_also` in the case of the source area, `see_also_from` in the target's
+             * @example see_also
+             */
+            kind: components["schemas"]["AreaLinkKind"];
+            /**
+             * Other
+             * @description Address of the area on the other side
+             * @example TRK/mcp
+             */
+            other: string;
+            /**
+             * Reason
+             * @description Why one working in the source area reads the target too, one phrase
+             * @example Экраны показывают механики ядра: их правила — там.
+             */
+            reason: string;
         };
         /**
          * AreaRead
@@ -2488,6 +2534,70 @@ export interface components {
              * @example Популяризация
              */
             title: string;
+        };
+        /**
+         * AreaSeeAlsoFromRead
+         * @description Связь `see_also` со стороны цели: кто отсылает читателя сюда.
+         */
+        AreaSeeAlsoFromRead: {
+            /**
+             * Address
+             * @description Address of the area that lists this one in its see also
+             * @example TRK/ui
+             */
+            address: string;
+            /**
+             * Title
+             * @example Интерфейс
+             */
+            title: string;
+            /**
+             * Reason
+             * @description Why one working there reads here too, as the source of the link wrote it
+             * @example Экраны показывают механики ядра: их правила — там.
+             */
+            reason: string;
+            created_by: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * AreaSeeAlsoRead
+         * @description Связь `see_also` со стороны источника: куда он отсылает читателя.
+         */
+        AreaSeeAlsoRead: {
+            /**
+             * Address
+             * @description Address of the area the card refers to; its card is read at `/projects/TRK/areas/mcp`
+             * @example TRK/mcp
+             */
+            address: string;
+            /**
+             * Title
+             * @example MCP-сервер
+             */
+            title: string;
+            /**
+             * Description
+             * @description Short "what this is" of the area on the other side, so one can decide to open it
+             * @example Инструменты агентов и их ответы
+             */
+            description: string;
+            /**
+             * Reason
+             * @description Why one working here reads there too, one phrase
+             * @example Экраны показывают механики ядра: их правила — там.
+             */
+            reason: string;
+            created_by: components["schemas"]["AuthorRead"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /**
          * AreaUpdate
@@ -4724,7 +4834,7 @@ export interface components {
         };
         /**
          * LinkEntryRead
-         * @description Служебная запись о появлении или снятии связи.
+         * @description Служебная запись о появлении или снятии связи: в деле задачи или области.
          */
         LinkEntryRead: {
             /**
@@ -4746,27 +4856,28 @@ export interface components {
             no: number;
             /**
              * Task Key
+             * @description Key of the owning task; `null` for an entry of a project's, an area's or a discussion's case
              * @example TRK-42
              */
-            task_key: string;
+            task_key: string | null;
             /**
              * Project Key
-             * @description Always `null`: entries of this type belong to a task, never to a project
+             * @description Key of the owning project for an entry of a project's case (`TRK#7`); `null` for a task entry, whose project is part of `task_key`, and for an area or a discussion entry
              * @example null
              */
-            project_key: null;
+            project_key: string | null;
             /**
              * Area
-             * @description Always `null`: entries of this type belong to a task, never to an area
+             * @description Address of the owning area for an entry of an area's case (`TRK/promotion#3`); `null` for a task or project entry
              * @example null
              */
-            area?: null;
+            area?: string | null;
             /**
              * Discussion
-             * @description Always `null`: entries of this type never belong to a discussion
+             * @description Address of the owning discussion for an entry of a discussion's case (`TRK~7#3`); `null` otherwise
              * @example null
              */
-            discussion?: null;
+            discussion?: string | null;
             author: components["schemas"]["AuthorRead"];
             /**
              * Title
@@ -4823,7 +4934,8 @@ export interface components {
              * @enum {string}
              */
             type: "link_added" | "link_removed";
-            payload: components["schemas"]["LinkPayload"];
+            /** Payload */
+            payload: components["schemas"]["LinkPayload"] | components["schemas"]["AreaLinkPayload"];
         };
         /**
          * LinkFactsRead
@@ -4835,14 +4947,23 @@ export interface components {
              * @enum {string}
              */
             type: "link_added" | "link_removed";
-            /** @description Kind of the link */
-            link_kind?: components["schemas"]["LinkKind"] | null;
+            /**
+             * Link Kind
+             * @description Kind of the link; in the case of an area `see_also` (this area lists the other in see also) or `see_also_from` (the other area lists this one)
+             */
+            link_kind?: components["schemas"]["LinkKind"] | components["schemas"]["AreaLinkKind"] | null;
             /**
              * Other Key
-             * @description The task on the other side
+             * @description The task on the other side; `null` in the case of an area
              * @example TRK-7
              */
             other_key?: string | null;
+            /**
+             * Other Area
+             * @description Address of the area on the other side; `null` in the case of a task
+             * @example TRK/mcp
+             */
+            other_area?: string | null;
         };
         /**
          * LinkKind
@@ -4852,7 +4973,9 @@ export interface components {
         LinkKind: "parent" | "child" | "blocks" | "blocked_by" | "relates";
         /**
          * LinkPayload
-         * @description Связь между задачами. Подшивается в дело обеих сторон под своим именем.
+         * @description Связь между задачами или областями. Подшивается в дело обеих сторон под своим именем.
+         *
+         *     Связь областей — `AreaLinkPayload`.
          *
          *     Модель объявлена здесь, а не в задаче 24 вместе со связями: объединение по `type`
          *     обязано покрывать **все** типы записей, иначе первая же запись о связи развалила бы
@@ -4866,7 +4989,7 @@ export interface components {
             kind: string;
             /**
              * Other
-             * @description Key of the task on the other side
+             * @description Key of the task on the other side; address of the area for an area link
              * @example TRK-7
              */
             other: string;

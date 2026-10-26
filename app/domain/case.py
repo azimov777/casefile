@@ -93,6 +93,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
 
+from app.domain.area_links import AreaLinkKind
 from app.domain.areas import (
     ADDRESS_SEPARATOR,
     format_area_address,
@@ -551,13 +552,17 @@ class AssigneeChangedFacts:
 class LinkFacts:
     """`link_added` и `link_removed`: чем задача стала другой и какой.
 
+    В деле области (связь `see_also`) вид — `see_also` или `see_also_from`, а другая
+    сторона названа в `other_area` адресом области; в деле задачи — `other_key`.
+
     Один вариант на два типа: форма у них одна, а разметка различает их сама — `type`
     здесь без значения по умолчанию именно поэтому.
     """
 
     type: Literal[EntryType.LINK_ADDED, EntryType.LINK_REMOVED]
-    link_kind: LinkKind | None = None
+    link_kind: LinkKind | AreaLinkKind | None = None
     other_key: str | None = None
+    other_area: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

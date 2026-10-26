@@ -46,6 +46,7 @@ from pydantic import (
 
 from app.api.schemas.authors import AuthorRead
 from app.db.models.entry import Entry
+from app.domain.area_links import AreaLinkKind
 from app.domain.case import (
     CLOSING_SUMMARY_PART,
     MAX_ADDRESSEES,
@@ -170,9 +171,22 @@ class LinkFactsRead(_EntryFactsBase):
     """Связь появилась или снята: её вид и вторая сторона."""
 
     type: Literal[EntryType.LINK_ADDED, EntryType.LINK_REMOVED]
-    link_kind: LinkKind | None = Field(default=None, description="Kind of the link")
+    link_kind: LinkKind | AreaLinkKind | None = Field(
+        default=None,
+        description=(
+            "Kind of the link; in the case of an area `see_also` (this area lists the other "
+            "in see also) or `see_also_from` (the other area lists this one)"
+        ),
+    )
     other_key: str | None = Field(
-        default=None, examples=["TRK-7"], description="The task on the other side"
+        default=None,
+        examples=["TRK-7"],
+        description="The task on the other side; `null` in the case of an area",
+    )
+    other_area: str | None = Field(
+        default=None,
+        examples=["TRK/mcp"],
+        description="Address of the area on the other side; `null` in the case of a task",
     )
 
 
@@ -779,7 +793,9 @@ class AssigneeChangedPayload(BaseModel):
 
 
 class LinkPayload(BaseModel):
-    """Связь между задачами. Подшивается в дело обеих сторон под своим именем.
+    """Связь между задачами или областями. Подшивается в дело обеих сторон под своим именем.
+
+    Связь областей — `AreaLinkPayload`.
 
     Модель объявлена здесь, а не в задаче 24 вместе со связями: объединение по `type`
     обязано покрывать **все** типы записей, иначе первая же запись о связи развалила бы
@@ -789,7 +805,31 @@ class LinkPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: str = Field(examples=["blocked_by"])
-    other: str = Field(examples=["TRK-7"], description="Key of the task on the other side")
+    other: str = Field(
+        examples=["TRK-7"],
+        description="Key of the task on the other side; address of the area for an area link",
+    )
+
+
+class AreaLinkPayload(BaseModel):
+    """Связь областей `see_also`. Подшивается в дело обеих областей под своим именем.
+
+    Отдельная модель от `LinkPayload`: у связи задач причины нет, и добавлять ей пустое
+    поле значило бы менять нагрузку уже записанных записей. Объединение различает их по
+    набору ключей (`extra="forbid"`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: AreaLinkKind = Field(
+        examples=["see_also"],
+        description="`see_also` in the case of the source area, `see_also_from` in the target's",
+    )
+    other: str = Field(examples=["TRK/mcp"], description="Address of the area on the other side")
+    reason: str = Field(
+        examples=["Экраны показывают механики ядра: их правила — там."],
+        description="Why one working in the source area reads the target too, one phrase",
+    )
 
 
 class AttachmentPayload(BaseModel):
@@ -1318,11 +1358,11 @@ class AssigneeChangedEntryRead(_EntryReadBase):
     payload: AssigneeChangedPayload
 
 
-class LinkEntryRead(_EntryReadBase):
-    """Служебная запись о появлении или снятии связи."""
+class LinkEntryRead(_ProjectOwnableEntryRead):
+    """Служебная запись о появлении или снятии связи: в деле задачи или области."""
 
     type: Literal[EntryType.LINK_ADDED, EntryType.LINK_REMOVED]
-    payload: LinkPayload
+    payload: LinkPayload | AreaLinkPayload
 
 
 class MovedEntryRead(_EntryReadBase):
