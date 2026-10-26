@@ -35,6 +35,17 @@ describe('readFileFilter', () => {
   });
 });
 
+describe('отбор «давно не открывали»', () => {
+  it('читается из unopened=1, считается условием, пишется в адрес и снимается без следа', () => {
+    const filter = readFileFilter(new URLSearchParams('unopened=1'));
+    expect(filter.unopened).toBe(true);
+    expect(activeConditions(filter)).toBe(1);
+    expect(withFilter(new URLSearchParams(), { unopened: true }).toString()).toBe('unopened=1');
+    expect(withFilter(new URLSearchParams('unopened=1'), { unopened: false }).toString()).toBe('');
+    expect(readFileFilter(new URLSearchParams('unopened=yes')).unopened).toBe(false);
+  });
+});
+
 describe('withFilter', () => {
   it('не пишет умолчания в адрес', () => {
     const params = new URLSearchParams('sort=size&order=asc&q=a');

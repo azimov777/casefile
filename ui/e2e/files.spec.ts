@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { side } from './contour';
+import { compose, side } from './contour';
 
 /**
  * «Файлы» (TRK-739, слово владельца TRK~8#4): все файлы установки одним списком — загрузка,
@@ -182,6 +182,150 @@ test('загрузить, найти, отсортировать, отобрат
     expect(problems).toEqual([]);
   } finally {
     // Уборка: всё, что носит метку прогона, — одним удалением по отбору.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`/files?q=${stamp}`);
+    const left = await page.getByRole('article').count();
+    if (left > 0) {
+      await page.getByRole('button', { name: 'Удалить все отобранные' }).click();
+      const dialog = page.getByRole('alertdialog');
+      await dialog.getByRole('checkbox').check();
+      await dialog.getByRole('button', { name: 'Удалить', exact: true }).click();
+      await expect(page.getByRole('article')).toHaveCount(0);
+    }
+  }
+});
+
+/**
+ * «Давно не открывали» (TRK-754, слово владельца TRK~8#12, вариант «Б»): метка у изображений,
+ * отбор в адресе, число отобранных, удаление с подтверждением числа. Срок — настройка
+ * `file_unopened_days` (минимум 1 день, умолчание 90), а добавленный сейчас файл за сутки не
+ * состарить, поэтому сценарий сдвигает `created_at` загруженных файлов прямо в базе контура
+ * (`docker compose exec db psql`): отсчёт признака идёт от добавления, пока файл не открывали.
+ */
+function age(names: string[], days: number): void {
+  const list = names.map((name) => `'${name}'`).join(', ');
+  compose([
+    'exec',
+    '-T',
+    'db',
+    'psql',
+    '-U',
+    'tracker',
+    '-d',
+    'tracker',
+    '-c',
+    `UPDATE files SET created_at = now() - interval '${days} days' WHERE name IN (${list})`,
+  ]);
+}
+
+test('давно не открывали: метка, отбор, число, удаление с подтверждением и расхождение числа', async ({
+  page,
+}) => {
+  const stamp = `e2u${Date.now().toString(36)}`;
+  const oldA = `${stamp}-old-a.png`;
+  const oldB = `${stamp}-old-b.png`;
+  const fresh = `${stamp}-fresh.png`;
+  const doc = `${stamp}-old-doc.pdf`;
+
+  const problems: string[] = [];
+  const bytesReads: string[] = [];
+  const deletions: string[] = [];
+  page.on('console', (message) => {
+    // Браузер сам пишет в консоль ожидаемое 409 расхождения числа; сам отказ сверяет ответ ниже.
+    if (message.type() === 'error' && !/status of 409/.test(message.text())) {
+      problems.push(`console: ${message.text()}`);
+    }
+  });
+  page.on('pageerror', (error) => problems.push(`page: ${error.message}`));
+  page.on('request', (request) => {
+    if (/\/api\/v1\/files\/[^/]+\/content/.test(request.url())) bytesReads.push(request.url());
+  });
+  await page.route('**/api/v1/files/delete', async (route) => {
+    deletions.push(route.request().postData() ?? '');
+    await route.continue();
+  });
+  page.on('response', (response) => {
+    // Единственный ожидаемый отказ — расхождение числа при удалении (409).
+    if (response.status() >= 400 && response.status() !== 409) {
+      problems.push(`${response.status()} ${response.url()}`);
+    }
+  });
+
+  await page.goto('/files');
+  try {
+    await upload(page, { name: oldA, mimeType: 'image/png', buffer: PNG });
+    await upload(page, { name: oldB, mimeType: 'image/png', buffer: PNG });
+    await upload(page, { name: fresh, mimeType: 'image/png', buffer: PNG });
+    await upload(page, { name: doc, mimeType: 'application/pdf', buffer: PDF });
+    // Состарить двух изображений и документ; документ метки не получает никогда.
+    age([oldA, oldB, doc], 200);
+
+    await page.goto(`/files?q=${stamp}`);
+    await expect(page.getByRole('article')).toHaveCount(4);
+    const mark = (name: string) => card(page, name).locator('[data-role="unopened"]');
+    await expect(mark(oldA)).toHaveText('Давно не открывали');
+    await expect(mark(oldB)).toHaveText('Давно не открывали');
+    await expect(mark(fresh)).toHaveCount(0);
+    await expect(mark(doc)).toHaveCount(0);
+
+    // Отбор: переключатель пишет адрес; в списке два изображения, число названо, срок виден.
+    await page.getByRole('checkbox', { name: 'Давно не открывали' }).click();
+    await expect(page.getByRole('checkbox', { name: 'Давно не открывали' })).toBeChecked();
+    await expect(page).toHaveURL(/unopened=1/);
+    await expect(page.getByRole('article')).toHaveCount(2);
+    await expect(page.locator('[data-role="unopened-count"]')).toHaveText(
+      'Давно не открывали: 2 изображения',
+    );
+    await expect(page.locator('[data-role="unopened-term"]')).toContainText('90 дней');
+    const settingsLink = page.getByRole('link', { name: /меняется в «Настройках»/ });
+    await expect(settingsLink).toHaveAttribute('href', '/settings');
+
+    // Список — не открытие: ни одно изображение не читалось байтами (иначе признак бы слетел).
+    expect(bytesReads).toEqual([]);
+
+    // Расхождение числа: пока окно открыто, третье изображение состарилось. Ничего не удалено.
+    await page.getByRole('button', { name: 'Удалить все давно не открытые' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog.getByText('Удалить все 2 файла, отобранные фильтром?')).toBeVisible();
+    await dialog.getByRole('checkbox', { name: 'Удаляю ровно 2' }).check();
+    age([fresh], 200);
+    await dialog.getByRole('button', { name: 'Удалить', exact: true }).click();
+    await expect(
+      dialog.getByText(/число подходящих файлов стало 3: ничего не удалено/),
+    ).toBeVisible();
+    expect(JSON.parse(deletions[0] ?? '{}')).toEqual({
+      expected_count: 2,
+      unopened: true,
+      q: stamp,
+    });
+    // Отметка снята, окно называет новое число; все четыре файла на месте.
+    await expect(dialog.getByRole('checkbox', { name: 'Удаляю ровно 3' })).not.toBeChecked();
+    await expect(dialog.getByText('Удалить все 3 файла, отобранные фильтром?')).toBeVisible();
+
+    // Подтверждаю новое число: удалены три изображения, документ цел.
+    await dialog.getByRole('checkbox', { name: 'Удаляю ровно 3' }).check();
+    await dialog.getByRole('button', { name: 'Удалить', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(JSON.parse(deletions[1] ?? '{}')).toEqual({
+      expected_count: 3,
+      unopened: true,
+      q: stamp,
+    });
+    await expect(page.getByText('Под поиск и фильтры не подошёл ни один файл.')).toBeVisible();
+    await page.getByRole('checkbox', { name: 'Давно не открывали' }).click();
+    await expect(page.getByRole('checkbox', { name: 'Давно не открывали' })).not.toBeChecked();
+    await expect(page.getByRole('article')).toHaveCount(1);
+    await expect(card(page, doc)).toBeVisible();
+
+    // Телефон и доступность с включённым отбором.
+    await page.goto(`/files?q=${stamp}&unopened=1`);
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await fitsWidth(page)).toBe(true);
+    await expect(page.locator('[data-role="unopened-term"]')).toBeVisible();
+    expect(problems).toEqual([]);
+  } finally {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(`/files?q=${stamp}`);
     const left = await page.getByRole('article').count();

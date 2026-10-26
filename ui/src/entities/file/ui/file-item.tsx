@@ -58,6 +58,11 @@ export function FileItem({
             {file.name}
           </span>
           <Badge tone="neutral">{file.project_key}</Badge>
+          {file.unopened === true ? (
+            <span data-role="unopened">
+              <Badge tone="attention">{t('item.unopened')}</Badge>
+            </span>
+          ) : null}
           {archived ? <Badge tone="dropped">{t('item.archived')}</Badge> : null}
         </p>
 

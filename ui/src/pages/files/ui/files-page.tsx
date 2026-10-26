@@ -11,11 +11,13 @@ import {
   type FileCard,
 } from '@/entities/file';
 import { bootstrapWithArchivedQueryOptions } from '@/entities/session';
+import { settingsQueryOptions } from '@/entities/setting';
 import {
   DeleteDialog,
   DeleteManyDialog,
   ReplaceDialog,
   UploadDialog,
+  useAllMatching,
 } from '@/features/manage-files';
 import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import { Button, QueryState } from '@/shared/ui';
@@ -25,10 +27,14 @@ import { FilesToolbar, type FileFilterChange } from './files-toolbar';
 /**
  * Экран «Файлы»: все файлы установки одним списком (TRK-739, слово владельца TRK~8#4).
  *
- * Отбор — в адресе (`q`, `project`, `type`, `sort`, `order`), список — страницами по
+ * Отбор — в адресе (`q`, `project`, `type`, `sort`, `order`, `unopened`), список — страницами по
  * курсору. Сервер ищет, отбирает и сортирует (TRK#244): экран только показывает. Строка —
  * карточка файла без байтов; байты читаются лишь по нажатию «Открыть» и «Скачать», потому
  * что каждое чтение — открытие файла для сервера.
+ *
+ * Метка и отбор «давно не открывали» (TRK-754, TRK/files#8): признак считает сервер, трекер сам
+ * ничего не стирает — удаляет человек, подтвердив число. Миниатюр нет: чтение байтов было бы
+ * открытием и сняло бы признак.
  *
  * Недоступное действие не показывается (TRK/ui-screens#2): у файлов архивного проекта нет
  * ни выбора, ни «Заменить», ни «Удалить»; «Открыть» у них есть — сервер байтов архива не
@@ -42,6 +48,13 @@ export function FilesPage() {
   const filterKey = JSON.stringify(filter);
   const bootstrap = useQuery(bootstrapWithArchivedQueryOptions());
   const files = useInfiniteQuery(filesQueryOptions(filter));
+  // Срок «давно не открывали» — настройка установки; не прочитался, экран просто не называет его.
+  const settings = useQuery(settingsQueryOptions());
+  const unopenedDays = Number(
+    settings.data?.find((setting) => setting.name === 'file_unopened_days')?.effective_value,
+  );
+  // Отобранных «давно не открывали» считает обход всех страниц (список не считает, TRK/ui-api#15).
+  const unopenedAll = useAllMatching(filter, filter.unopened);
   const [picked, setPicked] = useState<{ key: string; ids: ReadonlySet<string> }>({
     key: filterKey,
     ids: new Set(),
@@ -106,11 +119,15 @@ export function FilesPage() {
       <FilesToolbar
         filter={filter}
         projects={projects.map((project) => ({ key: project.key, title: project.title }))}
+        unopenedDays={Number.isFinite(unopenedDays) ? unopenedDays : null}
         onChange={change}
         onReset={() =>
-          setParams((current) => withFilter(current, { q: '', project: null, type: null }), {
-            replace: true,
-          })
+          setParams(
+            (current) => withFilter(current, { q: '', project: null, type: null, unopened: false }),
+            {
+              replace: true,
+            },
+          )
         }
       />
 
@@ -132,6 +149,11 @@ export function FilesPage() {
               {t('list.shown', { count: items.length })}
               {files.hasNextPage ? `, ${t('list.moreAvailable')}` : ''}
             </span>
+            {filter.unopened && unopenedAll.ready ? (
+              <span className="text-meta text-text" data-role="unopened-count" role="status">
+                {t('list.unopenedCount', { count: unopenedAll.files.length })}
+              </span>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-role="bulk">
@@ -170,7 +192,11 @@ export function FilesPage() {
               <DeleteManyDialog
                 target={{ kind: 'matching', filter }}
                 triggerLabel={
-                  conditions === 0 ? t('selection.deleteEverything') : t('selection.deleteMatching')
+                  filter.unopened
+                    ? t('selection.deleteUnopened')
+                    : conditions === 0
+                      ? t('selection.deleteEverything')
+                      : t('selection.deleteMatching')
                 }
                 onDeleted={() => setPickedIds(new Set())}
               />
