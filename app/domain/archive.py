@@ -42,6 +42,10 @@ EXCLUDED_TABLES: dict[str, str] = {
         "Kept for a day with whole responses of creating calls, and the response to issuing "
         "a token holds its secret (app/db/models/idempotency.py)"
     ),
+    "installation_settings": (
+        "Settings of this installation chosen by its administrator: a property of the machine, "
+        "not tracker data, and values chosen for one installation are not imposed on another"
+    ),
     "oauth_clients": (
         "OAuth sign-in belongs to the agent harness on the source machine, like a browser "
         "session: its connections stay behind, and the client signs in anew on the receiver"
