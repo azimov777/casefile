@@ -1202,3 +1202,30 @@ class FileDeletedError(ConflictError):
 
     code = "file_deleted"
     message = "File was deleted: only its tombstone remains"
+
+
+# --- Настройки установки (TRK-743) --------------------------------------------------
+
+
+class InstallationSettingNotFoundError(NotFoundError):
+    """Настройки с таким именем в реестре нет.
+
+    Реестр — ровно семь параметров установки, годных человеку
+    (`app/domain/installation_settings.py`); `details.name` — присланное имя.
+    """
+
+    code = "installation_setting_not_found"
+    message = "Installation setting not found"
+
+
+class InstallationSettingInvalidError(ValidationError):
+    """Значение настройки не проходит правила реестра: тип или пределы.
+
+    `details.name` — настройка, `details.reason` — `not_an_integer`, `not_a_boolean`,
+    `not_a_duration`, `too_small` или `too_large`; для пределов в `details.minimum` и
+    `details.maximum` (числа в единицах настройки, срок — в секундах). В таблицу ничего
+    не попадает.
+    """
+
+    code = "installation_setting_invalid"
+    message = "Installation setting value is invalid"

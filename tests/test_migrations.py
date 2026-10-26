@@ -1908,3 +1908,46 @@ async def test_project_access_defaults_to_all_guards_pairs_and_comes_off_on_roll
     assert await _project_access_objects(migration_engine) == (False, False)
     await migrate(url, PROJECT_ACCESS_REVISION)
     assert await _project_access_objects(migration_engine) == (True, True)
+
+
+# --- Настройки установки (TRK-743) ---------------------------------------------------------
+
+#: Ревизия таблицы настроек установки и ревизия перед ней.
+INSTALLATION_SETTINGS_REVISION = "68c51da858b1"
+INSTALLATION_SETTINGS_PREVIOUS = "2d73da764c90"
+
+_INSERT_SETTING = text(
+    "INSERT INTO installation_settings (name, value, updated_by_kind, updated_by_signature) "
+    "VALUES (:name, :value, 'human', 'owner')"
+)
+
+
+async def _settings_table_exists(engine: AsyncEngine) -> bool:
+    async with engine.connect() as connection:
+        return bool(
+            await connection.scalar(text("SELECT to_regclass('installation_settings') IS NOT NULL"))
+        )
+
+
+async def test_the_installation_settings_table_guards_names_and_comes_off_on_rollback(
+    migration_engine: AsyncEngine, test_database_url: str
+) -> None:
+    """После подъёма таблица есть и пуста, второе значение того же имени отвергается
+    базой; после `downgrade -1` таблицы нет, подъём идёт снова."""
+    url = f"{test_database_url}_migrations"
+    await migrate(url, INSTALLATION_SETTINGS_PREVIOUS)
+    assert not await _settings_table_exists(migration_engine)
+
+    await migrate(url, INSTALLATION_SETTINGS_REVISION)
+    assert await _settings_table_exists(migration_engine)
+    async with migration_engine.begin() as connection:
+        assert await connection.scalar(text("SELECT count(*) FROM installation_settings")) == 0
+        await connection.execute(_INSERT_SETTING, {"name": "mcp_page_size", "value": "10"})
+    with pytest.raises(Exception, match="uq_installation_settings_name"):
+        async with migration_engine.begin() as connection:
+            await connection.execute(_INSERT_SETTING, {"name": "mcp_page_size", "value": "11"})
+
+    await migrate(url, INSTALLATION_SETTINGS_PREVIOUS, down=True)
+    assert not await _settings_table_exists(migration_engine)
+    await migrate(url, INSTALLATION_SETTINGS_REVISION)
+    assert await _settings_table_exists(migration_engine)

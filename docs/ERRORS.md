@@ -59,6 +59,7 @@
 | `discussion_task_not_found` | Task is not attached to the discussion | Задача не привязана к этому обсуждению — отвязывать нечего. |
 | `entry_not_found` | Case entry not found | Записи с таким номером в этой задаче нет. |
 | `file_not_found` | File not found | Файла с таким идентификатором в установке нет. |
+| `installation_setting_not_found` | Installation setting not found | Настройки с таким именем в реестре нет. |
 | `link_not_found` | Link not found | Связи такого вида между этими задачами нет. |
 | `not_found` | Object not found | Запрошенного объекта не существует. |
 | `participant_not_found` | Participant not found | Участника с таким именем или идентификатором нет. |
@@ -142,6 +143,7 @@
 | `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. Снять (`withdrawn`) или заменить (`replaced`) можно только вопрос, на который ещё не ответили: у отвеченного это `already_answered`. Ответ с `choice`, которой нет среди вариантов вопроса, — `not_an_option`; у вопроса без вариантов — `question_has_no_options`. |
 | `file_fields_invalid` | File name or type is invalid | Имя или тип файла не проходят проверку; замечания — в `details.fields`. |
 | `file_too_large` | File is larger than this installation allows | Файл больше предела установки `TRACKER_FILE_MAX_BYTES`. |
+| `installation_setting_invalid` | Installation setting value is invalid | Значение настройки не проходит правила реестра: тип или пределы. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
 | `invalid_area_key` | Area key is invalid | Адрес новой области не `ПРОЕКТ/ключ` или ключ не по шаблону. |
 | `invalid_attribute_name` | Attribute name is invalid | Имя атрибута не соответствует шаблону. |

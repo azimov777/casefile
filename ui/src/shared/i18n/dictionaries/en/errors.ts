@@ -73,6 +73,8 @@ export const errors = {
   idempotency_key_reused: 'This idempotency key has already been used by another request.',
   installation_not_empty:
     'Only an installation without projects can take an archive: import into a fresh one.',
+  installation_setting_invalid: 'The value does not fit the rules of this setting.',
+  installation_setting_not_found: 'There is no such installation setting.',
   internal_error: 'Internal server error.',
   invalid_actor_label: 'The temporary-agent label does not match the pattern.',
   invalid_area_key:

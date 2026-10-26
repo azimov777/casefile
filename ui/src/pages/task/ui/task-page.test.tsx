@@ -1442,4 +1442,36 @@ describe('предупреждение закрытия не целиком (TRK
       await screen.findByRole('form', { name: say.ui('remark.formLabel', { key: 'DEMO-8' }) }),
     ).toBeInTheDocument();
   });
+
+  it('«Вернуть на доработку» ставит курсор в поле замечания (TRK-731)', async () => {
+    warned([]);
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-8');
+
+    const panel = await screen.findByRole('region', { name: say.ui('warning.title') });
+    await user.click(within(panel).getByRole('button', { name: say.ui('warning.return') }));
+
+    const field = await screen.findByLabelText(say.ui('remark.fieldLabel'));
+    await waitFor(() => expect(field).toHaveFocus());
+  });
+
+  it('после замечания плашка уходит, а на её месте сказано почему (TRK-731)', async () => {
+    const accepted: { body: unknown; key: string | null }[] = [];
+    warned(accepted);
+    const user = userEvent.setup();
+    renderApp('/tasks/DEMO-8');
+
+    const panel = await screen.findByRole('region', { name: say.ui('warning.title') });
+    await user.click(within(panel).getByRole('button', { name: say.ui('warning.return') }));
+    await user.type(await screen.findByLabelText(say.ui('remark.fieldLabel')), 'Не хватает замера');
+    await user.click(screen.getByRole('button', { name: say.ui('remark.submit') }));
+
+    await waitFor(() => expect(accepted).toHaveLength(1));
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: say.ui('warning.title') })).toBeNull(),
+    );
+    const note = await screen.findByRole('status', { name: say.ui('warning.returnedTitle') });
+    expect(within(note).getByText(say.ui('warning.returnedTitle'))).toBeInTheDocument();
+    expect(within(note).getByText(say.ui('warning.returnedText'))).toBeInTheDocument();
+  });
 });
