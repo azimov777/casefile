@@ -1,7 +1,7 @@
 """participant project access
 
 Revision ID: 50535bc472dd
-Revises: 2d73da764c90
+Revises: 68c51da858b1
 Create Date: 2026-10-25 21:42:23.254991+00:00
 
 Доступ агента к проектам (TRK-746; слово владельца TRK~28#6, выбор «A»).
@@ -23,7 +23,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "50535bc472dd"
-down_revision: str | None = "2d73da764c90"
+down_revision: str | None = "68c51da858b1"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

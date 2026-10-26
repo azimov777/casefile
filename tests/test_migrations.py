@@ -1844,7 +1844,7 @@ async def test_the_area_links_table_guards_pairs_and_comes_off_on_rollback(
 
 #: Ревизия доступа к проектам и ревизия перед ней.
 PROJECT_ACCESS_REVISION = "50535bc472dd"
-PROJECT_ACCESS_PREVIOUS = "2d73da764c90"
+PROJECT_ACCESS_PREVIOUS = "68c51da858b1"
 
 _INSERT_PARTICIPANT_PROJECT = text(
     "INSERT INTO participant_projects (participant_id, project_id) "
