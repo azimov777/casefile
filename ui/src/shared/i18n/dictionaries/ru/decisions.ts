@@ -35,6 +35,7 @@ export const decisions = {
     confirmed: 'подтверждено',
   },
   row: {
+    projectOf: 'Проект',
     project: 'проект',
     area: 'Область',
     from: 'Откуда',

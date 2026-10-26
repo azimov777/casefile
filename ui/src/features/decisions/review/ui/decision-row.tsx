@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { decisionHref, parseDecisionRef, type DecisionRow } from '@/entities/decision';
 import { AuthorName, DecisionStatusMark, entryQueryOptions } from '@/entities/entry';
 import { errorMessage } from '@/shared/errors';
-import { areaHref } from '@/shared/lib';
+import { areaHref, projectHref } from '@/shared/lib';
 import { Badge, Button, Callout, Markdown, RelativeTime, TaskText } from '@/shared/ui';
 import { useReviewDecision } from '../model/use-review';
 import { ReviseDialog } from './revise-dialog';
@@ -31,6 +31,12 @@ interface DecisionReviewRowProps {
    * `task-filters`, а срезы одного слоя друг друга не импортируют.
    */
   tasksHref: (ref: string) => string;
+  /**
+   * Ключ проекта решения: задан там, где строка стоит вне экрана своего проекта (Входящая,
+   * TRK-759) — тогда проект назван ссылкой на его экран. На экранах проекта и области не
+   * задаётся: проект и так назван страницей.
+   */
+  project?: string;
 }
 
 /**
@@ -50,6 +56,7 @@ export function DecisionReviewRow({
   canReview,
   onReviewed,
   tasksHref,
+  project,
 }: DecisionReviewRowProps) {
   const { t } = useTranslation('decisions');
   const place = parseDecisionRef(row.ref);
@@ -95,8 +102,18 @@ export function DecisionReviewRow({
       </button>
 
       <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-meta text-muted">
+        {project === undefined ? null : (
+          <span>
+            {t('row.projectOf')}{' '}
+            <Link to={projectHref(project)} className={REF} data-project-link>
+              {project}
+            </Link>
+          </span>
+        )}
         {row.area === null ? (
-          <span>{t('row.project')}</span>
+          project === undefined ? (
+            <span>{t('row.project')}</span>
+          ) : null
         ) : (
           <span>
             {t('row.area')}{' '}

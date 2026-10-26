@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query';
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import { apiClient, unwrap, type components } from '@/shared/api';
 
 /** Решение в списке поперёк проектов и областей (`GET /api/v1/decisions`, TRK-756). */
@@ -82,4 +82,42 @@ function readPage(project: string | null, cursor: string | undefined) {
         data: result.data === undefined ? undefined : { data: result.data },
       })),
   );
+}
+
+/** Сколько ждущих проверки решений читает Входящая за раз; дальше — «Ещё». */
+const INBOX_PAGE_SIZE = 20;
+
+/**
+ * Решения, которые ждут человека, — раздел «Решения ждут проверки» Входящей (TRK-759): только
+ * действующие и непроверенные, старые первыми, всех проектов или одного. Страницами по
+ * кнопке «Ещё»: после выпуска их сотни, и читать все ради двадцати строк не нужно. Отбор —
+ * `status=in_force` вместе с `review_state=unconfirmed`, как называет контракт. Ключ под
+ * корнем `['decisions']`: проверка любого решения перечитывает и этот список.
+ */
+export function unconfirmedDecisionsQueryOptions(project: string) {
+  return infiniteQueryOptions({
+    queryKey: [...decisionKeys.list(project === '' ? null : project), 'unconfirmed'] as const,
+    queryFn: ({ pageParam }) =>
+      unwrap(
+        apiClient
+          .GET('/api/v1/decisions', {
+            params: {
+              query: {
+                limit: INBOX_PAGE_SIZE,
+                status: 'in_force',
+                review_state: 'unconfirmed',
+                ...(project === '' ? {} : { project }),
+                ...(pageParam === '' ? {} : { cursor: pageParam }),
+              },
+            },
+          })
+          .then((result) => ({
+            ...result,
+            data: result.data === undefined ? undefined : { data: result.data },
+          })),
+      ),
+    initialPageParam: '',
+    getNextPageParam: (last) =>
+      last.meta?.has_more === true ? (last.meta.next_cursor ?? undefined) : undefined,
+  });
 }
