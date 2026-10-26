@@ -1513,7 +1513,8 @@ export interface paths {
         /**
          * Delete several files
          * @description Удаляет несколько файлов: выбранные (`ids`) или все под отбор (`expected_count` и
-         *     отбор `project`, `q`, `mime_type`; без отбора — все файлы установки).
+         *     отбор `project`, `q`, `mime_type`, `unopened` — давно не открытые изображения; без отбора —
+         *     все файлы установки).
          *
          *     Байты стираются, остаются надгробия. По отбору нужно число, которое человек
          *     подтвердил: не совпало с числом подходящих — `409 file_count_mismatch`
@@ -4965,6 +4966,11 @@ export interface components {
              * @example image
              */
             mime_type?: string | null;
+            /**
+             * Unopened
+             * @description True: only images not opened for `file_unopened_days` days (`unopened`)
+             */
+            unopened?: boolean | null;
         };
         /**
          * FileRead
@@ -5026,6 +5032,11 @@ export interface components {
             deleted_by?: components["schemas"]["AuthorRead"] | null;
             /** Deleted At */
             deleted_at?: string | null;
+            /**
+             * Unopened
+             * @description Image (PNG, JPEG, GIF, WebP) not opened for the installation's `file_unopened_days` days, counted from the last opening or, if never opened, from adding. Computed on reading, stored nowhere; documents and tombstones never have it. The tracker deletes nothing by itself
+             */
+            unopened: boolean;
             /**
              * Entries
              * @description Case entries that attach the file
@@ -14852,6 +14863,8 @@ export interface operations {
                 descending?: boolean;
                 /** @description Also list tombstones of deleted files */
                 include_deleted?: boolean;
+                /** @description True: only images with the `unopened` mark, not opened for `file_unopened_days` days (documents never). The tracker deletes nothing by itself */
+                unopened?: boolean;
                 /** @description Page size */
                 limit?: number;
                 /** @description Cursor from `meta.next_cursor` of a previous page */

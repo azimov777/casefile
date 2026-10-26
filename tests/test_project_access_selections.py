@@ -14,12 +14,14 @@
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.file import File
 from app.db.models.participant import Participant
 from app.db.models.project import Project
 from app.db.models.task import Task
@@ -269,7 +271,7 @@ async def test_files_follow_the_project_of_the_file(
 ) -> None:
     """Файлы тоже читаются через проект (TRK/files#3, п. 5): список, выдача, замена,
     удаление, вложение в запись и название закрытого проекта в списке."""
-    from app.domain.errors import ProjectNotAllowedError
+    from app.domain.errors import FileCountMismatchError, ProjectNotAllowedError
 
     agent = Actor(
         author=world.agent.author,
@@ -296,6 +298,28 @@ async def test_files_follow_the_project_of_the_file(
         )
     with pytest.raises(ProjectNotAllowedError):
         await files_service.list_files(db_session, actor=agent, project=CLOSED)
+    # Отбор для удаления (TRK-741) не видит файлов закрытого проекта: число и удаление
+    # считаются только по открытому.
+    old = datetime.now(UTC) - timedelta(days=400)
+    for card in everything.items:
+        file = await db_session.get(File, card.id)
+        assert file is not None
+        file.mime_type, file.created_at = "image/png", old
+    await db_session.flush()
+    visible = await files_service.list_files(db_session, actor=agent, unopened=True)
+    assert {card.project_key for card in visible.items} == {OPEN}
+    with pytest.raises(FileCountMismatchError) as mismatch:
+        await files_service.delete_matching(
+            db_session, actor=agent, expected_count=2, unopened=True
+        )
+    assert mismatch.value.details == {"expected": 2, "actual": 1}
+    deleted = await files_service.delete_matching(
+        db_session, actor=agent, expected_count=1, unopened=True
+    )
+    assert {card.project_key for card in deleted} == {OPEN}
+    stamp(db_session, ProjectAccess())
+    assert not (await files_service.read_file(db_session, closed_file.id, actor=main_actor)).deleted
+    stamp(db_session, agent.project_access)
     with pytest.raises(ProjectNotAllowedError):
         await case_service.add_entry(
             db_session,
@@ -534,6 +558,7 @@ def test_every_selection_function_takes_the_access() -> None:
         (DiscussionRepository, "page"),
         (DiscussionRepository, "count_waiting_on_humans"),
         (FileRepository, "list_page"),
+        (FileRepository, "matching"),
     }
     for owner, method in across_projects:
         source = inspect.getsource(getattr(owner, method))

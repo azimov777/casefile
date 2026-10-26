@@ -6,9 +6,10 @@
 
 import uuid
 from collections.abc import Collection, Sequence
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, delete, distinct, func, select, tuple_
+from sqlalchemy import Select, and_, delete, distinct, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -24,7 +25,7 @@ from app.db.pagination import (
 from app.db.project_scope import open_to
 from app.db.repositories.projects import in_active_project
 from app.db.sql import LIKE_ESCAPE, ilike_contains
-from app.domain.files import FileSort
+from app.domain.files import IMAGE_MIME_TYPES, FileSort
 from app.domain.project_access import UNRESTRICTED, ProjectAccess
 
 
@@ -131,15 +132,22 @@ class FileRepository:
         self,
         *,
         project_id: uuid.UUID | None,
+        access: ProjectAccess = UNRESTRICTED,
         query: str | None,
         mime_type: str | None,
+        unopened_before: datetime | None = None,
     ) -> list[File]:
         """Все живые файлы под отбор списка, без страниц: для удаления по отбору.
 
-        Условия те же, что у `list_page` (без проекта — архивные скрыты, TRK#99); надгробия
-        не входят: удалять в них нечего. Порядок по `id` — один и тот же при каждом вызове.
+        Условия те же, что у `list_page` (без проекта — архивные скрыты, TRK#99; закрытые
+        агенту проекты не видны, TRK-751); надгробия не входят: удалять в них нечего.
+        Порядок по `id` — один и тот же при каждом вызове.
         """
-        statement: Select[Any] = select(File).where(File.deleted_at.is_(None))
+        statement: Select[Any] = (
+            select(File).where(File.deleted_at.is_(None)).where(open_to(access, File.project_id))
+        )
+        if unopened_before is not None:
+            statement = statement.where(_unopened_condition(unopened_before))
         if project_id is not None:
             statement = statement.where(File.project_id == project_id)
         else:
@@ -162,6 +170,7 @@ class FileRepository:
         include_deleted: bool,
         limit: int | None,
         cursor: str | None,
+        unopened_before: datetime | None = None,
     ) -> Page[File]:
         """Страница файлов.
 
@@ -179,6 +188,8 @@ class FileRepository:
             statement = statement.where(in_active_project(File.project_id))
         if not include_deleted:
             statement = statement.where(File.deleted_at.is_(None))
+        if unopened_before is not None:
+            statement = statement.where(_unopened_condition(unopened_before))
         if query:
             statement = statement.where(ilike_contains(File.name, query))
         if mime_type:
@@ -208,6 +219,18 @@ def _sort_expression(sort: FileSort) -> ColumnElement[Any]:
             return File.size_bytes
         case FileSort.TYPE:
             return File.mime_type
+
+
+def _unopened_condition(cutoff: datetime) -> ColumnElement[bool]:
+    """Признак «давно не открывали»: изображение, которое не открывали с `cutoff`.
+
+    Не открывавшийся файл считается от добавления. Надгробие признака не имеет.
+    """
+    return and_(
+        File.deleted_at.is_(None),
+        File.mime_type.in_(IMAGE_MIME_TYPES),
+        func.coalesce(File.last_opened_at, File.created_at) <= cutoff,
+    )
 
 
 def _mime_condition(value: str) -> ColumnElement[bool]:

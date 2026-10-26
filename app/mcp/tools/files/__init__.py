@@ -13,6 +13,7 @@ from types import ModuleType
 
 from app.mcp.tools.files import (
     delete_file,
+    delete_files,
     list_files,
     read_file,
     request_file_replace,
@@ -27,6 +28,7 @@ TOOLS: Sequence[ModuleType] = (
     read_file,
     list_files,
     delete_file,
+    delete_files,
 )
 
 

@@ -101,6 +101,7 @@ TASK_TOOLS = {
     "read_file",
     "list_files",
     "delete_file",
+    "delete_files",
 }
 
 #: Что прежде открывал набор `main` (наборов больше нет, TRK-471).
@@ -238,6 +239,8 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     "request_file_replace": (False, False, False),
     # Удаление файла: байты стираются, остаётся надгробие; повтор отказывает `file_deleted`.
     "delete_file": (False, True, False),
+    # Удаление по отбору: повтор отказывает `file_count_mismatch`, не идемпотентен.
+    "delete_files": (False, True, False),
     # Подшивающие и переводящие: дело только дописывается — не разрушают, — но без
     # ключа идемпотентности повтор с теми же аргументами не гарантирует то же
     # состояние: заводит вторую запись/объект или отказывает конфликтом или

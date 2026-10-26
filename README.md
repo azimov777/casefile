@@ -229,6 +229,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 - `read_file` — returns a file: an image as `image` content the model sees, any other file as its card and a one-time `curl -o` link
 - `list_files` — lists files as cards with search by name and filters by project and media type, sorted by time added or opened, size or type
 - `delete_file` — erases a file's bytes and keeps its tombstone: name, type, size, who deleted it and when
+- `delete_files` — erases every file a filter picks (project, name, type, `unopened` for images not opened for the term of days) once the confirmed count matches
 
 **Links**
 - `link` — links two tasks and files `link_added` in both cases, or attaches a task to a discussion

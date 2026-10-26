@@ -147,6 +147,18 @@ class Settings(BaseSettings):
         ),
     )
 
+    file_unopened_days: int = Field(
+        default=90,
+        ge=1,
+        description=(
+            "`TRACKER_FILE_UNOPENED_DAYS`: days without opening after which an image "
+            "(PNG, JPEG, GIF, WebP) gets the "
+            "`unopened` mark and falls into the `unopened` filter of the file list. The "
+            "tracker only computes the mark when it reads: it deletes nothing by itself, "
+            "a person or an agent deletes the picked files. A document never gets the mark"
+        ),
+    )
+
     # Токен транспорта stdio (`python -m app.mcp --stdio`). У сообщения stdio нет HTTP-запроса,
     # а значит, и заголовка `Authorization`: процесс представляется одним токеном на всё время
     # жизни. В HTTP не читается вовсе — там токен приходит с каждым запросом. `SecretStr` — по

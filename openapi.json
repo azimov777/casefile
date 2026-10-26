@@ -10288,6 +10288,18 @@
             "description": "Also list tombstones of deleted files"
           },
           {
+            "name": "unopened",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "True: only images with the `unopened` mark, not opened for `file_unopened_days` days (documents never). The tracker deletes nothing by itself",
+              "default": false,
+              "title": "Unopened"
+            },
+            "description": "True: only images with the `unopened` mark, not opened for `file_unopened_days` days (documents never). The tracker deletes nothing by itself"
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -10421,7 +10433,7 @@
           "files"
         ],
         "summary": "Delete several files",
-        "description": "Удаляет несколько файлов: выбранные (`ids`) или все под отбор (`expected_count` и\nотбор `project`, `q`, `mime_type`; без отбора — все файлы установки).\n\nБайты стираются, остаются надгробия. По отбору нужно число, которое человек\nподтвердил: не совпало с числом подходящих — `409 file_count_mismatch`\n(`details.expected`, `details.actual`), ничего не удалено. Выбранные удаляются все или\nни одного: неизвестный файл — `404 file_not_found`, уже удалённый —\n`409 file_deleted`, архивный проект — `409 project_archived`. Повтор отвечает так же,\nкак первый вызов отвечал бы на то же состояние: удалённое второй раз не удаляется.",
+        "description": "Удаляет несколько файлов: выбранные (`ids`) или все под отбор (`expected_count` и\nотбор `project`, `q`, `mime_type`, `unopened` — давно не открытые изображения; без отбора —\nвсе файлы установки).\n\nБайты стираются, остаются надгробия. По отбору нужно число, которое человек\nподтвердил: не совпало с числом подходящих — `409 file_count_mismatch`\n(`details.expected`, `details.actual`), ничего не удалено. Выбранные удаляются все или\nни одного: неизвестный файл — `404 file_not_found`, уже удалённый —\n`409 file_deleted`, архивный проект — `409 project_archived`. Повтор отвечает так же,\nкак первый вызов отвечал бы на то же состояние: удалённое второй раз не удаляется.",
         "operationId": "delete_files",
         "security": [
           {
@@ -17656,6 +17668,18 @@
             "examples": [
               "image"
             ]
+          },
+          "unopened": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unopened",
+            "description": "True: only images not opened for `file_unopened_days` days (`unopened`)"
           }
         },
         "additionalProperties": false,
@@ -17776,6 +17800,11 @@
             ],
             "title": "Deleted At"
           },
+          "unopened": {
+            "type": "boolean",
+            "title": "Unopened",
+            "description": "Image (PNG, JPEG, GIF, WebP) not opened for the installation's `file_unopened_days` days, counted from the last opening or, if never opened, from adding. Computed on reading, stored nowhere; documents and tombstones never have it. The tracker deletes nothing by itself"
+          },
           "entries": {
             "type": "integer",
             "title": "Entries",
@@ -17798,6 +17827,7 @@
           "added_by",
           "added_at",
           "deleted",
+          "unopened",
           "entries",
           "tasks"
         ],

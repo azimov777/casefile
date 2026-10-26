@@ -70,6 +70,15 @@ SortQuery = Annotated[
 DescendingQuery = Annotated[
     bool, Query(description="Biggest or newest first (the default); false reverses the order")
 ]
+UnopenedQuery = Annotated[
+    bool,
+    Query(
+        description=(
+            "True: only images with the `unopened` mark, not opened for `file_unopened_days` "
+            "days (documents never). The tracker deletes nothing by itself"
+        )
+    ),
+]
 IncludeDeletedQuery = Annotated[bool, Query(description="Also list tombstones of deleted files")]
 
 
@@ -142,6 +151,7 @@ async def list_files(
     sort: SortQuery = FileSort.ADDED,
     descending: DescendingQuery = True,
     include_deleted: IncludeDeletedQuery = False,
+    unopened: UnopenedQuery = False,
     limit: LimitQuery = DEFAULT_PAGE_SIZE,
     cursor: CursorQuery = None,
 ) -> CollectionResponse[FileRead]:
@@ -159,6 +169,7 @@ async def list_files(
         sort=sort,
         descending=descending,
         include_deleted=include_deleted,
+        unopened=unopened,
         limit=limit,
         cursor=cursor,
     )
@@ -174,7 +185,8 @@ async def delete_files(
     actor: ActorDep,
 ) -> DataResponse[FilesDeleted]:
     """Удаляет несколько файлов: выбранные (`ids`) или все под отбор (`expected_count` и
-    отбор `project`, `q`, `mime_type`; без отбора — все файлы установки).
+    отбор `project`, `q`, `mime_type`, `unopened` — давно не открытые изображения; без отбора —
+    все файлы установки).
 
     Байты стираются, остаются надгробия. По отбору нужно число, которое человек
     подтвердил: не совпало с числом подходящих — `409 file_count_mismatch`
@@ -194,6 +206,7 @@ async def delete_files(
             project=payload.project,
             query=payload.q,
             mime_type=payload.mime_type,
+            unopened=bool(payload.unopened),
         )
     return DataResponse[FilesDeleted](
         data=FilesDeleted(deleted=len(cards), files=[file_read(card) for card in cards])

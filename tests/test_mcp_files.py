@@ -455,3 +455,27 @@ async def test_the_file_tools_refuse_a_project_the_agent_cannot_see(
         assert "project_not_found" in await refuse(
             session, "request_file_upload", project="NOPE", name="a.bin"
         )
+
+
+async def test_unopened_filter_and_bulk_delete_with_a_confirmed_count(
+    mcp_server: MCPServer, main_secret: str, project: Project
+) -> None:
+    """Свежее изображение без признака и вне отбора `unopened`; `delete_files` стирает
+    выбранное по типу, только если число подтверждено (TRK-741)."""
+    async with served(mcp_server, main_secret) as (session, curl):
+        image = await stored(session, curl, "a.png", PNG, "image/png")
+        await stored(session, curl, "b.png", PNG + b"1", "image/png")
+        doc = await stored(session, curl, "r.pdf", PDF, "application/pdf")
+
+        listed = await call(session, "list_files")
+        assert all("unopened" not in item for item in listed["items"])
+        assert (await call(session, "list_files", unopened=True))["items"] == []
+
+        assert "file_count_mismatch" in await refuse(
+            session, "delete_files", expected_count=3, mime_type="image"
+        )
+        assert len((await call(session, "list_files"))["items"]) == 3
+        done = await call(session, "delete_files", expected_count=2, mime_type="image")
+        assert {item["id"] for item in done["result"]} >= {image["id"]}
+        remaining = (await call(session, "list_files"))["items"]
+        assert [item["id"] for item in remaining] == [doc["id"]]
