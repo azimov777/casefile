@@ -203,7 +203,9 @@ def register_file_routes(
     async def upload(request: Request) -> Response:
         try:
             link = links.take(request.path_params["secret"], LinkKind.UPLOAD, LinkKind.REPLACE)
-            data = await _body(request, settings.file_max_bytes)
+            async with runtime.sessions() as session:
+                limit = await files_service.file_size_limit(session, settings)
+            data = await _body(request, limit)
             async with runtime.sessions() as session:
                 stamp(session, link.actor.project_access)
                 if link.kind is LinkKind.UPLOAD:

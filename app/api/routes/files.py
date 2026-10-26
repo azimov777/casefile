@@ -15,6 +15,7 @@ from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Form, Path, Query, Response, UploadFile, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import ActorDep, CursorQuery, LimitQuery, SessionDep
 from app.api.idempotency import OnceDep
@@ -27,7 +28,6 @@ from app.api.schemas.files import (
     FileUpload,
     file_read,
 )
-from app.core.config import get_settings
 from app.db.pagination import DEFAULT_PAGE_SIZE
 from app.domain.files import FileSort, sha256_hex
 from app.services import files as service
@@ -82,13 +82,13 @@ UnopenedQuery = Annotated[
 IncludeDeletedQuery = Annotated[bool, Query(description="Also list tombstones of deleted files")]
 
 
-async def _read_part(upload: UploadFile) -> bytes:
+async def _read_part(session: AsyncSession, upload: UploadFile) -> bytes:
     """Байты части формы, не больше предела и одного лишнего байта.
 
     Лишний байт нужен, чтобы сценарий увидел превышение и отказал `file_too_large` с
     присланным размером не меньше предела плюс один; файл в память целиком не читается.
     """
-    return await upload.read(get_settings().file_max_bytes + 1)
+    return await upload.read(await service.file_size_limit(session) + 1)
 
 
 def _disposition(name: str) -> str:
@@ -113,7 +113,7 @@ async def upload_file(
     `Idempotency-Key` и тем же содержимым отвечает первой карточкой.
     """
     owner = await projects_service.get_project(session, form.project)
-    data = await _read_part(form.file)
+    data = await _read_part(session, form.file)
     given_name = form.name if form.name is not None else form.file.filename
     content_type = form.file.content_type
 
@@ -280,7 +280,7 @@ async def replace_file(
     из `Content-Type` части. Удалённый файл — `409 file_deleted`, архивный проект —
     `409 project_archived`, файл больше предела — `422 file_too_large`.
     """
-    data = await _read_part(form.file)
+    data = await _read_part(session, form.file)
     card = await service.replace_file(
         session,
         file_id,
