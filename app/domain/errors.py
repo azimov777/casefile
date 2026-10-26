@@ -117,6 +117,27 @@ class ProjectDescriptionTooLongError(ValidationError):
     message = "Project description is too long"
 
 
+class ProjectNotAllowedError(PermissionDeniedError):
+    """Проект закрыт этому агенту его режимом доступа (TRK~28#6).
+
+    Из списков, поиска, ленты и входящей закрытый проект исчезает молча; по прямому
+    адресу отказ называет проект: `details.project` — его ключ.
+    """
+
+    code = "project_not_allowed"
+    message = "This project is closed to the agent"
+
+
+class ProjectAccessModeInvalidError(ValidationError):
+    """Режим доступа к проектам — не `all`, `except` и не `only`.
+
+    `details.mode` — присланное значение, `details.allowed` — допустимые.
+    """
+
+    code = "project_access_mode_invalid"
+    message = "Project access mode is invalid"
+
+
 class ProjectArchivedError(ConflictError):
     """Проект в архиве: он и его задачи заморожены для изменений (TRK#101).
 
