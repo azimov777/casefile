@@ -31,6 +31,9 @@ test('Входящая: решения DEMO в разделе, «Подтвер�
   await expect(first).toBeVisible();
   await expect(first.locator('[data-project-link]')).toHaveText('DEMO');
   const ref = (await first.getAttribute('data-decision')) ?? '';
+  // Значок «Входящей» до проверки: вопросы и предупреждения, но не решения.
+  const badge = page.getByRole('link', { name: /^Входящая/ });
+  const badgeBefore = (await badge.textContent()) ?? '';
 
   // Ссылка решения открывает его проект на вкладке «Решения».
   await first.locator(`a[href*="entry="]`).first().click();
@@ -49,9 +52,9 @@ test('Входящая: решения DEMO в разделе, «Подтвер�
   );
   await expect(section(page).locator(`li[data-decision="${ref}"]`)).toHaveCount(0);
 
-  // Значок «Входящей» неподтверждённых решений не считает.
-  const badge = page.getByRole('link', { name: /^Входящая/ });
-  await expect(badge).not.toContainText(String(before - 1));
+  // Значок «Входящей» неподтверждённых решений не считает: подтверждение его не меняет.
+  // Число решений в нём не ищется: подстрока совпала бы с числом вопросов или предупреждений.
+  await expect(badge).toHaveText(badgeBefore);
 });
 
 for (const colorScheme of ['light', 'dark'] as const) {
