@@ -5,12 +5,16 @@ import { useOnceKey } from '@/shared/lib';
 import {
   issueToken,
   participantKeys,
+  projectAccessKeys,
   registerAgent,
   revokeToken,
+  setProjectAccess,
   type AgentInput,
   type IssueInput,
   type IssuedToken,
   type Participant,
+  type ProjectAccess,
+  type ProjectAccessInput,
 } from '../api/access';
 
 type Input<TInput> = Omit<TInput, 'idempotencyKey'>;
@@ -97,6 +101,18 @@ export function useRevokeToken() {
     mutationFn: (tokenId: string): Promise<void> => revokeToken(tokenId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: tokenKeys.all });
+    },
+  });
+}
+
+/** Сохраняет режим и список проектов агента и обновляет прочитанное в кэше. */
+export function useSetProjectAccess() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: ProjectAccessInput): Promise<ProjectAccess> => setProjectAccess(input),
+    onSuccess: (access, input) => {
+      queryClient.setQueryData(projectAccessKeys.of(input.participant), access);
     },
   });
 }

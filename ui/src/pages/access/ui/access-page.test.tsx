@@ -119,12 +119,46 @@ function signedIn(who: Who) {
 /** Адреса запросов списка токенов за прогон: по ним видно, уходил ли `mine`. */
 let tokenQueries: URL[] = [];
 
+/** Доступ агентов к проектам, как его держит «бэкенд» теста: имя агента → режим и ключи. */
+let projectAccess: Record<string, { mode: string; projects: string[] }> = {};
+/** Тела PUT доступа к проектам за прогон: имя агента и тело. */
+let accessPuts: { name: string; body: { mode: string; projects: string[] } }[] = [];
+/** Ответ отказа на PUT: если задан, настройка не меняется. */
+let accessDenial: ReturnType<typeof failure> | null = null;
+
+const PROJECTS = ['DEMO', 'TRK', 'DOCS'].map((key) => ({
+  id: `project-${key}`,
+  key,
+  title: `Проект ${key}`,
+  description: '',
+  last_task_number: 1,
+  created_by: { kind: 'tracker' as const, signature: null },
+  created_at: '2026-09-22T10:00:00Z',
+  updated_at: '2026-09-22T10:00:00Z',
+}));
+
 /** Экран: первый кадр, список доступов, реестр, установка. */
 function installation(tokens = [UI_TOKEN, AGENT_TOKEN], who: Who = 'admin') {
   server.use(
     http.get(`${API}/api/v1/bootstrap`, () =>
-      data(bootstrap({ token: { id: SESSION_ID, scope: 'main' }, ...signedIn(who) })),
+      data(
+        bootstrap({
+          token: { id: SESSION_ID, scope: 'main' },
+          projects: PROJECTS,
+          ...signedIn(who),
+        }),
+      ),
     ),
+    http.get(`${API}/api/v1/participants/:name/projects`, ({ params }) =>
+      data(projectAccess[String(params.name)] ?? { mode: 'all', projects: [] }),
+    ),
+    http.put(`${API}/api/v1/participants/:name/projects`, async ({ params, request }) => {
+      const body = (await request.json()) as { mode: string; projects: string[] };
+      accessPuts.push({ name: String(params.name), body });
+      if (accessDenial !== null) return accessDenial;
+      projectAccess[String(params.name)] = { mode: body.mode, projects: body.projects };
+      return data(projectAccess[String(params.name)]);
+    }),
     http.get(`${API}/api/v1/tokens`, ({ request }) => {
       tokenQueries.push(new URL(request.url));
       return collection(tokens);
@@ -152,6 +186,9 @@ beforeEach(() => {
   sent = [];
   issueKeys = [];
   tokenQueries = [];
+  projectAccess = {};
+  accessPuts = [];
+  accessDenial = null;
   setToken(SESSION);
   server.events.on('request:start', ({ request }) => {
     sent.push(`${request.method} ${new URL(request.url).pathname}`);
@@ -247,7 +284,7 @@ describe('экран «Доступы»', () => {
     const toggle = screen.getByRole('button', { name: say.access('history.count', { count: 1 }) });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(
-      screen.queryByRole('article', {
+      screen.queryByRole('group', {
         name: say.ui('token.label', { name: 'проверка 6 сентября' }),
       }),
     ).toBeNull();
@@ -830,10 +867,10 @@ describe('чьи токены на экране (TRK-114)', () => {
       screen.getByRole('button', { name: say.access('history.count', { count: 1 }) }),
     );
     expect(
-      screen.queryByRole('article', { name: say.ui('token.label', { name: 'вход вчера' }) }),
+      screen.queryByRole('group', { name: say.ui('token.label', { name: 'вход вчера' }) }),
     ).toBeNull();
     expect(
-      screen.queryByRole('article', { name: say.ui('token.label', { name: 'вход с телефона' }) }),
+      screen.queryByRole('group', { name: say.ui('token.label', { name: 'вход с телефона' }) }),
     ).toBeNull();
     expect(row('проверка 6 сентября')).toHaveAttribute('data-revoked', 'true');
   });
@@ -910,5 +947,126 @@ describe('чьи токены на экране (TRK-114)', () => {
     expect(
       await within(dialog).findByText(say.access('denied.not_own_token'), { exact: false }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('доступ агента к проектам', () => {
+  /** Строка агента в разделе «Агенты и их проекты». */
+  async function agentRow(name: string): Promise<HTMLElement> {
+    return screen.findByRole('group', { name: say.access('agents.label', { name }) });
+  }
+
+  it('кнопка «Проекты» открывает окно; «только перечисленные» и два проекта уходят PUT-ом, «все» прячет список', async () => {
+    installation();
+    const user = userEvent.setup();
+    renderApp('/access');
+
+    const row = await agentRow('nightly_agent');
+    expect(await within(row).findByText(say.access('agents.mode.all'))).toBeInTheDocument();
+    await user.click(within(row).getByRole('button', { name: say.access('agents.action') }));
+
+    const dialog = await screen.findByRole('dialog');
+    // В режиме «все» списка проектов нет.
+    expect(
+      await within(dialog).findByRole('radio', {
+        name: new RegExp(say.access('projects.mode.all.label')),
+      }),
+    ).toBeChecked();
+    expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument();
+
+    await user.click(
+      within(dialog).getByRole('radio', {
+        name: new RegExp(say.access('projects.mode.only.label')),
+      }),
+    );
+    await user.click(within(dialog).getByRole('checkbox', { name: /TRK/ }));
+    await user.click(within(dialog).getByRole('checkbox', { name: /DOCS/ }));
+    await user.click(within(dialog).getByRole('button', { name: say.access('projects.save') }));
+
+    await waitFor(() => expect(accessPuts).toHaveLength(1));
+    expect(accessPuts[0]).toEqual({
+      name: 'nightly_agent',
+      body: { mode: 'only', projects: ['TRK', 'DOCS'] },
+    });
+    // Окно закрылось, подпись строки показывает новый режим.
+    expect(
+      await within(await agentRow('nightly_agent')).findByText(
+        say.access('agents.mode.only', { amount: 2 }),
+      ),
+    ).toBeInTheDocument();
+
+    // Возврат к «всем» прячет список и шлёт пустой.
+    await user.click(
+      within(await agentRow('nightly_agent')).getByRole('button', {
+        name: say.access('agents.action'),
+      }),
+    );
+    const again = await screen.findByRole('dialog');
+    expect(await within(again).findAllByRole('checkbox')).toHaveLength(3);
+    await user.click(
+      within(again).getByRole('radio', { name: new RegExp(say.access('projects.mode.all.label')) }),
+    );
+    expect(within(again).queryByRole('checkbox')).not.toBeInTheDocument();
+    await user.click(within(again).getByRole('button', { name: say.access('projects.save') }));
+    await waitFor(() => expect(accessPuts).toHaveLength(2));
+    expect(accessPuts[1]?.body).toEqual({ mode: 'all', projects: [] });
+  });
+
+  it('режим «кроме» показывает сохранённый проект отмеченным и подпись «Кроме 1»', async () => {
+    projectAccess = { nightly_agent: { mode: 'except', projects: ['DOCS'] } };
+    installation();
+    const user = userEvent.setup();
+    renderApp('/access');
+
+    const row = await agentRow('nightly_agent');
+    expect(
+      await within(row).findByText(say.access('agents.mode.except', { amount: 1 })),
+    ).toBeInTheDocument();
+    await user.click(within(row).getByRole('button', { name: say.access('agents.action') }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByRole('checkbox', { name: /DOCS/ })).toBeChecked();
+    expect(within(dialog).getByRole('checkbox', { name: /TRK/ })).not.toBeChecked();
+  });
+
+  it('чужого агента человек без флага администратора не видит, а пришедший отказ объясняется словами', async () => {
+    installation([UI_TOKEN], 'alice');
+    accessDenial = failure('agent_owned_by_another', 403, 'no', {});
+    const user = userEvent.setup();
+    renderApp('/access');
+
+    // Свой и ничей — есть, агент Боба — нет.
+    const own = await agentRow('claude_alice');
+    expect(
+      screen.queryByRole('group', { name: say.access('agents.label', { name: 'claude_bob' }) }),
+    ).not.toBeInTheDocument();
+
+    await user.click(within(own).getByRole('button', { name: say.access('agents.action') }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(
+      await within(dialog).findByRole('radio', {
+        name: new RegExp(say.access('projects.mode.except.label')),
+      }),
+    );
+    await user.click(within(dialog).getByRole('checkbox', { name: /TRK/ }));
+    await user.click(within(dialog).getByRole('button', { name: say.access('projects.save') }));
+
+    expect(
+      await within(dialog).findByText(say.access('projects.ownedByAnother')),
+    ).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    // Настройка не изменилась: подпись всё ещё «Все проекты».
+    expect(projectAccess).toEqual({});
+    expect(
+      within(await agentRow('claude_alice')).getByText(say.access('agents.mode.all')),
+    ).toBeInTheDocument();
+  });
+
+  it('у сеанса без учётной записи кнопки «Проекты» нет', async () => {
+    installation([UI_TOKEN], 'agent');
+    renderApp('/access');
+
+    const row = await agentRow('nightly_agent');
+    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
   });
 });
