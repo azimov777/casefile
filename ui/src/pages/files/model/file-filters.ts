@@ -29,7 +29,7 @@ function isSort(value: string | null): value is FileSort {
   return SORT_KEYS.some((key) => key === value);
 }
 
-/** Отбор из адреса страницы: `q`, `project`, `type`, `sort`, `order=asc`. Лишнее и неизвестное отбрасывается. */
+/** Отбор из адреса страницы: `q`, `project`, `type`, `sort`, `order=asc`, `unopened=1`. Лишнее и неизвестное отбрасывается. */
 export function readFileFilter(params: URLSearchParams): FileFilter {
   const type = params.get('type');
   const sort = params.get('sort');
@@ -40,7 +40,7 @@ export function readFileFilter(params: URLSearchParams): FileFilter {
     mimeType: isPreset(type) ? TYPE_PRESETS[type] : null,
     sort: isSort(sort) ? sort : 'added',
     descending: params.get('order') !== 'asc',
-    unopened: false,
+    unopened: params.get('unopened') === '1',
   };
 }
 
@@ -50,12 +50,13 @@ export function typePresetOf(filter: FileFilter): TypePreset | null {
   return found ?? null;
 }
 
-/** Сколько условий отбора включено: поиск, проект, тип. Порядок отбором не считается. */
+/** Сколько условий отбора включено: поиск, проект, тип, «давно не открывали». Порядок отбором не считается. */
 export function activeConditions(filter: FileFilter): number {
   return (
     (filter.q !== '' ? 1 : 0) +
     (filter.project !== null ? 1 : 0) +
-    (filter.mimeType !== null ? 1 : 0)
+    (filter.mimeType !== null ? 1 : 0) +
+    (filter.unopened ? 1 : 0)
   );
 }
 
@@ -68,6 +69,7 @@ export function withFilter(
     type: TypePreset | null;
     sort: FileSort;
     descending: boolean;
+    unopened: boolean;
   }>,
 ): URLSearchParams {
   const next = new URLSearchParams(params);
@@ -79,6 +81,7 @@ export function withFilter(
   if ('project' in change) set('project', change.project ?? null);
   if ('type' in change) set('type', change.type ?? null);
   if ('sort' in change) set('sort', change.sort === 'added' ? null : (change.sort ?? null));
+  if ('unopened' in change) set('unopened', change.unopened === true ? '1' : null);
   if ('descending' in change) set('order', change.descending === false ? 'asc' : null);
   return next;
 }

@@ -83,22 +83,41 @@ beforeEach(() => {
   server.use(
     http.get(`${API}/api/v1/tasks`, () => collection([])),
     http.get(`${API}/api/v1/files`, ({ request }) => {
-      requests.push(new URL(request.url));
-      return collection(stored);
+      const url = new URL(request.url);
+      requests.push(url);
+      return collection(
+        url.searchParams.get('unopened') === 'true' ? stored.filter((f) => f.unopened) : stored,
+      );
     }),
+    http.get(`${API}/api/v1/settings`, () =>
+      collection([
+        {
+          name: 'file_unopened_days',
+          effective_value: '90',
+          default_value: '90',
+          source: 'default',
+          default_source: 'default',
+          kind: 'integer',
+          value: null,
+        },
+      ] as never),
+    ),
     http.post(`${API}/api/v1/files/delete`, async ({ request }) => {
       const body = (await request.json()) as {
         ids?: string[];
         expected_count?: number;
+        unopened?: boolean;
       };
       deletions.push(body);
-      if (body.expected_count !== undefined && body.expected_count !== stored.length) {
+      const matched = body.unopened === true ? stored.filter((f) => f.unopened) : stored;
+      if (body.expected_count !== undefined && body.expected_count !== matched.length) {
         return failure('file_count_mismatch', 409, 'Mismatch', {
           expected: body.expected_count,
-          actual: stored.length,
+          actual: matched.length,
         });
       }
-      const gone = body.ids === undefined ? stored : stored.filter((f) => body.ids?.includes(f.id));
+      const gone =
+        body.ids === undefined ? matched : stored.filter((f) => body.ids?.includes(f.id));
       stored = stored.filter((f) => !gone.includes(f));
       return data({ deleted: gone.length, files: gone.map((f) => ({ ...f, deleted: true })) });
     }),
@@ -241,6 +260,96 @@ describe('экран «Файлы»', () => {
         }),
       ).not.toBeChecked(),
     );
+  });
+
+  describe('«давно не открывали» (TRK-754)', () => {
+    beforeEach(() => {
+      stored = [
+        file('f1', 'old-a.png', { mime_type: 'image/png', unopened: true }),
+        file('f2', 'old-b.png', { mime_type: 'image/png', unopened: true }),
+        file('f3', 'fresh.png', { mime_type: 'image/png', last_opened_at: '2026-10-25T10:00:00Z' }),
+        file('f4', 'report.pdf'),
+      ];
+    });
+
+    it('без отбора метка стоит только у карточек с признаком, а запрос не несёт unopened', async () => {
+      renderApp('/files', LOCAL);
+      await screen.findAllByRole('article');
+
+      expect(requests.at(-1)?.searchParams.has('unopened')).toBe(false);
+      const mark = say.files('item.unopened');
+      expect(within(card('old-a.png')).getByText(mark)).toBeVisible();
+      expect(within(card('old-b.png')).getByText(mark)).toBeVisible();
+      expect(within(card('fresh.png')).queryByText(mark)).toBeNull();
+      expect(within(card('report.pdf')).queryByText(mark)).toBeNull();
+    });
+
+    it('отбор из адреса уходит unopened=true; число отобранных названо, срок и ссылка на настройки видны', async () => {
+      renderApp('/files?unopened=1', LOCAL);
+      await screen.findAllByRole('article');
+
+      expect(requests.at(-1)?.searchParams.get('unopened')).toBe('true');
+      expect(screen.getAllByRole('article')).toHaveLength(2);
+      expect(await screen.findByText(say.files('list.unopenedCount', { count: 2 }))).toBeVisible();
+      expect(screen.getByRole('checkbox', { name: say.files('filters.unopened') })).toBeChecked();
+      expect(screen.getByText(/90/, { selector: '[data-role="unopened-term"]' })).toBeVisible();
+      expect(
+        screen.getByRole('link', { name: say.files('filters.unopenedSettings') }),
+      ).toHaveAttribute('href', '/settings');
+    });
+
+    it('переключатель пишет отбор в адрес и запрашивает список заново', async () => {
+      const user = userEvent.setup();
+      renderApp('/files', LOCAL);
+      await screen.findAllByRole('article');
+
+      await user.click(screen.getByRole('checkbox', { name: say.files('filters.unopened') }));
+      await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+      expect(requests.at(-1)?.searchParams.get('unopened')).toBe('true');
+    });
+
+    it('удаление отобранных: окно называет число, уходит expected_count и unopened', async () => {
+      const user = userEvent.setup();
+      renderApp('/files?unopened=1', LOCAL);
+      await screen.findAllByRole('article');
+
+      await user.click(screen.getByRole('button', { name: say.files('selection.deleteUnopened') }));
+      const dialog = await screen.findByRole('alertdialog');
+      expect(
+        await within(dialog).findByText(say.files('remove.matchingTitle', { count: 2 })),
+      ).toBeVisible();
+      await user.click(
+        within(dialog).getByRole('checkbox', {
+          name: say.files('remove.confirmCount', { count: 2 }),
+        }),
+      );
+      await user.click(within(dialog).getByRole('button', { name: say.files('remove.confirm') }));
+
+      await waitFor(() => expect(deletions).toEqual([{ expected_count: 2, unopened: true }]));
+      // Свежее изображение и документ остались.
+      expect(stored.map((f) => f.name)).toEqual(['fresh.png', 'report.pdf']);
+    });
+
+    it('число изменилось: ничего не удалено, экран называет новое число', async () => {
+      const user = userEvent.setup();
+      renderApp('/files?unopened=1', LOCAL);
+      await screen.findAllByRole('article');
+
+      await user.click(screen.getByRole('button', { name: say.files('selection.deleteUnopened') }));
+      const dialog = await screen.findByRole('alertdialog');
+      await user.click(
+        await within(dialog).findByRole('checkbox', {
+          name: say.files('remove.confirmCount', { count: 2 }),
+        }),
+      );
+      stored = [...stored, file('f5', 'old-c.png', { mime_type: 'image/png', unopened: true })];
+      await user.click(within(dialog).getByRole('button', { name: say.files('remove.confirm') }));
+
+      expect(
+        await within(dialog).findByText(say.files('remove.mismatch', { actual: 3 })),
+      ).toBeVisible();
+      expect(stored).toHaveLength(5);
+    });
   });
 
   it('загрузка уходит с ключом повтора', async () => {

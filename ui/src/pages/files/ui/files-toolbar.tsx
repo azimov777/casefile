@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { ArrowDownUp, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import type { FileFilter, FileSort } from '@/entities/file';
 import { Button, Input, Select } from '@/shared/ui';
 import {
@@ -23,6 +24,7 @@ export interface FileFilterChange {
   type?: TypePreset | null;
   sort?: FileSort;
   descending?: boolean;
+  unopened?: boolean;
 }
 
 /**
@@ -33,10 +35,13 @@ export interface FileFilterChange {
 export function FilesToolbar({
   filter,
   projects,
+  unopenedDays,
   onChange,
   onReset,
 }: {
   filter: FileFilter;
+  /** Срок настройки `file_unopened_days`; `null` — не прочитан, тогда срок не называется. */
+  unopenedDays: number | null;
   projects: { key: string; title: string }[];
   onChange: (change: FileFilterChange) => void;
   onReset: () => void;
@@ -151,6 +156,27 @@ export function FilesToolbar({
             {t('filters.reset')}
           </Button>
         )}
+      </div>
+
+      {/* Признак считает сервер (TRK/files#8); срок — настройка установки, правится на «Настройках». */}
+      <div className="flex min-w-0 basis-full flex-col gap-1" data-role="unopened-filter">
+        <label className="inline-flex min-h-(--ui-tap) items-center gap-2 text-body">
+          <input
+            type="checkbox"
+            className="size-(--ui-mark) accent-accent"
+            checked={filter.unopened}
+            onChange={(event) => onChange({ unopened: event.target.checked })}
+          />
+          {t('filters.unopened')}
+        </label>
+        <p className="max-w-(--ui-text-max) text-meta text-muted" data-role="unopened-term">
+          {unopenedDays === null ? null : (
+            <>{t('filters.unopenedTerm', { count: unopenedDays })} </>
+          )}
+          <Link to="/settings" className="underline">
+            {t('filters.unopenedSettings')}
+          </Link>
+        </p>
       </div>
     </div>
   );
