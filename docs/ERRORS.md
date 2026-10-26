@@ -58,6 +58,7 @@
 | `discussion_not_found` | Discussion not found | Обсуждения с таким адресом нет: проект есть, номера в нём нет (решение `TRK#51`). |
 | `discussion_task_not_found` | Task is not attached to the discussion | Задача не привязана к этому обсуждению — отвязывать нечего. |
 | `entry_not_found` | Case entry not found | Записи с таким номером в этой задаче нет. |
+| `file_link_not_found` | No such file link | Такой одноразовой ссылки на файл не выдавали. |
 | `file_not_found` | File not found | Файла с таким идентификатором в установке нет. |
 | `installation_setting_not_found` | Installation setting not found | Настройки с таким именем в реестре нет. |
 | `link_not_found` | Link not found | Связи такого вида между этими задачами нет. |
@@ -71,6 +72,7 @@
 
 | Код | Сообщение | Когда возникает |
 |---|---|---|
+| `file_link_wrong_kind` | This file link opens another action | Ссылка открывает другое действие: скачивание не принимает загрузку и наоборот. |
 | `method_not_allowed` | Method not allowed | Маршрут есть, но этого метода у него нет. |
 
 ## 409 — конфликт состояния
@@ -117,9 +119,17 @@
 | `task_has_open_discussions` | Task has discussions that are not closed | Закрытие или отмена задачи, пока привязанное к ней обсуждение не закрыто: адреса обсуждений — в `details.discussions`. |
 | `task_has_parent` | Task already has a parent | У задачи уже есть родитель: второй не ставится, нынешний назван в `details.parent`. |
 | `task_has_unclosed_children` | Task has children that are not closed | Закрытие задачи при детях не в `done` и не в `cancelled`. |
+| `too_many_file_links` | Too many unused file links are open; wait for them to expire | Живых одноразовых ссылок на файлы слишком много; ждать срока жизни прежних. |
 | `transition_not_allowed` | Transition is not allowed | Перехода между этими статусами нет в таблице; допустимые перечислены в `details.allowed`. |
 | `version_conflict` | Task version is outdated | Версия задачи разошлась: её изменили между чтением и записью. |
 | `warning_not_open` | Task has no open warning to accept | `acceptance` в задаче, где нечего принимать: открытого предупреждения нет. |
+
+## 410
+
+| Код | Сообщение | Когда возникает |
+|---|---|---|
+| `file_link_expired` | This file link has expired; take a new one | Ссылка просрочена. |
+| `file_link_used` | This file link was already used; take a new one | Ссылка уже использована: она одноразовая. |
 
 ## 422 — не прошло проверку
 

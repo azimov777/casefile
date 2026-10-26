@@ -223,6 +223,13 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 - `close_discussion` — closes a discussion with its final conclusion, in one transaction
 - `list_discussions` — lists discussions with filters by project, status, turn and attached task: address, title, status, turn, open questions, closing time
 
+**Files**
+- `request_file_upload` — returns a one-time link and the `curl -T` command that uploads a new file to a project; the bytes go from disk to the tracker and never through the model
+- `request_file_replace` — returns a one-time link and the `curl -T` command that replaces the content of a file under the same id
+- `read_file` — returns a file: an image as `image` content the model sees, any other file as its card and a one-time `curl -o` link
+- `list_files` — lists files as cards with search by name and filters by project and media type, sorted by time added or opened, size or type
+- `delete_file` — erases a file's bytes and keeps its tombstone: name, type, size, who deleted it and when
+
 **Links**
 - `link` — links two tasks and files `link_added` in both cases, or attaches a task to a discussion
 - `unlink` — removes a link and files `link_removed` in both cases, or detaches a task from a discussion

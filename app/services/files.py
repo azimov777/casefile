@@ -389,3 +389,13 @@ async def _cards(session: AsyncSession, files: Sequence[File]) -> list[FileCard]
         )
         for file in files
     ]
+
+
+def validate_name_and_type(name: Any, mime_type: Any = None) -> tuple[str, str]:
+    """Имя и тип файла, как их сохранит загрузка: проверенные и приведённые.
+
+    Нужна входу, который выдаёт ссылку на загрузку раньше самой загрузки (MCP,
+    `request_file_upload`): отказ `file_fields_invalid` приходит при выдаче, а не после
+    передачи байтов.
+    """
+    return _name_and_type(name, mime_type)

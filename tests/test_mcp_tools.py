@@ -96,6 +96,11 @@ TASK_TOOLS = {
     "set_attribute",
     "remove_attribute",
     "wait_journal",
+    "request_file_upload",
+    "request_file_replace",
+    "read_file",
+    "list_files",
+    "delete_file",
 }
 
 #: Что прежде открывал набор `main` (наборов больше нет, TRK-471).
@@ -224,6 +229,15 @@ TOOL_ANNOTATIONS: dict[str, tuple[bool, bool, bool]] = {
     "read_entries": (True, False, True),
     "read_project_entries": (True, False, True),
     "wait_journal": (True, False, True),
+    "list_files": (True, False, True),
+    # Выдача файла: повтор безопасен и даёт то же, но каждая выдача ставит файлу отметку
+    # «последний раз открыт» — читающей её не назвать (TRK-737).
+    "read_file": (False, False, True),
+    # Ссылка на загрузку: ничего не стирает до самой загрузки, повтор выдаёт новую ссылку.
+    "request_file_upload": (False, False, False),
+    "request_file_replace": (False, False, False),
+    # Удаление файла: байты стираются, остаётся надгробие; повтор отказывает `file_deleted`.
+    "delete_file": (False, True, False),
     # Подшивающие и переводящие: дело только дописывается — не разрушают, — но без
     # ключа идемпотентности повтор с теми же аргументами не гарантирует то же
     # состояние: заводит вторую запись/объект или отказывает конфликтом или

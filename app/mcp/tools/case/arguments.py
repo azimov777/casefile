@@ -82,6 +82,16 @@ EntryTypeArg = Annotated[
     ),
 ]
 
+EntryFilesArg = Annotated[
+    list[str] | None,
+    Field(
+        description=(
+            "Ids of files the entry attaches, up to 10, in the order shown. A missing file "
+            "is refused with `file_not_found`, a deleted one with `file_deleted`"
+        )
+    ),
+]
+
 DraftForArg = Annotated[
     str | None,
     Field(

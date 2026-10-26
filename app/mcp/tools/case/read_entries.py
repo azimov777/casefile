@@ -6,6 +6,7 @@ from app.mcp.tools.case.views import EntryView, entry
 from app.mcp.toolset import READ_ONLY, Toolset
 from app.mcp.views import PageView, page
 from app.services import case as case_service
+from app.services import files as files_service
 from app.services import tasks as tasks_service
 
 
@@ -48,9 +49,15 @@ def register(tools: Toolset) -> None:
                 limit=await tools.page_limit(session, limit),
                 cursor=cursor,
             )
+            attached = await files_service.entry_attachments(session, listed.items)
             return page(
                 (
-                    entry(item, task_key=task.key, lifted_by=listed.lifts.get(item.no))
+                    entry(
+                        item,
+                        task_key=task.key,
+                        lifted_by=listed.lifts.get(item.no),
+                        files=attached.get(item.id),
+                    )
                     for item in listed.items
                 ),
                 next_cursor=listed.next_cursor,

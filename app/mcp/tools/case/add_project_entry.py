@@ -10,7 +10,7 @@ from app.domain.case import MAX_ENTRY_TITLE_LENGTH, EntryType
 from app.domain.discussions import is_discussion_address
 from app.mcp.arguments import CaseAddressArg, IdempotencyKeyArg
 from app.mcp.idempotency import Once
-from app.mcp.tools.case.arguments import ENTRY_REFS_DESCRIPTION, EntryBodyArg
+from app.mcp.tools.case.arguments import ENTRY_REFS_DESCRIPTION, EntryBodyArg, EntryFilesArg
 from app.mcp.tools.case.views import AppendedProjectEntryView, appended_project_entry
 from app.mcp.toolset import FILING, Toolset
 from app.services import areas as areas_service
@@ -89,6 +89,7 @@ def register(tools: Toolset) -> None:
         body: EntryBodyArg = "",
         refs: ProjectEntryRefsArg = None,
         supersedes: SupersedesArg = None,
+        files: EntryFilesArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedProjectEntryView:
         """Files an entry in the case of a project or of an area: a decision, finding,
@@ -121,6 +122,7 @@ def register(tools: Toolset) -> None:
                         title=title,
                         body=body,
                         refs=refs or (),
+                        files=files or (),
                         supersedes=supersedes,
                     )
                     return appended_project_entry(entry, project_key=discussion.address)
@@ -134,6 +136,7 @@ def register(tools: Toolset) -> None:
                         "body": body,
                         "refs": refs,
                         "supersedes": supersedes,
+                        **({"files": files} if files else {}),
                     },
                     build=note,
                 )
@@ -148,6 +151,7 @@ def register(tools: Toolset) -> None:
                     title=title,
                     body=body,
                     refs=refs or (),
+                    files=files or (),
                     supersedes=supersedes,
                 )
                 return appended_project_entry(entry, project_key=owner_name(owner))
@@ -161,6 +165,7 @@ def register(tools: Toolset) -> None:
                     "body": body,
                     "refs": refs,
                     "supersedes": supersedes,
+                    **({"files": files} if files else {}),
                 },
                 build=append,
             )

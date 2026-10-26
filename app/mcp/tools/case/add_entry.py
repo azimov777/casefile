@@ -7,6 +7,7 @@ from app.mcp.idempotency import Once
 from app.mcp.tools.case.arguments import (
     DraftForArg,
     EntryBodyArg,
+    EntryFilesArg,
     EntryRefsArg,
     EntryTitleArg,
     EntryTypeArg,
@@ -29,6 +30,7 @@ def register(tools: Toolset) -> None:
         body: EntryBodyArg = "",
         refs: EntryRefsArg = None,
         draft_for: DraftForArg = None,
+        files: EntryFilesArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedEntryView:
         """Files an entry without payload: a decision, attempt, finding, artifact, remark,
@@ -53,6 +55,7 @@ def register(tools: Toolset) -> None:
                     title=title,
                     body=body,
                     refs=refs or (),
+                    files=files or (),
                     draft_for=draft_for,
                 )
                 return appended_entry(entry, task_key=task.key)
@@ -62,6 +65,8 @@ def register(tools: Toolset) -> None:
             # черновиков, отвечает на повтор тем же отпечатком, а не `idempotency_key_reused`.
             if draft_for is not None:
                 request["draft_for"] = draft_for
+            if files:
+                request["files"] = files
             return await Once.of(add_entry, session, actor, idempotency_key).run(
                 result=AppendedEntryView,
                 request=request,

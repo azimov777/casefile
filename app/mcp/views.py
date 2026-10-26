@@ -125,11 +125,14 @@ REST этого правила не знает и знать не должен: 
 """
 
 from collections.abc import Iterable
+from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
 
 from app.db.models.project import Project
 from app.domain.authors import Author
+from app.domain.files import FileCard
 from app.mcp.enums import AuthorKindSchema
 
 
@@ -143,6 +146,49 @@ class AuthorView(BaseModel):
 def author(value: Author) -> AuthorView:
     """Кто сделал действие: род и подпись. У самого трекера подписи нет."""
     return AuthorView(kind=value.kind, signature=value.signature)
+
+
+# Файл, приложенный к записи дела: общая форма инструментов дела и группы файлов. Без
+# проекта, контрольной суммы, счётчиков и отметок открытия — запись показывает, какой файл
+# приложен, а не его историю; полную карточку несёт `list_files`. Удалённый файл — надгробие:
+# имя, тип и размер остаются, `deleted_at` называет время, у живого поля нет вовсе; кто удалил —
+# в карточке (`list_files` с `include_deleted`). Авторы в файлах — подписью строкой, без
+# вложенной модели: каждая вложенная модель в схеме стоит около ста токенов в каждом
+# инструменте, чей ответ её несёт (`TRK/mcp#68`).
+class AttachedFileView(BaseModel):
+    """File attached to an entry; once deleted only its tombstone remains, with `deleted_at`."""
+
+    id: str
+    name: str
+    mime_type: str
+    size_bytes: int
+    deleted_at: datetime | None = None
+
+    @model_serializer(mode="wrap")
+    def _tombstone_only_when_deleted(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        """Убирает `deleted_at` у живого файла: пустой ключ — шум в каждом вложении."""
+        dumped: dict[str, Any] = handler(self)
+        if dumped.get("deleted_at") is None:
+            dumped.pop("deleted_at", None)
+        return dumped
+
+
+def signature(value: Author | None) -> str | None:
+    """Подпись автора строкой; у самого трекера её нет."""
+    return None if value is None else value.signature
+
+
+def attached_file(card: FileCard) -> AttachedFileView:
+    """Вложение записи: живой файл или надгробие."""
+    return AttachedFileView(
+        id=str(card.id),
+        name=card.name,
+        mime_type=card.mime_type,
+        size_bytes=card.size_bytes,
+        deleted_at=card.deleted_at,
+    )
 
 
 class ProjectRefView(BaseModel):

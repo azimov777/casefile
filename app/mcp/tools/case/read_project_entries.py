@@ -15,6 +15,7 @@ from app.mcp.views import PageView, page
 from app.services import areas as areas_service
 from app.services import case as case_service
 from app.services import discussions as discussions_service
+from app.services import files as files_service
 
 InForceArg = Annotated[
     bool | None,
@@ -88,8 +89,12 @@ def register(tools: Toolset) -> None:
                     limit=await tools.page_limit(session, limit),
                     cursor=cursor,
                 )
+                attached = await files_service.entry_attachments(session, found.items)
                 return page(
-                    (entry(item, discussion=discussion.address) for item in found.items),
+                    (
+                        entry(item, discussion=discussion.address, files=attached.get(item.id))
+                        for item in found.items
+                    ),
                     next_cursor=found.next_cursor,
                 )
             owner = await areas_service.get_owner(session, key)
@@ -106,11 +111,22 @@ def register(tools: Toolset) -> None:
                 limit=await tools.page_limit(session, limit),
                 cursor=cursor,
             )
+            attached = await files_service.entry_attachments(session, listed.items)
             return page(
                 (
-                    entry(item, area=owner.address, standing=listed.standings.get(item.no))
+                    entry(
+                        item,
+                        area=owner.address,
+                        standing=listed.standings.get(item.no),
+                        files=attached.get(item.id),
+                    )
                     if isinstance(owner, Area)
-                    else entry(item, project_key=owner.key, standing=listed.standings.get(item.no))
+                    else entry(
+                        item,
+                        project_key=owner.key,
+                        standing=listed.standings.get(item.no),
+                        files=attached.get(item.id),
+                    )
                     for item in listed.items
                 ),
                 next_cursor=listed.next_cursor,

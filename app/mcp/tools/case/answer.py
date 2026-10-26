@@ -10,7 +10,7 @@ from app.domain.discussions import is_discussion_address
 from app.mcp.arguments import IdempotencyKeyArg
 from app.mcp.enums import AnswerOutcomeSchema
 from app.mcp.idempotency import Once
-from app.mcp.tools.case.arguments import EntryBodyArg
+from app.mcp.tools.case.arguments import EntryBodyArg, EntryFilesArg
 from app.mcp.tools.case.views import AppendedDiscussionEntryView, appended_discussion_entry
 from app.mcp.toolset import FILING, Toolset
 from app.services import case as case_service
@@ -104,6 +104,7 @@ def register(tools: Toolset) -> None:
         replaced_by: ReplacedByArg = None,
         relayed_from: RelayedFromArg = None,
         choice: ChoiceArg = None,
+        files: EntryFilesArg = None,
         idempotency_key: IdempotencyKeyArg = None,
     ) -> AppendedDiscussionEntryView:
         """Answers a question of a discussion or of a task's case, or closes it unanswered
@@ -133,6 +134,7 @@ def register(tools: Toolset) -> None:
                         replaced_by=replaced_by,
                         relayed_from=relayed_from,
                         choice=choice,
+                        files=files or (),
                     )
                     return appended_discussion_entry(entry, discussion=discussion.address)
 
@@ -151,6 +153,7 @@ def register(tools: Toolset) -> None:
                         replaced_by=replaced_by,
                         relayed_from=relayed_from,
                         choice=choice,
+                        files=files or (),
                     )
                     return appended_discussion_entry(entry, task_key=task.key)
 
@@ -164,6 +167,7 @@ def register(tools: Toolset) -> None:
                     "replaced_by": replaced_by,
                     **({"relayed_from": relayed_from} if relayed_from is not None else {}),
                     **({"choice": choice} if choice is not None else {}),
+                    **({"files": files} if files else {}),
                 },
                 build=append,
             )
