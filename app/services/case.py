@@ -156,9 +156,9 @@ from app.domain.tasks import (
     TaskStatus,
     checks_without_verdict,
 )
+from app.services import closed_refs, freeze
 from app.services import decisions as decisions_service
 from app.services import files as files_service
-from app.services import freeze
 from app.services import participants as participants_service
 from app.services.auth import Actor
 
@@ -247,11 +247,9 @@ async def list_entries(
     page = await EntryRepository(session).list_page(
         task.id, nos=nos, types=types, after_no=after_no, limit=limit, cursor=cursor
     )
-    return TaskCasePage(
-        items=page.items,
-        next_cursor=page.next_cursor,
-        lifts=await draft_lifts(session, task, page.items),
-    )
+    lifts = await draft_lifts(session, task, page.items)
+    await closed_refs.mask_entries(session, page.items, actor.project_access)
+    return TaskCasePage(items=page.items, next_cursor=page.next_cursor, lifts=lifts)
 
 
 async def read_entry(session: AsyncSession, task: Task, no: int, *, actor: Actor) -> Entry:
@@ -259,6 +257,7 @@ async def read_entry(session: AsyncSession, task: Task, no: int, *, actor: Actor
     entry = await EntryRepository(session).get_by_no(task.id, no)
     if entry is None:
         raise EntryNotFoundError(details={"key": task.key, "no": no})
+    await closed_refs.mask_entries(session, [entry], actor.project_access)
     return entry
 
 
@@ -297,7 +296,8 @@ async def case_index(session: AsyncSession, task: Task, *, actor: Actor) -> list
     домена, а не выборка из базы (`app/domain/case.py`, `mark_outdated_verdicts`).
     Опись и так приходит целиком и упорядоченной, второго запроса пометка не стоит.
     """
-    return mark_outdated_verdicts(await EntryRepository(session).headings(task.id))
+    headings = mark_outdated_verdicts(await EntryRepository(session).headings(task.id))
+    return await closed_refs.mask_headings(session, headings, actor.project_access)
 
 
 async def latest_entry_no(session: AsyncSession, task: Task, *, actor: Actor) -> int:
@@ -1018,6 +1018,7 @@ async def list_project_entries(
     replaceable = [entry for entry in page.items if entry.type in REPLACEABLE_ENTRY_TYPES]
     if standings is None and replaceable:
         standings = await decisions_service.case_standings(session, project)
+    await closed_refs.mask_entries(session, page.items, actor.project_access)
     return CasePage(
         items=page.items,
         next_cursor=page.next_cursor,
@@ -1040,6 +1041,7 @@ async def read_project_entry(
     )
     if entry is None:
         raise EntryNotFoundError(details={"key": owner_name(project), "no": no})
+    await closed_refs.mask_entries(session, [entry], actor.project_access)
     return entry
 
 
@@ -1054,9 +1056,12 @@ async def project_case_index(
     у области — та же форма, TRK#57, раздел 6). Правило формы одно: из описи уходит то,
     что стоит в списках действующих или заменено."""
     repository = EntryRepository(session)
-    if isinstance(project, Area):
-        return await repository.area_headings(project.id)
-    return await repository.project_headings(project.id)
+    headings = (
+        await repository.area_headings(project.id)
+        if isinstance(project, Area)
+        else await repository.project_headings(project.id)
+    )
+    return await closed_refs.mask_headings(session, headings, actor.project_access)
 
 
 async def record_project_created(

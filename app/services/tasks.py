@@ -71,7 +71,7 @@ from app.domain.errors import (
     TaskVersionConflictError,
 )
 from app.domain.links import LinkKind
-from app.domain.project_access import is_open
+from app.domain.project_access import CLOSED_PROJECT_LABEL, is_open
 from app.domain.tasks import (
     BACKLOG_ONLY_FIELDS,
     CHECK_EDIT_FIELD,
@@ -110,9 +110,9 @@ from app.domain.tasks import (
 )
 from app.services import areas as areas_service
 from app.services import case as case_service
+from app.services import closed_refs, freeze
 from app.services import decisions as decisions_service
 from app.services import discussions as discussions_service
-from app.services import freeze
 from app.services import links as links_service
 from app.services import projects as projects_service
 from app.services.auth import Actor
@@ -311,6 +311,14 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
     # (TRK~28#6). Признак `blocked` считается по всем связям: блокер, которого агент не
     # видит, задачу всё равно держит.
     links = [link for link in all_links if is_open(actor.project_access, link.other.project_id)]
+    # Блокер закрытого проекта виден фактом без имени: `blocked` не остаётся без причины.
+    hidden_blockers = [
+        CLOSED_PROJECT_LABEL
+        for link in all_links
+        if link not in links
+        and link.kind is LinkKind.BLOCKED_BY
+        and not is_closed(link.other.status)
+    ]
     hierarchy = links_service.split_hierarchy(links)
     summary = await case_service.last_summary(session, task, actor=actor)
     questions = await case_service.open_questions(session, task, actor=actor)
@@ -333,12 +341,16 @@ async def read_task_package(session: AsyncSession, key: str, *, actor: Actor) ->
             last_change=last_change,
             summary=summary,
             questions=questions,
-            discussion_questions=discussion_questions,
+            discussion_questions=await closed_refs.mask_discussion_questions(
+                session, discussion_questions, actor.project_access
+            ),
             remarks=remarks,
             links=links,
+            hidden_blockers=hidden_blockers,
             children=hierarchy.children,
-            discussions_after_card=await case_service.discussion_entries_after_card(
-                session, task, actor=actor
+            discussions_after_card=closed_refs.mask_addresses(
+                await case_service.discussion_entries_after_card(session, task, actor=actor),
+                await closed_refs.closed_keys(session, actor.project_access),
             ),
             project_decisions_after_card=await decisions_service.project_decisions_after_card(
                 session, task, actor=actor
@@ -377,6 +389,7 @@ def _task_state(
     discussion_questions: Sequence[tuple[Entry, str]],
     remarks: Sequence[Entry],
     links: Sequence[links_service.TaskLink],
+    hidden_blockers: Sequence[str],
     children: Sequence[links_service.TaskLink],
     discussions_after_card: Sequence[str],
     project_decisions_after_card: Sequence[str],
@@ -437,7 +450,8 @@ def _task_state(
             link.other.key
             for link in links
             if link.kind is LinkKind.BLOCKED_BY and not is_closed(link.other.status)
-        ],
+        ]
+        + list(hidden_blockers),
         children=[
             state_domain.ChildStatus(key=link.other.key, status=link.other.status)
             for link in children
@@ -1179,7 +1193,12 @@ async def _transition_facts(
     deferred: bool | None = None
     if to_status is TaskStatus.IN_PROGRESS:
         blockers = await links_service.open_blockers(session, task)
-        blocking_questions = await case_service.open_blocking_question_refs(session, task)
+        # Блокер закрытого агенту проекта держит вход, но его ключ вызову не положен (TRK-753).
+        blockers = closed_refs.mask_addresses(blockers, await closed_refs.closed_keys(session))
+        blocking_questions = closed_refs.mask_addresses(
+            await case_service.open_blocking_question_refs(session, task),
+            await closed_refs.closed_keys(session),
+        )
         # Момент — из объекта задачи, уже с полями этого вызова; сравнивает его база.
         deferred = await TaskRepository(session).is_deferred(task.not_before)
     children: list[str] | None = None
@@ -1187,6 +1206,9 @@ async def _transition_facts(
     if is_closed(to_status):
         children = await links_service.unclosed_children(session, task)
         discussions = await DiscussionRepository(session).unclosed_of_task(task.id)
+        discussions = closed_refs.mask_addresses(
+            discussions, await closed_refs.closed_keys(session)
+        )
     return TransitionFacts(
         key=task.key,
         from_status=from_status,
