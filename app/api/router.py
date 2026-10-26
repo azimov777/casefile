@@ -27,6 +27,7 @@ from app.api.routes import (
     bootstrap,
     discussions,
     installation,
+    installation_settings,
     journal,
     links,
     participants,
@@ -77,6 +78,7 @@ api_router = APIRouter(
 
 api_router.include_router(bootstrap.router)
 api_router.include_router(installation.router)
+api_router.include_router(installation_settings.router)
 api_router.include_router(participants.router)
 api_router.include_router(tokens.router)
 api_router.include_router(accounts.router)

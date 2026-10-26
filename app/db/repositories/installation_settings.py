@@ -23,6 +23,11 @@ class InstallationSettingRepository:
         statement = select(InstallationSetting.value).where(InstallationSetting.name == name)
         return await self._session.scalar(statement)
 
+    async def get_row(self, name: str) -> InstallationSetting | None:
+        """Строка целиком (кто и когда менял) или `None`."""
+        statement = select(InstallationSetting).where(InstallationSetting.name == name)
+        return await self._session.scalar(statement)
+
     async def list_all(self) -> list[InstallationSetting]:
         statement = select(InstallationSetting).order_by(InstallationSetting.name)
         return list(await self._session.scalars(statement))
