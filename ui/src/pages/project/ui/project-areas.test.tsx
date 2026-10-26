@@ -7,6 +7,7 @@ import {
   bootstrap,
   collection,
   data,
+  decisionsPage,
   areaCard,
   areaDetail,
   failure,
@@ -47,6 +48,7 @@ beforeEach(() => {
   writes = [];
   setToken('trk_test');
   server.use(
+    http.get(`${API}/api/v1/decisions`, () => decisionsPage([])),
     // Счётчики шапки (TRK-619) читают список задач; их числа здесь не проверяются.
     http.get(`${API}/api/v1/tasks`, () => collection([], { total: 0 })),
     http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),

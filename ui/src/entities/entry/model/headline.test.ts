@@ -172,6 +172,29 @@ describe.each(LANGUAGES)('заголовок записи по фактам на
     ]);
   });
 
+  it('проверка решения: исход словами и решение ссылкой на запись того же дела (TRK-758)', () => {
+    // Присланный английский `title` не показывается: фраза собрана по фактам записи.
+    for (const outcome of ['confirmed', 'rejected', 'removed'] as const) {
+      const headline = entryHeadline(
+        { type: 'decision_review', decision: 15, outcome },
+        'TRK/mcp',
+        say.ui,
+      );
+      expect(headlineText(headline)).toBe(
+        `${say.ui(`entry.headline.decisionReview.${outcome}`)} TRK/mcp#15`,
+      );
+      expect(headline.kind === 'built' && headline.parts.at(-1)).toEqual({
+        kind: 'entry',
+        key: 'TRK/mcp',
+        no: 15,
+      });
+    }
+    // Запись из описи, где фактов нет, не падает: остаётся фраза без ссылки.
+    expect(line({ type: 'decision_review' })).toBe(
+      say.ui('entry.headline.decisionReview.confirmed'),
+    );
+  });
+
   it('ответ и вердикт тоже собираются здесь: их заголовок выводит трекер', () => {
     const answer = built(FACTS.answer);
     expect(headlineText(answer)).toBe(`${say.ui('entry.headline.answerTo')} DEMO-4#4`);

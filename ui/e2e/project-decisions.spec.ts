@@ -3,9 +3,10 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 import { fontsReady, readE2eToken } from './contour';
 
 /*
- * Решения проекта (TRK-554): раздел «Решения» на экране проекта — действующие сверху,
- * заменённые свёрнуты вместе с тем, что их заменило, — обратный путь от решения к
- * задачам, сделанным по нему, и строка «Решения» в шапке задачи со статусом.
+ * Решения проекта (TRK-554): раздел «Решения» на экране проекта — действующие по
+ * умолчанию, заменённые в отборе «Показать снятые» вместе с тем, что их заменило, —
+ * обратный путь от решения к задачам, сделанным по нему, и строка «Решения» в шапке
+ * задачи со статусом. Проверку решений человеком — `decision-review.spec.ts`.
  *
  * Сценарий пишущий — заводит в проекте `TRK` два решения, второе заменяет первое, и
  * задачу, которая ссылается на первое, — и потому идёт в проекте «запись». Заголовки
@@ -19,10 +20,10 @@ const OLD = `Номер выдаёт счётчик проекта, прогон
 const NEW = `Номер выдаётся последним, после проверок, прогон ${RUN}`;
 const TASK = `Задача по решению проекта, прогон ${RUN}`;
 /**
- * Кнопка свёрнутых заменённых решений: её имя — знак состояния псевдоэлементом и счёт.
- * Число зависит от прежних прогонов на той же базе, поэтому оно не названо.
+ * Ссылка отбора «Показать снятые»: число зависит от прежних прогонов на той же базе,
+ * поэтому оно не названо.
  */
-const SUPERSEDED_TOGGLE = /^[▸▾] Не действу/;
+const REMOVED_FILTER = /^Показать снятые/;
 
 async function api(
   request: APIRequestContext,
@@ -99,12 +100,13 @@ test('экран проекта: действующее решение, заме
   const current = decisionRow(region, `TRK#${newNo}`);
   await expect(current).toHaveAttribute('data-status', 'in_force');
   await expect(current).toContainText(NEW);
-  await expect(current).toContainText('действует');
-  await expect(current.getByRole('link', { name: `TRK#${oldNo}` })).toBeVisible();
+  // Ключ установки подписывает человек: его решение действует и читается подтверждённым.
+  await expect(current).toHaveAttribute('data-review', 'confirmed');
 
-  // Заменённое — история: свёрнуто, пока его не попросили.
+  // Заменённое — история: за отбором «Показать снятые», пока его не попросили.
   await expect(decisionRow(region, `TRK#${oldNo}`)).toHaveCount(0);
-  await region.getByRole('button', { name: SUPERSEDED_TOGGLE }).click();
+  await region.getByRole('link', { name: REMOVED_FILTER }).click();
+  await expect(page).toHaveURL(/show=removed/);
   const old = decisionRow(region, `TRK#${oldNo}`);
   await expect(old).toHaveAttribute('data-status', 'superseded');
   await expect(old).toContainText(OLD);
@@ -118,6 +120,7 @@ test('экран проекта: действующее решение, заме
 
   // Ссылка решения открывает «Дело» с раскрытой записью — тело читается там.
   await page.goto('/projects/TRK?tab=decisions');
+  await expect(decisionRow(page, `TRK#${newNo}`)).toBeVisible();
   await decisionRow(page.getByRole('region', { name: 'Решения', exact: true }), `TRK#${newNo}`)
     .getByRole('link', { name: `TRK#${newNo}`, exact: true })
     .click();
@@ -162,7 +165,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
     await page.goto('/projects/TRK?tab=decisions');
     const region = page.getByRole('region', { name: 'Решения', exact: true });
-    await region.getByRole('button', { name: SUPERSEDED_TOGGLE }).click();
+    await region.getByRole('link', { name: REMOVED_FILTER }).click();
     await expect(decisionRow(region, `TRK#${oldNo}`)).toBeVisible();
     await fontsReady(page);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);

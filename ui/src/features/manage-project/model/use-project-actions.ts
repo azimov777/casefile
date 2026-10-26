@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { areaKeys } from '@/entities/area';
+import { decisionKeys } from '@/entities/decision';
 import { questionKeys, remarkKeys } from '@/entities/entry';
 import { projectKeys } from '@/entities/project';
 import { sessionKeys } from '@/entities/session';
@@ -118,6 +119,8 @@ export function useFileEntry() {
     mutationFn: (input: EntryInput) => fileEntry(input),
     onSuccess: (_entry, { holder }) => {
       void queryClient.invalidateQueries({ queryKey: holderKey(holder) });
+      // Новое решение области — строка списка решений и новое «не подтверждено» (TRK-758).
+      void queryClient.invalidateQueries({ queryKey: decisionKeys.all });
     },
   });
 }

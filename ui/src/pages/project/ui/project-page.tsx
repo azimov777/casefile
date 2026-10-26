@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { decisionsQueryOptions } from '@/entities/decision';
 import { projectQueryOptions } from '@/entities/project';
 import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import {
@@ -13,6 +14,7 @@ import {
   useProjectRights,
   type HolderTabLink,
 } from '@/features/manage-project';
+import { decisionsFilterHref, UnconfirmedLine } from '@/features/decisions/review';
 import { TaskCounters, tasksHref } from '@/features/task-filters';
 import { ApiError } from '@/shared/api';
 import { useLanguage } from '@/shared/i18n';
@@ -45,6 +47,7 @@ import { ProjectOverview } from './project-overview';
 export function ProjectPage() {
   const { key = '' } = useParams();
   const project = useQuery(projectQueryOptions(key));
+  const decisions = useQuery(decisionsQueryOptions(key));
   const rights = useProjectRights();
   const address = useHolderAddress('project');
   const { language } = useLanguage();
@@ -83,7 +86,7 @@ export function ProjectPage() {
     {
       tab: 'decisions',
       label: t('tabs.decisions'),
-      count: card.decisions.filter((decision) => decision.status === 'in_force').length,
+      count: decisions.data?.rows.filter((row) => row.status === 'in_force').length,
     },
     { tab: 'attributes', label: t('tabs.attributes'), count: card.attributes.length },
     { tab: 'areas', label: t('tabs.areas'), count: card.areas.length },
@@ -105,7 +108,15 @@ export function ProjectPage() {
       description={card.description}
       noDescription={t('noDescription')}
       links={<Link to={tasksHref('', { project: card.key })}>{t('tasks')}</Link>}
-      counters={<TaskCounters project={card.key} />}
+      counters={
+        <>
+          <TaskCounters project={card.key} />
+          <UnconfirmedLine
+            count={card.unconfirmed_decisions}
+            to={decisionsFilterHref(address.tabHref('decisions'), 'unconfirmed')}
+          />
+        </>
+      }
       menu={rights.manage ? <ProjectMenu project={card} archived={frozen} /> : null}
       notice={
         // Архив сказан словами под шапкой, а не одним цветом: почему на экране нет ни
@@ -124,11 +135,7 @@ export function ProjectPage() {
       tabHref={address.tabHref}
     >
       {address.tab === 'decisions' ? (
-        <ProjectDecisions
-          projectKey={card.key}
-          decisions={card.decisions}
-          entryHref={address.entryHref}
-        />
+        <ProjectDecisions projectKey={card.key} canReview={canWrite} />
       ) : address.tab === 'attributes' ? (
         <AttributesSection
           holder={holder}

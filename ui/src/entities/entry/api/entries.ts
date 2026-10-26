@@ -8,13 +8,16 @@ import {
   type operations,
 } from '@/shared/api';
 import { splitAreaAddress } from '@/shared/lib';
+import type { EntryFacts } from '../model/headline';
 import type { EntryOwner } from '../model/owner';
 
 /** Запись дела с телом и нагрузкой: объединение, размеченное полем `type`. */
 export type Entry = components['schemas']['EntryRead'];
 
 /** Строка описи: заголовок записи без тела. */
-export type EntryHeading = components['schemas']['EntryHeadingRead'];
+export type EntryHeading = Omit<components['schemas']['EntryHeadingRead'], 'facts'> & {
+  facts: EntryFacts;
+};
 
 export type EntryType = components['schemas']['EntryType'];
 export type Author = components['schemas']['AuthorRead'];

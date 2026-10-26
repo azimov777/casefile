@@ -7,6 +7,7 @@ import {
   collection,
   data,
   areaDetail,
+  decisionsPage,
   failure,
   projectDetail,
 } from '@testing/msw/responses';
@@ -53,6 +54,7 @@ beforeEach(() => {
   requests = [];
   setToken('trk_test');
   server.use(
+    http.get(`${API}/api/v1/decisions`, () => decisionsPage([])),
     http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
     http.get(`${API}/api/v1/projects/DEMO`, () => data(projectDetail('DEMO'))),
     http.get(`${API}/api/v1/projects/DEMO/areas`, () => collection([])),
@@ -169,5 +171,47 @@ describe('счётчики задач в шапке страницы облас�
       expect(url.searchParams.getAll('area')).toEqual(['DEMO/promotion']);
       expect(url.searchParams.get('limit')).toBe('1');
     }
+  });
+});
+
+describe('строка «Не подтверждено решений» под счётчиками (TRK-758)', () => {
+  it('проект: число из карточки ссылкой на «Решения» с отбором «Не подтверждены»', async () => {
+    serve({ inProgress: 0, open: 0, waiting: 0, warnings: 0 });
+    server.use(
+      http.get(`${API}/api/v1/projects/DEMO`, () =>
+        data(projectDetail('DEMO', { unconfirmed_decisions: 12 })),
+      ),
+    );
+    renderApp('/projects/DEMO');
+
+    const link = await screen.findByRole('link', {
+      name: say.decisions('unconfirmed.some', { count: 12 }),
+    });
+    expect(link).toHaveAttribute('href', '/projects/DEMO?tab=decisions&show=unconfirmed');
+  });
+
+  it('проект: при нуле ссылки нет, сказано, что все подтверждены', async () => {
+    serve({ inProgress: 0, open: 0, waiting: 0, warnings: 0 });
+    renderApp('/projects/DEMO');
+
+    expect(await screen.findByText(say.decisions('unconfirmed.none'))).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: say.decisions('unconfirmed.some', { count: 0 }) }),
+    ).toBeNull();
+  });
+
+  it('область: число из карточки области, ссылка на её «Решения» с тем же отбором', async () => {
+    serve({ inProgress: 0, open: 0, waiting: 0, warnings: 0 });
+    server.use(
+      http.get(`${API}/api/v1/projects/DEMO/areas/promotion`, () =>
+        data(areaDetail('DEMO/promotion', { unconfirmed_decisions: 4 })),
+      ),
+    );
+    renderApp('/projects/DEMO/areas/promotion');
+
+    const link = await screen.findByRole('link', {
+      name: say.decisions('unconfirmed.some', { count: 4 }),
+    });
+    expect(link).toHaveAttribute('href', '/projects/DEMO/areas/promotion?show=unconfirmed');
   });
 });

@@ -2,7 +2,16 @@ import { http } from 'msw';
 import userEvent from '@testing-library/user-event';
 import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { API, bootstrap, collection, data, entryOfType, failure } from '@testing/msw/responses';
+import {
+  API,
+  bootstrap,
+  collection,
+  data,
+  decisionRow,
+  decisionsPage,
+  entryOfType,
+  failure,
+} from '@testing/msw/responses';
 import { server } from '@testing/msw/server';
 import { address, renderApp } from '@testing/render';
 import { say } from '@testing/say';
@@ -90,11 +99,15 @@ function decision(no: number, overrides: Partial<ProjectDecision> = {}): Project
 
 /** Адреса запросов прогона: по ним видно, чем читалась история и тело. */
 let seen: URL[] = [];
+/** Решения проекта и областей, как их отдаёт `GET /api/v1/decisions`. */
+let decisionRows: ReturnType<typeof decisionRow>[] = [];
 
 beforeEach(() => {
   seen = [];
+  decisionRows = [];
   setToken('trk_test');
   server.use(
+    http.get(`${API}/api/v1/decisions`, () => decisionsPage(decisionRows)),
     // Счётчики шапки (TRK-619) читают список задач; их числа здесь не проверяются.
     http.get(`${API}/api/v1/tasks`, () => collection([], { total: 0 })),
     http.get(`${API}/api/v1/bootstrap`, () => data(bootstrap())),
@@ -243,6 +256,39 @@ describe('экран проекта', () => {
       .closest('tr') as HTMLElement;
     expect(within(current).queryByText(say.ui('decision.status.in_force'))).toBeNull();
     expect(within(current).queryByRole('link')).toBeNull();
+  });
+
+  it('проверка решения в описи «Дела» читается фразой по фактам, а не присланным английским заголовком (TRK-758)', async () => {
+    server.use(
+      http.get(`${API}/api/v1/projects/DEMO/entries`, () =>
+        collection([
+          projectEntry(6, 'decision_review', {
+            title: 'Decision DEMO#5 rejected',
+            body: 'Не согласен',
+            payload: { decision: 5, outcome: 'rejected' },
+          } as Partial<Entry>),
+          projectEntry(7, 'decision_review', {
+            title: 'Decision DEMO#3 confirmed',
+            body: '',
+            payload: { decision: 3, outcome: 'confirmed' },
+          } as Partial<Entry>),
+        ]),
+      ),
+    );
+    renderApp('/projects/DEMO?tab=case', { language: 'ru' });
+
+    const index = await screen.findByRole('table');
+    expect(
+      within(index).getByRole('button', {
+        name: `${say.ui('entry.headline.decisionReview.rejected')} DEMO#5`,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(index).getByRole('button', {
+        name: `${say.ui('entry.headline.decisionReview.confirmed')} DEMO#3`,
+      }),
+    ).toBeInTheDocument();
+    expect(within(index).queryByText(/Decision DEMO#5 rejected/)).toBeNull();
   });
 
   it('свёрнутая запись, пришедшая ссылкой `?entry=N`, оставляет «Дело» открытым', async () => {
@@ -414,6 +460,8 @@ describe('вкладка «Обзор»', () => {
         ),
       ),
     );
+    decisionRows = [2, 5, 7, 9].map((no) => decisionRow(`DEMO#${no}`));
+    decisionRows.push(decisionRow('DEMO#3', { status: 'superseded', superseded_by: 'DEMO#9' }));
     renderApp('/projects/DEMO', { language: 'ru' });
 
     const block = await screen.findByRole('region', { name: say.project('overview.decisions') });

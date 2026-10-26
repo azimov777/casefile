@@ -31,6 +31,7 @@ type AreaCard = components['schemas']['AreaRead'];
 type AreaDetail = components['schemas']['AreaDetailRead'];
 type Discussion = components['schemas']['DiscussionRead'];
 type DiscussionDetail = components['schemas']['DiscussionDetailRead'];
+type DecisionListRow = components['schemas']['DecisionListRead'];
 
 /** Ответ-ресурс в оболочке контракта. */
 export function data<T>(payload: T, status = 200) {
@@ -818,4 +819,45 @@ export function discussionConclusion(address: string, no: number) {
       open: 'ничего',
     },
   };
+}
+
+/**
+ * Строка списка решений (`GET /api/v1/decisions`, TRK-756): адрес `DEMO#3` или
+ * `DEMO/promotion#3` разбирается на область и номер. По умолчанию — действующее и ещё не
+ * проверенное решение агента без задач; тест называет отличия.
+ */
+export function decisionRow(
+  ref: string,
+  overrides: Partial<DecisionListRow> = {},
+): DecisionListRow {
+  const [owner = '', no = '0'] = ref.split('#');
+  return {
+    ref,
+    area: owner.includes('/') ? owner : null,
+    title: `Решение ${no}`,
+    author: { kind: 'agent', signature: 'demo_agent' },
+    created_at: '2026-09-01T10:00:00Z',
+    status: 'in_force',
+    review_state: 'unconfirmed',
+    review_entry: null,
+    supersedes: [],
+    superseded_by: null,
+    refs: [],
+    tasks: 0,
+    ...overrides,
+  };
+}
+
+/**
+ * Список решений в оболочке контракта: строки и число непроверенных действующих рядом с
+ * `data`. Число по умолчанию — сколько строк в силе и не проверено, как считает бэкенд.
+ */
+export function decisionsPage(rows: DecisionListRow[], unconfirmed?: number) {
+  return HttpResponse.json({
+    data: rows,
+    meta: { has_more: false, next_cursor: null },
+    unconfirmed:
+      unconfirmed ??
+      rows.filter((row) => row.status === 'in_force' && row.review_state === 'unconfirmed').length,
+  });
 }

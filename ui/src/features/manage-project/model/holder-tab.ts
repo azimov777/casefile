@@ -87,6 +87,8 @@ export function tabSearch(
     next.delete('type');
   }
   if (tab !== 'attributes') next.delete('attribute');
+  // Отбор решений (`?show=`, TRK-758) — состояние вкладки «Решения».
+  if (tab !== 'decisions') next.delete('show');
   // Поиск — состояние вкладок знания: с «Атрибутов» и «Дела» он снимается, между
   // «Решениями» и «Заметками» переезжает.
   if (!isKnowledgeTab(kind, tab)) next.delete(SEARCH_PARAM);

@@ -31,6 +31,7 @@ export const say = {
   area: i18n.getFixedT(null, 'area'),
   questions: i18n.getFixedT(null, 'questions'),
   discussions: i18n.getFixedT(null, 'discussions'),
+  decisions: i18n.getFixedT(null, 'decisions'),
   start: i18n.getFixedT(null, 'start'),
   errors: i18n.getFixedT(null, 'errors'),
   fieldReasons: i18n.getFixedT(null, 'fieldReasons'),

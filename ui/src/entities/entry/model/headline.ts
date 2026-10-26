@@ -10,7 +10,18 @@ import type { Entry, EntryHeading } from '../api/entries';
  * разбирать»). Состав полей сужается сам — `switch (facts.type)`, — и внешний тип
  * записи для этого не нужен.
  */
-export type EntryFacts = components['schemas']['EntryFactsRead'];
+export type EntryFacts = components['schemas']['EntryFactsRead'] | DecisionReviewFacts;
+
+/**
+ * Факты проверки решения (TRK-758): номер проверенного решения и исход. Описью бэкенд
+ * этих полей не отдаёт (`NoFactsRead`), но дело проекта и области приходит записями целиком,
+ * и строка собирается из их нагрузки (`factsOfEntry`), как у `link_added`.
+ */
+export interface DecisionReviewFacts {
+  type: 'decision_review';
+  decision?: number | null;
+  outcome?: components['schemas']['ReviewOutcome'] | null;
+}
 
 /**
  * Отдельные формы объединения: ими индексируются типы значений там, где нагрузку
@@ -407,8 +418,25 @@ export function entryHeadline(facts: EntryFacts, taskKey: string, t: TFunction<'
     case 'remark':
     case 'acceptance':
     case 'note':
-    case 'decision_review':
       return { kind: 'author' };
+
+    /*
+     * Проверка решения человеком (TRK-755): фраза по фактам, а не присланный английский
+     * `title`. Решение — ссылка на запись того же дела (`taskKey` — адрес владельца дела);
+     * причина лежит в теле записи.
+     */
+    case 'decision_review': {
+      const review = 'decision' in facts ? facts : null;
+      return {
+        kind: 'built',
+        parts: [
+          words(t(`entry.headline.decisionReview.${review?.outcome ?? 'confirmed'}`)),
+          ...(review?.decision == null
+            ? []
+            : [{ kind: 'entry' as const, key: taskKey, no: review.decision }]),
+        ],
+      };
+    }
 
     /*
      * Ветка недостижима, и это проверяет компилятор: разметка перебрана целиком, так
@@ -591,6 +619,12 @@ export function factsOfEntry(entry: Entry): EntryFacts {
         type: 'warning',
         partial: checksWith(entry.payload.checks, 'partial'),
         unverifiable: checksWith(entry.payload.checks, 'unverifiable'),
+      };
+    case 'decision_review':
+      return {
+        type: 'decision_review',
+        decision: entry.payload.decision,
+        outcome: entry.payload.outcome,
       };
     default:
       return { type: entry.type };
