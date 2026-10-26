@@ -262,6 +262,7 @@ describe('словари пояснений', () => {
       connect: d.connect?.explanation,
       access: d.access?.explanation,
       questions: d.questions?.explanation,
+      files: d.files?.explanation,
     };
   };
 
@@ -278,6 +279,7 @@ describe('словари пояснений', () => {
         found.project?.body,
         found.connect?.body,
         found.access?.body,
+        found.files?.body,
       ];
       // Ключей в перечне столько же, сколько текстов: новый ключ без текста роняет тест.
       expect(bodies).toHaveLength(Object.keys(HINT_KEYS).length);

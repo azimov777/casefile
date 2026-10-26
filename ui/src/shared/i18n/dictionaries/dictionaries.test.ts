@@ -73,6 +73,9 @@ describe('словари языков', () => {
       // Ключи задач в подсказке поля — идентификаторы контракта, а не слова (TRK-672).
       'discussions.attach.placeholder',
       'discussions.create.tasksPlaceholder',
+      // Название формата и заголовок окна — имя файла: слова не переводятся (TRK-739).
+      'files.filters.types.pdf',
+      'files.preview.title',
       'ui.app.name',
       'ui.app.mark',
       'login.title',

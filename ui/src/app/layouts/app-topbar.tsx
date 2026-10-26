@@ -198,6 +198,7 @@ function crumbsOf(place: Place, t: TFunction<'ui'>): Crumb[] {
   if (place.section === 'start') return [{ label: t('app.start') }];
   if (place.section === 'connect') return [{ label: t('app.connect') }];
   if (place.section === 'access') return [{ label: t('app.access') }];
+  if (place.section === 'files') return [{ label: t('app.files') }];
   if (place.section === 'settings') return [{ label: t('app.settings') }];
   if (place.section === 'people') return [{ label: t('app.people') }];
   if (place.section === 'account') return [{ label: t('app.account') }];

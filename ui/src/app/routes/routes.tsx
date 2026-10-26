@@ -6,6 +6,7 @@ import { ConnectPage } from '@/pages/connect';
 import { AreaPage } from '@/pages/area';
 import { DiscussionPage } from '@/pages/discussion';
 import { LoginPage } from '@/pages/login';
+import { FilesPage } from '@/pages/files';
 import { MovingPage } from '@/pages/moving';
 import { PeoplePage } from '@/pages/people';
 import { ProjectPage } from '@/pages/project';
@@ -38,6 +39,7 @@ export const routes: RouteObject[] = [
           { path: 'connect', element: <ConnectPage /> },
           { path: 'access', element: <AccessPage /> },
           { path: 'moving', element: <MovingPage /> },
+          { path: 'files', element: <FilesPage /> },
           { path: 'settings', element: <SettingsPage /> },
           {
             element: <RequireSignInMode />,

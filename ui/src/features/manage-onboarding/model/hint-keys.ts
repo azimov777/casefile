@@ -23,6 +23,8 @@ export const HINT_KEYS = {
   connect: 'connect',
   /** Доступы (`pages/access`, TRK-363). */
   access: 'access',
+  /** Файлы (`pages/files`, TRK-739). */
+  files: 'files',
 } as const;
 
 export type HintKey = (typeof HINT_KEYS)[keyof typeof HINT_KEYS];

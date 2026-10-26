@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router';
 import {
   ArrowLeftRight,
+  FileText,
   Home,
   Inbox,
   Info,
@@ -314,6 +315,12 @@ export function AppSide({ onNavigate }: { onNavigate?: () => void }) {
         <NavLink to="/access" onClick={onNavigate} className={sectionLink}>
           <KeyRound className="size-(--ui-mark) shrink-0" aria-hidden="true" />
           {t('app.access')}
+        </NavLink>
+
+        {/* Файлы установки — общее хранилище всех проектов; доступ к каждому — через его проект. */}
+        <NavLink to="/files" onClick={onNavigate} className={sectionLink}>
+          <FileText className="size-(--ui-mark) shrink-0" aria-hidden="true" />
+          {t('app.files')}
         </NavLink>
 
         {/*
