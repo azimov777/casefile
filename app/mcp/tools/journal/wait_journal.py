@@ -75,9 +75,9 @@ def register(tools: Toolset) -> None:
 
         The journal is every case entry of the installation in one stream, task cases
         and project cases alike, in `seq` order; `task`, `project` and `types` narrow
-        it. The call returns as soon as a matching entry appears, and after `timeout`
-        seconds at the latest. The next call
-        continues from the `seq` of the last entry received. With `types=["answer"]` and
+        it. The feed carries nothing from a closed project. The call returns as soon
+        as a matching entry appears, and after `timeout` seconds at the latest. The next
+        call continues from the `seq` of the last entry received. With `types=["answer"]` and
         `task`, one call covers an answer expected within `timeout`.
 
         Entries already filed in one case, by number, are returned by `read_entries` and

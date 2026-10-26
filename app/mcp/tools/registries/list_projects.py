@@ -49,7 +49,9 @@ def register(tools: Toolset) -> None:
         cursor: CursorArg = None,
     ) -> PageView[ProjectRowView]:
         """Lists the installation's projects, one page at a time: key, title and archive
-        time. A project's description is returned by `get_project`.
+        time. A project the owner has closed to the agent is left out; asked for by key it is
+        refused with `project_not_allowed`. A project's description is returned by
+        `get_project`.
         """
         async with runtime.call() as (session, actor):
             listed = await projects_service.list_projects(

@@ -237,7 +237,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 
 **Projects & participants**
 - `get_project` — returns one project by its key, or an area by its address in the same shape: key, title, description, current attribute values, the decisions and findings in force and the index of the rest of its case
-- `list_projects` — lists the installation's projects: key, title and archive time; archived ones only when asked
+- `list_projects` — lists the installation's projects the agent may use: key, title and archive time; archived ones only when asked
 - `list_participants` — lists the participant registry: the possible addressees of a question
 - `create_project` — creates a project
 - `update_project` — changes a project's title and description, recording each change in its case
