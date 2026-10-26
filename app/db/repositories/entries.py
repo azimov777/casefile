@@ -20,7 +20,19 @@ from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, case, distinct, func, or_, select, text, true, union_all
+from sqlalchemy import (
+    Select,
+    and_,
+    case,
+    distinct,
+    func,
+    null,
+    or_,
+    select,
+    text,
+    true,
+    union_all,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
@@ -40,6 +52,7 @@ from app.db.pagination import (
 from app.db.repositories.discussions import discussion_ids_of_tasks, unanswered_in_discussion
 from app.db.repositories.projects import in_active_project
 from app.db.sql import ilike_contains
+from app.domain.area_links import AreaLinkKind
 from app.domain.areas import ADDRESS_SEPARATOR, format_area_address
 from app.domain.authors import Author, AuthorKind
 from app.domain.case import (
@@ -1554,7 +1567,15 @@ def _facts_json() -> ColumnElement[Any]:
         ),
         (
             Entry.type.in_((EntryType.LINK_ADDED, EntryType.LINK_REMOVED)),
-            func.jsonb_build_object("link_kind", payload["kind"], "other_key", payload["other"]),
+            func.jsonb_build_object(
+                "link_kind",
+                payload["kind"],
+                # Другая сторона: ключ задачи в деле задачи, адрес области в деле области.
+                "other_key",
+                case((Entry.task_id.is_not(None), payload["other"]), else_=null()),
+                "other_area",
+                case((Entry.area_id.is_not(None), payload["other"]), else_=null()),
+            ),
         ),
         (
             Entry.type == EntryType.QUESTION,
@@ -1655,8 +1676,10 @@ def _read_facts(entry_type: EntryType, raw: Any) -> EntryFacts:
         case EntryType.LINK_ADDED | EntryType.LINK_REMOVED:
             return LinkFacts(
                 type=entry_type,
-                link_kind=_as_enum(LinkKind, values.get("link_kind")),
+                link_kind=_as_enum(LinkKind, values.get("link_kind"))
+                or _as_enum(AreaLinkKind, values.get("link_kind")),
                 other_key=values.get("other_key"),
+                other_area=values.get("other_area"),
             )
         case EntryType.QUESTION:
             addressees = values.get("addressees")

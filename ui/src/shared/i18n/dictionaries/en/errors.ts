@@ -74,6 +74,8 @@ export const errors = {
   idempotency_key_reused: 'This idempotency key has already been used by another request.',
   installation_not_empty:
     'Only an installation without projects can take an archive: import into a fresh one.',
+  installation_setting_invalid: 'The value does not fit the rules of this setting.',
+  installation_setting_not_found: 'There is no such installation setting.',
   internal_error: 'Internal server error.',
   invalid_actor_label: 'The temporary-agent label does not match the pattern.',
   invalid_area_key:
@@ -110,9 +112,11 @@ export const errors = {
     'This is a shared agent token: there is no participant behind it. A person’s token from the participant registry is required.',
   password_attempts_exceeded: 'Too many failed sign-in attempts. Try again later.',
   permission_denied: 'This token is not allowed to do that.',
+  project_access_mode_invalid: 'The project access mode must be all, except or only.',
   project_archived: 'The project is archived: it and its tasks accept no changes.',
   project_description_too_long: 'The project description is longer than 320 characters.',
   project_key_taken: 'The project key is taken.',
+  project_not_allowed: 'This project is closed to the agent.',
   project_not_archived: 'The project is not archived.',
   project_not_found: 'There is no project with that key.',
   project_reason_required: 'Archiving or restoring a project requires a reason.',

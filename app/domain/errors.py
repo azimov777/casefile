@@ -117,6 +117,27 @@ class ProjectDescriptionTooLongError(ValidationError):
     message = "Project description is too long"
 
 
+class ProjectNotAllowedError(PermissionDeniedError):
+    """Проект закрыт этому агенту его режимом доступа (TRK~28#6).
+
+    Из списков, поиска, ленты и входящей закрытый проект исчезает молча; по прямому
+    адресу отказ называет проект: `details.project` — его ключ.
+    """
+
+    code = "project_not_allowed"
+    message = "This project is closed to the agent"
+
+
+class ProjectAccessModeInvalidError(ValidationError):
+    """Режим доступа к проектам — не `all`, `except` и не `only`.
+
+    `details.mode` — присланное значение, `details.allowed` — допустимые.
+    """
+
+    code = "project_access_mode_invalid"
+    message = "Project access mode is invalid"
+
+
 class ProjectArchivedError(ConflictError):
     """Проект в архиве: он и его задачи заморожены для изменений (TRK#101).
 
@@ -1194,3 +1215,30 @@ class FileCountMismatchError(ConflictError):
 
     code = "file_count_mismatch"
     message = "The number of matching files differs from the confirmed one; nothing was deleted"
+
+
+# --- Настройки установки (TRK-743) --------------------------------------------------
+
+
+class InstallationSettingNotFoundError(NotFoundError):
+    """Настройки с таким именем в реестре нет.
+
+    Реестр — ровно семь параметров установки, годных человеку
+    (`app/domain/installation_settings.py`); `details.name` — присланное имя.
+    """
+
+    code = "installation_setting_not_found"
+    message = "Installation setting not found"
+
+
+class InstallationSettingInvalidError(ValidationError):
+    """Значение настройки не проходит правила реестра: тип или пределы.
+
+    `details.name` — настройка, `details.reason` — `not_an_integer`, `not_a_boolean`,
+    `not_a_duration`, `too_small` или `too_large`; для пределов в `details.minimum` и
+    `details.maximum` (числа в единицах настройки, срок — в секундах). В таблицу ничего
+    не попадает.
+    """
+
+    code = "installation_setting_invalid"
+    message = "Installation setting value is invalid"

@@ -21,6 +21,7 @@ from typing import Annotated
 
 from pydantic import WithJsonSchema
 
+from app.domain.area_links import AreaLinkKind
 from app.domain.authors import AuthorKind
 from app.domain.case import AnswerOutcome, EntryType, RemarkOutcome, VerdictOutcome
 from app.domain.decisions import DecisionStatus
@@ -73,6 +74,14 @@ DiscussionTurnSchema = Annotated[DiscussionTurn, described(DiscussionTurn, "Turn
 LinkKindSchema = Annotated[
     LinkKind,
     described(LinkKind, "Link kind, named by the role of the task the link is shown for"),
+]
+AreaLinkKindSchema = Annotated[
+    AreaLinkKind,
+    described(
+        AreaLinkKind,
+        "Area link kind, named by the role of the area the entry is filed in: `see_also` "
+        "in the source's case, `see_also_from` in the target's",
+    ),
 ]
 
 

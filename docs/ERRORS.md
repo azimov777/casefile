@@ -45,6 +45,7 @@
 | `agent_owned_by_another` | Only an administrator can issue a token to an agent owned by another person | Ключ агента с чужим хозяином выпускает только администратор (TRK-475#14). |
 | `human_token_not_allowed` | A key cannot be issued to a person: people sign in, keys are for agents | Ключ человеку не выпускается: человек входит в интерфейс, а не ходит с токеном (TRK-469#25). |
 | `permission_denied` | Action is not allowed | Действие запрещено. В v1 ролей нет, но точка отказа существует с самого начала. |
+| `project_not_allowed` | This project is closed to the agent | Проект закрыт этому агенту его режимом доступа (TRK~28#6). |
 
 ## 404 — не найдено
 
@@ -58,6 +59,7 @@
 | `discussion_task_not_found` | Task is not attached to the discussion | Задача не привязана к этому обсуждению — отвязывать нечего. |
 | `entry_not_found` | Case entry not found | Записи с таким номером в этой задаче нет. |
 | `file_not_found` | File not found | Файла с таким идентификатором в установке нет. |
+| `installation_setting_not_found` | Installation setting not found | Настройки с таким именем в реестре нет. |
 | `link_not_found` | Link not found | Связи такого вида между этими задачами нет. |
 | `not_found` | Object not found | Запрошенного объекта не существует. |
 | `participant_not_found` | Participant not found | Участника с таким именем или идентификатором нет. |
@@ -142,6 +144,7 @@
 | `entry_fields_invalid` | Case entry fields are invalid | Запись не проходит проверку формы; все замечания сразу — в `details.fields`. Снять (`withdrawn`) или заменить (`replaced`) можно только вопрос, на который ещё не ответили: у отвеченного это `already_answered`. Ответ с `choice`, которой нет среди вариантов вопроса, — `not_an_option`; у вопроса без вариантов — `question_has_no_options`. |
 | `file_fields_invalid` | File name or type is invalid | Имя или тип файла не проходят проверку; замечания — в `details.fields`. |
 | `file_too_large` | File is larger than this installation allows | Файл больше предела установки `TRACKER_FILE_MAX_BYTES`. |
+| `installation_setting_invalid` | Installation setting value is invalid | Значение настройки не проходит правила реестра: тип или пределы. |
 | `invalid_actor_label` | Actor label is invalid | Метка временного агента не соответствует шаблону. |
 | `invalid_area_key` | Area key is invalid | Адрес новой области не `ПРОЕКТ/ключ` или ключ не по шаблону. |
 | `invalid_attribute_name` | Attribute name is invalid | Имя атрибута не соответствует шаблону. |
@@ -160,6 +163,7 @@
 | `journal_too_many_tasks` | Too many tasks in one journal filter | Задач в одном фильтре ленты больше потолка: потолок и присланное — в `details`. |
 | `journal_wait_too_long` | Requested wait exceeds the ceiling | Запрошенное ожидание больше потолка: потолок и запрошенное лежат в `details`. |
 | `link_self_not_allowed` | A task cannot be linked to itself | Связь задачи с самой собой запрещена — любого вида, включая `relates`. |
+| `project_access_mode_invalid` | Project access mode is invalid | Режим доступа к проектам — не `all`, `except` и не `only`. |
 | `project_description_too_long` | Project description is too long | Описание проекта длиннее предела (`app/domain/projects.py`). |
 | `project_reason_required` | Archiving or restoring a project requires a reason | Архивирование и восстановление проекта требуют непустой причины `reason`. |
 | `question_not_a_task_entry` | Questions are asked in discussions, not in a task's case | Вопрос в деле задачи: вопросы задают в обсуждениях (решение `TRK#51`, п. 6). |

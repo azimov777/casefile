@@ -1,4 +1,12 @@
-import { useEffect, useId, useState, type ReactNode, type FormEvent, type MouseEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+  type FormEvent,
+  type MouseEvent,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { EMPTY_DRAFT, clearDraft, readDraft, saveDraft, type Draft } from '@/shared/lib';
 import { Button } from './button';
@@ -48,6 +56,12 @@ interface ComposerProps {
    * форму, а не помнить о хранилище сеанса.
    */
   onCancel?: () => void;
+  /**
+   * Форму раскрыл человек, и она должна встретить его: при появлении поле встаёт в
+   * середину окна и получает фокус. Для форм, которые стоят на странице с самого
+   * начала, флаг не нужен.
+   */
+  focusOnMount?: boolean;
 }
 
 /** Подпись поля и предпросмотра: она объясняет содержание, а не несёт его. */
@@ -83,12 +97,14 @@ export function Composer({
   onBegin,
   onSubmit,
   onCancel,
+  focusOnMount = false,
 }: ComposerProps) {
   const [draft, setDraft] = useState<Draft>(() => readDraft(storageKey));
   const [showPreview, setShowPreview] = useState(false);
   const [emptyBody, setEmptyBody] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const bodyId = useId();
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
   const { t } = useTranslation('ui');
 
   // Форма может пережить смену того, о чём она: соседний вопрос той же задачи меняет
@@ -97,6 +113,15 @@ export function Composer({
     setDraft(readDraft(storageKey));
     setEmptyBody(false);
   }, [storageKey]);
+
+  // Раскрытая издалека форма (кнопка в другом блоке карточки) иначе остаётся за краем
+  // экрана, и нажатие выглядит как «ничего не произошло». Прокрутка — до фокуса и без его
+  // собственной, чтобы поле встало посередине, а не прижалось к краю окна.
+  useEffect(() => {
+    if (!focusOnMount) return;
+    fieldRef.current?.scrollIntoView?.({ block: 'center' });
+    fieldRef.current?.focus({ preventScroll: true });
+  }, [focusOnMount]);
 
   function change(changes: Partial<Draft>) {
     const next = { ...draft, ...changes };
@@ -177,6 +202,7 @@ export function Composer({
         </label>
         <textarea
           id={bodyId}
+          ref={fieldRef}
           className="resize-y rounded-mark border border-line-strong bg-surface px-3 py-2 font-mono text-meta text-text aria-invalid:border-danger"
           value={draft.body}
           onChange={(event) => change({ body: event.target.value })}

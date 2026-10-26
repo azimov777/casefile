@@ -62,6 +62,7 @@ from app.domain.links import LinkKind
 from app.domain.participants import ParticipantKind
 from app.domain.projects import normalize_project_key
 from app.domain.tasks import TaskPriority, TaskStatus
+from app.services import area_links as area_links_service
 from app.services import areas as areas_service
 from app.services import attributes as attributes_service
 from app.services import case as case_service
@@ -314,6 +315,16 @@ async def _area_knowledge(session: AsyncSession, *, agent: Actor, owner: Actor) 
     )
     await areas_service.archive_area(
         session, webhooks, actor=owner, reason="Вебхуки сняты: потребители читают ленту"
+    )
+    # Единственная связь областей демо: записи `link_added` ложатся последними в дела обеих,
+    # номера прежних записей не сдвигаются. Её видит карточка `DEMO/ui` (`see_also`) и
+    # `DEMO/core` (`see_also_from`).
+    await area_links_service.add_area_link(
+        session,
+        ui,
+        core,
+        actor=agent,
+        reason="Экраны показывают механики ядра: их правила — там.",
     )
 
 
