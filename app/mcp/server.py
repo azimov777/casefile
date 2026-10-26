@@ -149,7 +149,7 @@ def _bare_server(settings: Settings, runtime: Runtime) -> MCPServer:
             runtime.sessions,
             None,
             runtime.documents,
-            access_ttl=settings.oauth_access_ttl,
+            settings=settings,
             resource=settings.effective_mcp_public_url,
             consent_page=consent_page_url(issuer),
         )
@@ -166,7 +166,7 @@ def _bare_server(settings: Settings, runtime: Runtime) -> MCPServer:
                 runtime.sessions,
                 LocalConsent(bind_loopback=settings.bind_is_loopback),
                 runtime.documents,
-                access_ttl=settings.oauth_access_ttl,
+                settings=settings,
                 resource=settings.effective_mcp_public_url,
             )
         }

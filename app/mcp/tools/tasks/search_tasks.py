@@ -417,7 +417,6 @@ def _clip_into(payload: dict[str, Any], name: str, limit: int) -> None:
 def register(tools: Toolset) -> None:
     """Объявляет `search_tasks`."""
     runtime = tools.runtime
-    settings = tools.settings
 
     @tools.tool(title="Search tasks", annotations=READ_ONLY)
     async def search_tasks(
@@ -488,15 +487,16 @@ def register(tools: Toolset) -> None:
                 ),
                 sort=sort or (),
                 fields=fields,
-                limit=limit or settings.mcp_page_size,
+                limit=await tools.page_limit(session, limit),
                 cursor=cursor,
             )
+            text_limit = await tools.text_limit(session)
             return page(
                 (
                     found_task(
                         found,
                         fields=outcome.resolved.fields,
-                        text_limit=settings.mcp_text_limit,
+                        text_limit=text_limit,
                     )
                     for found in outcome.page.items
                 ),

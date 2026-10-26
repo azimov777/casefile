@@ -78,7 +78,6 @@ def discussion_row(row: DiscussionRow) -> DiscussionRowView:
 def register(tools: Toolset) -> None:
     """Объявляет `list_discussions`."""
     runtime = tools.runtime
-    settings = tools.settings
 
     @tools.tool(title="List discussions", annotations=READ_ONLY)
     async def list_discussions(
@@ -104,7 +103,7 @@ def register(tools: Toolset) -> None:
                 status=None if status is None else DiscussionStatus(status),
                 turn=None if turn is None else DiscussionTurn(turn),
                 task=None if task is None else await tasks_service.get_task(session, task),
-                limit=limit or settings.mcp_page_size,
+                limit=await tools.page_limit(session, limit),
                 cursor=cursor,
             )
             return page(

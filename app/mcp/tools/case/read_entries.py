@@ -12,7 +12,6 @@ from app.services import tasks as tasks_service
 def register(tools: Toolset) -> None:
     """Объявляет `read_entries`."""
     runtime = tools.runtime
-    settings = tools.settings
 
     @tools.tool(title="Read case entries", annotations=READ_ONLY)
     async def read_entries(
@@ -46,7 +45,7 @@ def register(tools: Toolset) -> None:
                 nos=nos,
                 types=types,
                 after_no=after_no,
-                limit=limit or settings.mcp_page_size,
+                limit=await tools.page_limit(session, limit),
                 cursor=cursor,
             )
             return page(

@@ -33,6 +33,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.utilities.func_metadata import ArgModelBase
 from mcp.shared.exceptions import MCPError
 from mcp_types import INVALID_REQUEST, ToolAnnotations
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import AppError
@@ -40,6 +41,7 @@ from app.domain.idempotency import IDEMPOTENCY_KEY_ARGUMENT
 from app.mcp.argument_refusal import install as enrich_argument_refusals
 from app.mcp.errors import describe
 from app.mcp.runtime import Runtime
+from app.services.installation_settings import get_setting
 
 #: Метод, которому нужен разобранный токен до ответа.
 LIST_TOOLS = "tools/list"
@@ -126,6 +128,20 @@ class Toolset:
     runtime: Runtime
     settings: Settings
     names: list[str] = field(default_factory=list)
+
+    async def page_limit(self, session: AsyncSession, limit: int | None) -> int:
+        """Размер страницы вызова: заданный агентом или настройка `mcp_page_size` из базы.
+
+        Настройка читается при каждом вызове (TRK-745): новое значение действует на
+        следующем вызове без перезапуска `mcp`. Заданный агентом `limit` базу не читает.
+        """
+        if limit:
+            return limit
+        return int(await get_setting(session, "mcp_page_size", settings=self.settings))
+
+    async def text_limit(self, session: AsyncSession) -> int:
+        """Обрезка длинного текста в ответе: настройка `mcp_text_limit`, читается при вызове."""
+        return int(await get_setting(session, "mcp_text_limit", settings=self.settings))
 
     def tool(
         self,

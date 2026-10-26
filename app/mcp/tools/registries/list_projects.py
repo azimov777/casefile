@@ -41,7 +41,6 @@ def project_row(item: Project) -> ProjectRowView:
 def register(tools: Toolset) -> None:
     """Объявляет `list_projects`."""
     runtime = tools.runtime
-    settings = tools.settings
 
     @tools.tool(title="List projects", annotations=READ_ONLY)
     async def list_projects(
@@ -57,7 +56,7 @@ def register(tools: Toolset) -> None:
                 session,
                 actor=actor,
                 include_archived=include_archived,
-                limit=limit or settings.mcp_page_size,
+                limit=await tools.page_limit(session, limit),
                 cursor=cursor,
             )
             return page(

@@ -39,6 +39,7 @@ import ipaddress
 import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from urllib.parse import urlencode, urlsplit
 
 from mcp.server.auth.handlers.authorize import AuthorizationRequest
@@ -232,7 +233,7 @@ class ConsentPage:
         response.set_cookie(
             SESSION_COOKIE,
             live.secret,
-            max_age=int(self._login.session_ttl.total_seconds()),
+            max_age=max(1, int((live.expires_at - datetime.now(UTC)).total_seconds())),
             path=_COOKIE_PATH,
             secure=self._secure,
             httponly=True,
