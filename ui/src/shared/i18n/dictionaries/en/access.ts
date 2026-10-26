@@ -168,4 +168,52 @@ export const access = {
     confirm: 'Disconnect',
     pending: 'Disconnecting…',
   },
+
+  agents: {
+    title: 'Agents and their projects',
+    count_one: '{{count, number}} agent',
+    count_other: '{{count, number}} agents',
+    intro:
+      'Which projects each agent sees. By default all of them, new ones included. A closed project disappears from the agent’s lists, search and inbox; a project the agent creates itself in “only the listed” mode is opened to it automatically. The shared agent key and temporary agents without a participant name are not limited: the setting lives on the participant.',
+    label: 'Agent {{name}}',
+    action: 'Projects',
+    mode: {
+      all: 'All projects',
+      except: 'All but {{amount}}',
+      only: 'Only {{amount}}',
+    },
+  },
+
+  projects: {
+    title: 'Projects of agent {{name}}',
+    intro:
+      'Choose which projects are open to the agent. Tokens and keys do not change: the setting lives on the agent itself.',
+    loading: 'Reading the agent’s access…',
+    loadingProjects: 'Reading the projects…',
+    modeLegend: 'Access mode',
+    mode: {
+      all: {
+        label: 'All projects, new ones included',
+        hint: 'The agent sees everything created now and later.',
+      },
+      except: {
+        label: 'All but the listed',
+        hint: 'New projects are open to the agent by themselves; the ticked ones are closed.',
+      },
+      only: {
+        label: 'Only the listed',
+        hint: 'New projects are closed; the ticked ones are open. A project the agent creates itself is opened to it automatically.',
+      },
+    },
+    closeLegend: 'Close projects',
+    openLegend: 'Open projects',
+    none: 'The installation has no projects yet.',
+    onlyEmpty: 'Nothing ticked: the agent will see no project at all.',
+    scope:
+      'The shared agent key and temporary agents without a participant name are not limited by this setting.',
+    save: 'Save',
+    pending: 'Saving…',
+    ownedByAnother:
+      'This agent belongs to another person: only an administrator of the installation can set its projects. Access is unchanged.',
+  },
 } as const;

@@ -23,9 +23,13 @@ import {
 import {
   AgentDialog,
   IssueDialog,
+  ProjectsDialog,
   RevokeDialog,
   SecretDialog,
+  participantsQueryOptions,
+  projectAccessQueryOptions,
   type IssuedToken,
+  type Participant,
 } from '@/features/manage-access';
 import { ExplanationPanel, HINT_KEYS } from '@/features/manage-onboarding';
 import { cn, useExitHold } from '@/shared/lib';
@@ -100,6 +104,7 @@ export function AccessPage() {
   const history = useExitHold(historyOpen);
   const { t } = useTranslation('access');
   const { t: brick } = useTranslation('ui');
+  const participants = useQuery(participantsQueryOptions());
 
   const session = bootstrap.data?.token ?? null;
   const me = bootstrap.data?.participant?.name ?? null;
@@ -117,6 +122,14 @@ export function AccessPage() {
   // срок — обычная жизнь входа, а не снятый доступ агента, и каждый выход засорял бы её.
   const revoked = items.filter((token) => isRevoked(token) && !isSession(token));
   const complete = tokens.isSuccess && !tokens.hasNextPage;
+  // Агенты, чьи проекты человек настраивает: те же, кому он выпускает ключ, — свои и без
+  // хозяина, а администратор — все. Чужого агента обычному человеку не показываем:
+  // кнопка, что наверняка кончится отказом, — ловушка (`TRK/ui-screens#2`).
+  const agents = (participants.data ?? []).filter(
+    (item) =>
+      item.kind === 'agent' &&
+      (admin || item.owner === null || item.owner === undefined || item.owner === me),
+  );
 
   const { hasNextPage, isFetchingNextPage, isError, fetchNextPage } = tokens;
   useEffect(() => {
@@ -145,6 +158,7 @@ export function AccessPage() {
   const closedId = useId();
   const connectionsId = useId();
   const keysId = useId();
+  const agentsId = useId();
   const sessionsId = useId();
   const historyId = useId();
 
@@ -283,6 +297,23 @@ export function AccessPage() {
         {hasNextPage ? <p className="text-meta text-muted">{t('loadingMore')}</p> : null}
       </section>
 
+      {agents.length === 0 ? null : (
+        <section aria-labelledby={agentsId} className="flex min-w-0 flex-col gap-3">
+          <SectionHead id={agentsId} title={t('agents.title')} shown>
+            <span className="sr-only">{t('agents.count', { count: agents.length })}</span>
+            <span aria-hidden="true">{agents.length}</span>
+          </SectionHead>
+          <p className="text-meta text-muted">{t('agents.intro')}</p>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {agents.map((agent) => (
+              <li key={agent.id}>
+                <AgentRow agent={agent} canWrite={canWrite} showOwner={admin} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {sessions.length === 0 ? null : (
         <section aria-labelledby={sessionsId} className="flex min-w-0 flex-col gap-3">
           <SectionHead id={sessionsId} title={t('sessions.title')} shown>
@@ -346,6 +377,57 @@ export function AccessPage() {
         </SecretDialog>
       )}
     </main>
+  );
+}
+
+/**
+ * Агент и его доступ к проектам: имя, подпись режима («Все проекты», «Кроме 2», «Только 3»)
+ * и кнопка «Проекты». Подпись читает режим агента отдельным запросом на каждую строку:
+ * агентов на установке единицы, а ответ маленький.
+ */
+function AgentRow({
+  agent,
+  canWrite,
+  showOwner,
+}: {
+  agent: Participant;
+  canWrite: boolean;
+  showOwner: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const access = useQuery({ ...projectAccessQueryOptions(agent.name), enabled: canWrite });
+  const { t } = useTranslation('access');
+  const label =
+    access.data === undefined
+      ? null
+      : access.data.mode === 'all'
+        ? t('agents.mode.all')
+        : t(`agents.mode.${access.data.mode}`, { amount: access.data.projects.length });
+
+  return (
+    <div
+      role="group"
+      aria-label={t('agents.label', { name: agent.name })}
+      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-block border border-line bg-surface px-4 py-3"
+    >
+      <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="font-mono font-semibold wrap-anywhere text-text">{agent.name}</span>
+        {label === null ? null : <Badge tone="neutral">{label}</Badge>}
+        {showOwner && agent.owner !== null && agent.owner !== undefined ? (
+          <span className="text-meta text-muted">{t('issue.ownerOf', { owner: agent.owner })}</span>
+        ) : null}
+      </p>
+      <div className="flex min-h-(--ui-control-sm) items-center">
+        {canWrite ? (
+          <ProjectsDialog
+            participant={agent.name}
+            open={open}
+            onOpenChange={setOpen}
+            trigger={<Button tone="quiet">{t('agents.action')}</Button>}
+          />
+        ) : null}
+      </div>
+    </div>
   );
 }
 

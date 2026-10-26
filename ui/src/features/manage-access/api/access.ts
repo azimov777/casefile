@@ -127,3 +127,53 @@ export function revokeToken(tokenId: string): Promise<void> {
     apiClient.DELETE('/api/v1/tokens/{token_id}', { params: { path: { token_id: tokenId } } }),
   );
 }
+
+/** Доступ агента к проектам: режим и ключи перечисленных проектов (`ProjectAccessRead`). */
+export type ProjectAccess = components['schemas']['ProjectAccessRead'];
+
+/** Режимы доступа к проектам: все, все кроме перечисленных, только перечисленные. */
+export type ProjectAccessMode = ProjectAccess['mode'];
+
+export const PROJECT_ACCESS_MODES: readonly ProjectAccessMode[] = ['all', 'except', 'only'];
+
+export const projectAccessKeys = {
+  all: ['project-access'] as const,
+  of: (participant: string) => ['project-access', participant] as const,
+};
+
+/** Режим и список проектов агента: `GET /api/v1/participants/{name}/projects`. */
+export function projectAccessQueryOptions(participant: string) {
+  return queryOptions({
+    queryKey: projectAccessKeys.of(participant),
+    queryFn: (): Promise<ProjectAccess> =>
+      unwrap(
+        apiClient.GET('/api/v1/participants/{participant_name}/projects', {
+          params: { path: { participant_name: participant } },
+        }),
+      ),
+  });
+}
+
+export interface ProjectAccessInput {
+  participant: string;
+  mode: ProjectAccessMode;
+  /** Ключи проектов; при `all` бэкенд очищает список сам, форма шлёт пустой. */
+  projects: string[];
+}
+
+/**
+ * Заменяет режим и список агента целиком: `PUT /api/v1/participants/{name}/projects`.
+ * Идемпотентен сам — тот же PUT даёт то же состояние, ключа повтора нет.
+ */
+export function setProjectAccess({
+  participant,
+  mode,
+  projects,
+}: ProjectAccessInput): Promise<ProjectAccess> {
+  return unwrap(
+    apiClient.PUT('/api/v1/participants/{participant_name}/projects', {
+      params: { path: { participant_name: participant } },
+      body: { mode, projects },
+    }),
+  );
+}
