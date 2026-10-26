@@ -150,6 +150,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List installation settings
+         * @description Семь настроек установки в порядке реестра: правила, значение, источник, кто менял.
+         *
+         *     Открыто любому вошедшему: секретов здесь нет, а экран показывает всем, что действует.
+         *     Без страниц и без `meta.total`: набор ограничен реестром.
+         */
+        get: operations["list_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change an installation setting
+         * @description Задаёт значение настройки; пустое значение возвращает её окружению или умолчанию.
+         *
+         *     Только администратору (`403 admin_required`), ключу агента тоже. Имя вне реестра —
+         *     `404 installation_setting_not_found`, значение вне типа или пределов —
+         *     `422 installation_setting_invalid` с причиной в `details.reason`; при отказе ничего не
+         *     меняется. Ответ — настройка целиком, как в списке.
+         */
+        patch: operations["update_setting"];
+        trace?: never;
+    };
     "/api/v1/participants": {
         parameters: {
             query?: never;
@@ -3566,6 +3614,12 @@ export interface components {
             data: components["schemas"]["EntryRead"][];
             meta?: components["schemas"]["PageMeta"];
         };
+        /** CollectionResponse[InstallationSettingRead] */
+        CollectionResponse_InstallationSettingRead_: {
+            /** Data */
+            data: components["schemas"]["InstallationSettingRead"][];
+            meta?: components["schemas"]["PageMeta"];
+        };
         /** CollectionResponse[ParticipantRead] */
         CollectionResponse_ParticipantRead_: {
             /** Data */
@@ -3797,6 +3851,10 @@ export interface components {
         /** DataResponse[InstallationRead] */
         DataResponse_InstallationRead_: {
             data: components["schemas"]["InstallationRead"];
+        };
+        /** DataResponse[InstallationSettingRead] */
+        DataResponse_InstallationSettingRead_: {
+            data: components["schemas"]["InstallationSettingRead"];
         };
         /** DataResponse[ParticipantRead] */
         DataResponse_ParticipantRead_: {
@@ -4814,6 +4872,84 @@ export interface components {
              * @example http://localhost:8100/mcp
              */
             mcp_url: string;
+        };
+        /**
+         * InstallationSettingRead
+         * @description Одна настройка установки: правила, что в базе, что действует и кто менял.
+         *
+         *     Значения — текстом в каноническом виде: число (`168`), `true`/`false`, срок ISO 8601
+         *     секундами (`PT2592000S`). Так же значение принимает правка.
+         */
+        InstallationSettingRead: {
+            /**
+             * Name
+             * @description Setting name from the registry
+             * @example mcp_page_size
+             */
+            name: string;
+            /**
+             * Env Var
+             * @description Environment variable that gives the default when the database is empty
+             * @example TRACKER_MCP_PAGE_SIZE
+             */
+            env_var: string;
+            /** @description Value type: `integer`, `boolean` or `duration` */
+            kind: components["schemas"]["SettingKind"];
+            /**
+             * Value
+             * @description What an administrator stored in the database. Null when nothing is stored or the setting was returned to the environment
+             * @example 10
+             */
+            value: string | null;
+            /**
+             * Effective Value
+             * @description The value in force now, whatever its source
+             * @example 10
+             */
+            effective_value: string;
+            /** @description Where `effective_value` comes from: `database`, `environment` or `default` */
+            source: components["schemas"]["SettingSource"];
+            /**
+             * Default Value
+             * @description The value in force when the database holds nothing: the environment variable if it is set and valid, otherwise the code default
+             * @example 25
+             */
+            default_value: string;
+            /** @description Where `default_value` comes from: `environment` or `default` */
+            default_source: components["schemas"]["SettingSource"];
+            /**
+             * Minimum
+             * @description Lowest allowed value, inclusive; seconds for a duration; null for a boolean
+             * @example 1
+             */
+            minimum: number | null;
+            /**
+             * Maximum
+             * @description Highest allowed value, inclusive; seconds for a duration; null for a boolean
+             * @example 200
+             */
+            maximum: number | null;
+            /** @description Who changed the setting last; null if nobody has */
+            updated_by: components["schemas"]["AuthorRead"] | null;
+            /**
+             * Updated At
+             * @description When the setting was changed last; null if nobody has
+             */
+            updated_at: string | null;
+        };
+        /**
+         * InstallationSettingUpdate
+         * @description Тело правки: новое значение; пустое или `null` возвращает «брать из окружения».
+         */
+        InstallationSettingUpdate: {
+            /**
+             * Value
+             * @description New value. A number, a boolean or a string in the canonical form; an empty string or null returns the setting to the environment variable or the code default
+             * @example 10
+             * @example 10
+             * @example
+             */
+            value: string | number | boolean | null;
         };
         /**
          * LinkCreate
@@ -6857,6 +6993,18 @@ export interface components {
             /** @description The account signed in */
             account: components["schemas"]["AccountRead"];
         };
+        /**
+         * SettingKind
+         * @description Тип значения: от него зависит разбор строки и запись канонического вида.
+         * @enum {string}
+         */
+        SettingKind: "integer" | "boolean" | "duration";
+        /**
+         * SettingSource
+         * @description Откуда взято значение.
+         * @enum {string}
+         */
+        SettingSource: "database" | "environment" | "default";
         /**
          * StateNoteRead
          * @description Открытое замечание или предупреждение: номер записи, автор, заголовок.
@@ -9155,6 +9303,167 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataResponse_ArchiveImportRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_settings: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse_InstallationSettingRead_"];
+                };
+            };
+            /** @description Token is missing, unknown or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Object not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_setting: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token */
+                "X-Actor-Label"?: string | null;
+            };
+            path: {
+                /** @description Setting name from the registry */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstallationSettingUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataResponse_InstallationSettingRead_"];
                 };
             };
             /** @description Token is missing, unknown or revoked */

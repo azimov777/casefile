@@ -607,6 +607,250 @@
         }
       }
     },
+    "/api/v1/settings": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "List installation settings",
+        "description": "Семь настроек установки в порядке реестра: правила, значение, источник, кто менял.\n\nОткрыто любому вошедшему: секретов здесь нет, а экран показывает всем, что действует.\nБез страниц и без `meta.total`: набор ограничен реестром.",
+        "operationId": "list_settings",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse_InstallationSettingRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/{name}": {
+      "patch": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Change an installation setting",
+        "description": "Задаёт значение настройки; пустое значение возвращает её окружению или умолчанию.\n\nТолько администратору (`403 admin_required`), ключу агента тоже. Имя вне реестра —\n`404 installation_setting_not_found`, значение вне типа или пределов —\n`422 installation_setting_invalid` с причиной в `details.reason`; при отказе ничего не\nменяется. Ответ — настройка целиком, как в списке.",
+        "operationId": "update_setting",
+        "security": [
+          {
+            "ApiToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Setting name from the registry",
+              "examples": [
+                "mcp_page_size"
+              ],
+              "title": "Name"
+            },
+            "description": "Setting name from the registry"
+          },
+          {
+            "name": "X-Actor-Label",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token",
+              "examples": [
+                "nightly_agent"
+              ],
+              "title": "X-Actor-Label"
+            },
+            "description": "Signature of a temporary agent, latin snake_case. Required with a shared agent token (one issued without a participant), ignored with a participant token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationSettingUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse_InstallationSettingRead_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token is missing, unknown or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Action is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Object not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/participants": {
       "get": {
         "tags": [
@@ -13751,6 +13995,25 @@
         ],
         "title": "CollectionResponse[EntryRead]"
       },
+      "CollectionResponse_InstallationSettingRead_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationSettingRead"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "CollectionResponse[InstallationSettingRead]"
+      },
       "CollectionResponse_ParticipantRead_": {
         "properties": {
           "data": {
@@ -14218,6 +14481,18 @@
           "data"
         ],
         "title": "DataResponse[InstallationRead]"
+      },
+      "DataResponse_InstallationSettingRead_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InstallationSettingRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataResponse[InstallationSettingRead]"
       },
       "DataResponse_ParticipantRead_": {
         "properties": {
@@ -16215,6 +16490,174 @@
         ],
         "title": "InstallationRead",
         "description": "Факты установки: одинаковы для любого запросившего и меняются только с её настройкой."
+      },
+      "InstallationSettingRead": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Setting name from the registry",
+            "examples": [
+              "mcp_page_size"
+            ]
+          },
+          "env_var": {
+            "type": "string",
+            "title": "Env Var",
+            "description": "Environment variable that gives the default when the database is empty",
+            "examples": [
+              "TRACKER_MCP_PAGE_SIZE"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SettingKind",
+            "description": "Value type: `integer`, `boolean` or `duration`"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value",
+            "description": "What an administrator stored in the database. Null when nothing is stored or the setting was returned to the environment",
+            "examples": [
+              "10"
+            ]
+          },
+          "effective_value": {
+            "type": "string",
+            "title": "Effective Value",
+            "description": "The value in force now, whatever its source",
+            "examples": [
+              "10"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/SettingSource",
+            "description": "Where `effective_value` comes from: `database`, `environment` or `default`"
+          },
+          "default_value": {
+            "type": "string",
+            "title": "Default Value",
+            "description": "The value in force when the database holds nothing: the environment variable if it is set and valid, otherwise the code default",
+            "examples": [
+              "25"
+            ]
+          },
+          "default_source": {
+            "$ref": "#/components/schemas/SettingSource",
+            "description": "Where `default_value` comes from: `environment` or `default`"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum",
+            "description": "Lowest allowed value, inclusive; seconds for a duration; null for a boolean",
+            "examples": [
+              1
+            ]
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum",
+            "description": "Highest allowed value, inclusive; seconds for a duration; null for a boolean",
+            "examples": [
+              200
+            ]
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who changed the setting last; null if nobody has"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "When the setting was changed last; null if nobody has"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "env_var",
+          "kind",
+          "value",
+          "effective_value",
+          "source",
+          "default_value",
+          "default_source",
+          "minimum",
+          "maximum",
+          "updated_by",
+          "updated_at"
+        ],
+        "title": "InstallationSettingRead",
+        "description": "Одна настройка установки: правила, что в базе, что действует и кто менял.\n\nЗначения — текстом в каноническом виде: число (`168`), `true`/`false`, срок ISO 8601\nсекундами (`PT2592000S`). Так же значение принимает правка."
+      },
+      "InstallationSettingUpdate": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value",
+            "description": "New value. A number, a boolean or a string in the canonical form; an empty string or null returns the setting to the environment variable or the code default",
+            "examples": [
+              "10",
+              10,
+              ""
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value"
+        ],
+        "title": "InstallationSettingUpdate",
+        "description": "Тело правки: новое значение; пустое или `null` возвращает «брать из окружения»."
       },
       "LinkCreate": {
         "properties": {
@@ -19573,6 +20016,26 @@
         ],
         "title": "SessionRead",
         "description": "Живой сеанс: токен вкладки, его срок и учётная запись за ним."
+      },
+      "SettingKind": {
+        "type": "string",
+        "enum": [
+          "integer",
+          "boolean",
+          "duration"
+        ],
+        "title": "SettingKind",
+        "description": "Тип значения: от него зависит разбор строки и запись канонического вида."
+      },
+      "SettingSource": {
+        "type": "string",
+        "enum": [
+          "database",
+          "environment",
+          "default"
+        ],
+        "title": "SettingSource",
+        "description": "Откуда взято значение."
       },
       "StateNoteRead": {
         "properties": {
