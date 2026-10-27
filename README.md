@@ -221,6 +221,15 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 **Discussions**
 - `add_conclusion` — files a discussion's conclusion: what is decided, superseded and still open
 - `close_discussion` — closes a discussion with its final conclusion, in one transaction
+- `list_discussions` — lists discussions with filters by project, status, turn and attached task: address, title, status, turn, open questions, closing time
+
+**Files**
+- `request_file_upload` — returns a one-time link and the `curl -T` command that uploads a new file to a project; the bytes go from disk to the tracker and never through the model
+- `request_file_replace` — returns a one-time link and the `curl -T` command that replaces the content of a file under the same id
+- `read_file` — returns a file: an image as `image` content the model sees, any other file as its card and a one-time `curl -o` link
+- `list_files` — lists files as cards with search by name and filters by project and media type, sorted by time added or opened, size or type
+- `delete_file` — erases a file's bytes and keeps its tombstone: name, type, size, who deleted it and when
+- `delete_files` — erases every file a filter picks (project, name, type, `unopened` for images not opened for the term of days) once the confirmed count matches
 
 **Links**
 - `link` — links two tasks and files `link_added` in both cases, or attaches a task to a discussion
@@ -228,7 +237,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 
 **Projects & participants**
 - `get_project` — returns one project by its key, or an area by its address in the same shape: key, title, description, current attribute values, the decisions and findings in force and the index of the rest of its case
-- `list_projects` — lists the installation's projects: key, title and archive time; archived ones only when asked
+- `list_projects` — lists the installation's projects the agent may use: key, title and archive time; archived ones only when asked
 - `list_participants` — lists the participant registry: the possible addressees of a question
 - `create_project` — creates a project
 - `update_project` — changes a project's title and description, recording each change in its case
@@ -248,7 +257,7 @@ Every MCP tool the server offers, grouped by area (`app/mcp/tools/`):
 |---|---|
 | Update right now | run the install line again |
 | Turn auto-update off | `CASEFILE_AUTO_UPDATE=false` in `~/casefile/.env`, then `docker compose up -d --no-deps updater` in `~/casefile` |
-| Stay on one release | `CASEFILE_VERSION=0.16.0` in `~/casefile/.env` |
+| Stay on one release | `CASEFILE_VERSION=0.17.0` in `~/casefile/.env` |
 | Stop / start | `docker compose stop` / `docker compose start` in `~/casefile` |
 | Remove everything, data included | `docker compose down -v` in `~/casefile` |
 | Move to another machine or your own server | [`docs/moving.md`](docs/moving.md) |

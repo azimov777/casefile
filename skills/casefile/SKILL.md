@@ -46,7 +46,8 @@ Read before you act, because the case already holds choices you must not redo:
   status, whose turn it is, the open questions and the latest conclusion. The latest
   conclusion and the human's answers and notes set the work together with the sections
   (`state` names the ones filed after the sections were last edited); read a discussion
-  in full with `read_project_entries(key="TRK~7")`;
+  in full with `read_project_entries(key="TRK~7")`; the discussions of a project, whose
+  turn it is — `list_discussions(project="TRK", status="open", turn="agent")`;
 - a reference like `TRK-7#12` in the text is an entry — `read_entries(key="TRK-7", nos=[12])`;
   `TRK~7#3` is an entry of a discussion — `read_project_entries(key="TRK~7", nos=[3])`.
 
@@ -68,6 +69,8 @@ a rule that was replaced. Read them every time you enter a task, a small one too
    besides the task's own area, read its area the same way. Do not read all of them, and
    do not stop at the task's own: a task that changes the importer and the schema binds
    `TRK/importer` and `TRK/schema` alike.
+   Your area's `see_also` in `get_project` names the areas its readers also read, each
+   with a reason: open the ones whose reason fits your work, titles first.
 4. Titles first, bodies only of the entries you need. `get_project` gives titles and
    addresses, not bodies. Pick the entries whose title is about your work and read just
    them: `read_project_entries(key="TRK/importer", nos=[3, 7])`. Do not read the whole
@@ -79,7 +82,10 @@ a rule that was replaced. Read them every time you enter a task, a small one too
 6. Only an entry in force counts. Every decision and finding you read carries a `status`;
    a superseded one names its successor in `superseded_by`. An entry you reached by its
    number, from a reference or a search without `in_force`, may be superseded: look at its
-   `status` before you rely on it, and take the successor instead.
+   `status` before you rely on it, and take the successor instead. An entry with status
+   `rejected` or `removed` was withdrawn by a human and has no successor: do not rely on
+   it and do not restore it. A reference to it, or a replacement of it, is refused with
+   `decision_not_in_force`.
 
 **Check:** you can say in two sentences what the goal is, where the work stands and what
 your next action is, and you know the open questions, the conclusions of the discussions
